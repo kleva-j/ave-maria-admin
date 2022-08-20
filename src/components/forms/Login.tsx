@@ -36,6 +36,7 @@ export const LoginForm = ({ handleSubmit, setError }: Props) => {
       })}
     >
       <TextInput
+        name="textinput-email"
         mt="lg"
         required
         label="Email"
