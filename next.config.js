@@ -11,4 +11,9 @@ module.exports = {
     APP_URL: process.env.APP_URL,
     WS_URL: process.env.WS_URL,
   },
+  experimental: {
+    images: {
+      allowFutureImage: true,
+    },
+  },
 };
