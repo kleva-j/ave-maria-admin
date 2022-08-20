@@ -3,7 +3,7 @@ on: [push]
 jobs:
   e2e:
     env:
-      DATABASE_URL: postgres://ukuyoxib:8KUVO4XTWxsKPk2NHajmJOGOhDNP5lZE@rogue.db.elephantsql.com/ukuyoxib
+      DATABASE_URL: ${{ secrets.DATABASE_URL }}
       NODE_ENV: test
       NEXTAUTH_SECRET: supersecret
     runs-on: ${{ matrix.os }}
@@ -15,8 +15,8 @@ jobs:
       postgres:
         image: postgres:12.1
         env:
-          POSTGRES_USER: ukuyoxib
-          POSTGRES_DB: ukuyoxib
+          POSTGRES_USER: ${{ secrets.DATABASE_USER }}
+          POSTGRES_DB: ${{ secrets.DATABASE_NAME }}
         ports:
           - 5432:5432
     steps:
