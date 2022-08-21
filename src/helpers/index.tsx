@@ -28,3 +28,15 @@ export function getStrength(password: string) {
 
 export const isEmpty = (obj: Record<string, unknown>) =>
   Object.keys(obj).length === 0;
+
+export const generateRoutesWithParams = (path: string) => {
+  const [routePaths, params] = path.split('?');
+  return {
+    title: '',
+    routes: routePaths.split('/').filter(Boolean).map(Capitalize),
+    params: params.split('&'),
+  };
+};
+
+export const Capitalize = (str: string) =>
+  str.substring(0, 1).toUpperCase() + str.substring(1);

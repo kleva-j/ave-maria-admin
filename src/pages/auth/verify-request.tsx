@@ -35,7 +35,7 @@ const VerifyRequest = () => {
   }, 60000);
   const interval = useInterval(() => setSeconds((s) => s - 1), 1000);
 
-  if (!provider || !type) push('/');
+  if (!provider || !type || !email) push('/');
 
   const handleResendEmail = async () => {
     setLoading(true);
@@ -124,5 +124,7 @@ const VerifyRequest = () => {
     </Center>
   ) : null;
 };
+
+VerifyRequest.pageTitle = 'Verify Email';
 
 export default VerifyRequest;
