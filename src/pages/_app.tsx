@@ -6,7 +6,10 @@ import { httpBatchLink } from '@trpc/client/links/httpBatchLink';
 import { getSession, SessionProvider } from 'next-auth/react';
 import { loggerLink } from '@trpc/client/links/loggerLink';
 import { AppType } from 'next/dist/shared/lib/utils';
+import { useRouter } from 'next/router';
 import { withTRPC } from '@trpc/next';
+import { getBaseUrl } from 'helpers';
+import { Seo } from 'components/seo';
 import { ReactNode } from 'react';
 import {
   ColorSchemeProvider,
@@ -20,15 +23,17 @@ import superjson from 'superjson';
 import Layout from 'layout';
 
 const { publicRuntimeConfig } = getConfig();
-
 const { APP_URL, WS_URL } = publicRuntimeConfig;
+
+const baseUrl = getBaseUrl();
 
 const MyApp: AppType = (props) => {
   const {
     Component,
     pageProps: { session, ...pageProps },
   } = props;
-  const { isProtected = false } = { ...Component };
+  const router = useRouter();
+  const { isProtected = false, pageTitle = '' } = { ...Component };
   const [colorScheme, setColorScheme] = useLocalStorage<ColorScheme>({
     key: 'gitline-color-scheme',
     defaultValue: useColorScheme(session?.user ? 'dark' : 'light'),
@@ -58,7 +63,10 @@ const MyApp: AppType = (props) => {
         }}
       >
         <SessionProvider session={session}>
-          {Wrapper(<Component {...pageProps} />)}
+          <>
+            <Seo canonical={baseUrl + router.asPath} title={pageTitle} />
+            {Wrapper(<Component {...pageProps} />)}
+          </>
         </SessionProvider>
       </MantineProvider>
     </ColorSchemeProvider>
