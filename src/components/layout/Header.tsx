@@ -66,7 +66,7 @@ export const PageHeader = ({ opened, setOpened }: Props) => {
 
               {!isLoggedIn ? (
                 <Link href={`/auth/signin?CallbackUrl=${callbackUrl}`} passHref>
-                  <Button component="a" variant="subtle">
+                  <Button component="a" variant="subtle" id="sign-in-button">
                     Sign in
                   </Button>
                 </Link>
