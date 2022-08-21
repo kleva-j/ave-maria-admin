@@ -30,6 +30,8 @@ const SignIn = ({ providers }: Props) => {
   );
 };
 
+SignIn.pageTitle = 'Sign In';
+
 export const getServerSideProps: GetServerSideProps = async ({ req, res }) => {
   const session = await unstable_getServerSession(req, res, authOptions);
   const providers = await getProviders();
