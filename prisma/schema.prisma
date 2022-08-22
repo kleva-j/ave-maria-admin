@@ -17,6 +17,12 @@ enum PosterSource {
   GITHUB
 }
 
+enum Roles {
+  editor
+  admin
+  user
+}
+
 model Post {
   id     String       @id @default(uuid())
   userId String
@@ -65,6 +71,10 @@ model User {
     accounts      Account[]
     sessions      Session[]
     posts         Post[]
+    role          Roles      @default(user)
+    createdAt     DateTime   @default(now()) @map(name: "created_at")
+    updatedAt     DateTime?  @updatedAt @map(name: "updated_at")
+    @@map(name: "users")
 }
 
 model VerificationToken {

@@ -1,9 +1,9 @@
+/* eslint-disable @typescript-eslint/ban-ts-comment */
 import type { NextAuthOptions } from 'next-auth';
 
-import { AuthSchema, signupAuthSchema, AuthState } from 'types';
+import { getSocialProfile, checkIfAdmin, Authorize } from 'lib/auth';
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import { prisma } from 'server/db/prismaClient';
-import { hash, compare } from 'bcryptjs';
 
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
@@ -22,64 +22,7 @@ export const authOptions: NextAuthOptions = {
         password: { label: 'Password', type: 'password' },
         authType: { label: 'AuthType', type: 'text' },
       },
-      async authorize(formData) {
-        const user = { name: formData?.name, email: formData?.email };
-
-        if (formData?.authType === AuthState.login)
-          AuthSchema.parse({ email: user.email, password: formData?.password });
-
-        if (formData?.authType === AuthState.signup)
-          signupAuthSchema.parse({ ...user, password: formData?.password });
-
-        try {
-          const userExist = await prisma.user.findUnique({
-            where: { email: user.email },
-          });
-
-          if (!userExist && formData?.authType === AuthState.login)
-            throw new Error('An Account with this credential does not exist.');
-
-          if (
-            userExist &&
-            formData?.authType === AuthState.login &&
-            !userExist.passwordHash
-          ) {
-            throw new Error('Try signing in with a social login.');
-          }
-
-          if (
-            userExist &&
-            userExist.passwordHash &&
-            formData?.authType === AuthState.login
-          ) {
-            const checkPassword = await compare(
-              formData?.password,
-              userExist.passwordHash as string,
-            );
-
-            if (!checkPassword) throw new Error('Incorrect credentials!');
-
-            const { id, name, email, image, emailVerified } = userExist;
-
-            return { id, name, email, image, emailVerified };
-          }
-
-          if (!userExist && formData?.authType === AuthState.signup) {
-            const { id, name, email, image, emailVerified } =
-              await prisma.user.create({
-                data: {
-                  name: user.name,
-                  email: user.email,
-                  passwordHash: await hash(formData?.password, 12),
-                },
-              });
-            return { id, name, email, emailVerified, image };
-          }
-          return null;
-        } catch (err) {
-          throw err;
-        }
-      },
+      authorize: Authorize,
     }),
     GoogleProvider({
       clientId: process.env.GOOGLE_CLIENT_ID ?? '',
@@ -91,10 +34,12 @@ export const authOptions: NextAuthOptions = {
           access_type: 'offline',
           response_type: 'code',
         }),
+      profile: getSocialProfile,
     }),
     GithubProvider({
       clientId: process.env.GITHUB_CLIENT_ID ?? '',
       clientSecret: process.env.GITHUB_CLIENT_SECRET ?? '',
+      profile: getSocialProfile,
     }),
     EmailProvider({ server: process.env.EMAIL_SERVER ?? '' }),
   ],
@@ -102,5 +47,20 @@ export const authOptions: NextAuthOptions = {
   pages: { signIn: '/auth/signin', verifyRequest: '/auth/verify-request' },
   session: { strategy: 'jwt', maxAge: 60 * 60 * 24 * 7 },
   debug: true,
+  callbacks: {
+    async session({ session, token }) {
+      // @ts-ignore
+      session.user.role = token.isAdmin ? 'admin' : 'user';
+      return session;
+    },
+    async jwt({ token, user }) {
+      if (user) {
+        token.isAdmin =
+          checkIfAdmin(user.email ?? '') && user?.role === 'admin';
+      }
+      return token;
+    },
+  },
 };
+
 export default NextAuth({ ...authOptions });
