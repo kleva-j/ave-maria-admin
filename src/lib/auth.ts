@@ -1,7 +1,6 @@
 import { AuthSchema, signupAuthSchema, AuthState } from 'types';
 import { prisma } from 'server/db/prismaClient';
 import { hash, compare } from 'bcryptjs';
-import { formatISO } from 'date-fns';
 
 export async function hashPassword(password: string) {
   return hash(password, 12);
@@ -16,7 +15,7 @@ export const getSocialProfile = (profile: any) => {
     email: profile.email,
     role: getUserRole(profile.email),
     name: profile.name ?? profile.login,
-    emailVerified: formatISO(new Date()),
+    emailVerified: new Date().toISOString(),
     image: profile.picture ?? profile.avatar_url,
     id: profile.id ? profile.id.toString() : profile.sub,
   };
