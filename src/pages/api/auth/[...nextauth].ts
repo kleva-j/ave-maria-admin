@@ -49,15 +49,14 @@ export const authOptions: NextAuthOptions = {
   debug: true,
   callbacks: {
     async session({ session, token }) {
-      // @ts-ignore
       session.user.role = token.isAdmin ? 'admin' : 'user';
       return session;
     },
-    async jwt({ token, user }) {
-      if (user) {
+    async jwt({ token, user, account }) {
+      if (user)
         token.isAdmin =
           checkIfAdmin(user.email ?? '') && user?.role === 'admin';
-      }
+      if (account) token.accessToken = account.access_token;
       return token;
     },
   },
