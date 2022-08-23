@@ -10,10 +10,10 @@ import {
 } from '@mantine/core';
 import { useMediaQuery, useTimeout, useInterval } from '@mantine/hooks';
 import { showNotification } from '@mantine/notifications';
+import { useEffect, useState } from 'react';
 import { signIn } from 'next-auth/react';
 import { useRouter } from 'next/router';
 import { AuthState } from 'types';
-import { useState } from 'react';
 
 import Image from 'next/future/image';
 import Link from 'next/link';
@@ -35,7 +35,9 @@ const VerifyRequest = () => {
   }, 60000);
   const interval = useInterval(() => setSeconds((s) => s - 1), 1000);
 
-  if (!provider || !type || !email) push('/');
+  useEffect(() => {
+    if (!provider || !type || !email) push('/');
+  }, [provider, type, email]);
 
   const handleResendEmail = async () => {
     setLoading(true);
