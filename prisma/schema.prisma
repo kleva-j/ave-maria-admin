@@ -4,8 +4,6 @@
 datasource db {
   provider = "postgres"
   url      = env("DATABASE_URL")
-  // provider = "sqlite"
-  // url      = "file:./dev.db"
 }
 
 generator client {
@@ -24,10 +22,10 @@ enum Roles {
 }
 
 model Post {
-  id     String       @id @default(uuid())
+  id     String @id @default(uuid())
   userId String
   text   String
-  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // To return `Date`s intact through the API we need to add data transformers
   // https://trpc.io/docs/data-transformers
@@ -36,51 +34,73 @@ model Post {
 }
 
 model Account {
-    id                String  @id @default(cuid())
-    userId            String
-    type              String
-    provider          String
-    providerAccountId String
-    refresh_token     String?
-    access_token      String?
-    expires_at        Int?
-    token_type        String?
-    scope             String?
-    id_token          String?
-    session_state     String?
-    user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
+  userId            String   @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String   @map("provider_account_id")
+  refresh_token     String?  @db.Text
+  access_token      String?  @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?  @db.Text
+  session_state     String?
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt         DateTime @default(now()) @map(name: "created_at")
+  updatedAt         DateTime @default(now()) @map(name: "updated_at")
 
-    @@unique([provider, providerAccountId])
+  @@unique([provider, providerAccountId])
+  @@index([providerAccountId], name: "providerAccountId")
+  @@index([provider], name: "provider")
+  @@index([userId], name: "userId")
+  @@map(name: "accounts")
 }
 
 model Session {
-    id           String   @id @default(cuid())
-    sessionToken String   @unique
-    userId       String
-    expires      DateTime
-    user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id      String   @id @default(cuid())
+  userId  String   @map(name: "user_id")
+  expires DateTime
+
+  sessionToken String @unique @map(name: "session_token")
+  accessToken  String @unique @map(name: "access_token")
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map(name: "created_at")
+  updatedAt DateTime @default(now()) @map(name: "updated_at")
+
+  @@map(name: "sessions")
 }
 
 model User {
-    id            String    @id @default(cuid())
-    name          String?
-    email         String?   @unique
-    emailVerified DateTime?
-    image         String?
-    passwordHash  String?
-    accounts      Account[]
-    sessions      Session[]
-    posts         Post[]
-    role          Roles      @default(user)
-    createdAt     DateTime   @default(now()) @map(name: "created_at")
-    updatedAt     DateTime?  @updatedAt @map(name: "updated_at")
-    @@map(name: "users")
+  id            String    @id @default(cuid())
+  name          String?
+  email         String?   @unique
+  emailVerified DateTime? @map(name: "email_verified")
+  image         String?
+  passwordHash  String?
+  accounts      Account[]
+  sessions      Session[]
+  posts         Post[]
+  role          Roles     @default(user)
+  createdAt     DateTime  @default(now()) @map(name: "created_at")
+  updatedAt     DateTime? @updatedAt @map(name: "updated_at")
+
+  @@map(name: "users")
+  VerificationToken VerificationToken[]
 }
 
 model VerificationToken {
-    identifier String
-    token      String   @unique
-    expires    DateTime
+  id         Int      @id @default(autoincrement())
+  userId     String   @map(name: "user_id")
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  createdAt  DateTime @default(now()) @map(name: "created_at")
+  updatedAt  DateTime @default(now()) @map(name: "updated_at")
 
-    @@unique([identifier, token])
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([identifier, token])
+  @@map(name: "verification_requests")
 }
