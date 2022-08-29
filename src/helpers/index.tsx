@@ -40,3 +40,20 @@ export const generateRoutesWithParams = (path: string) => {
 
 export const Capitalize = (str: string) =>
   str.substring(0, 1).toUpperCase() + str.substring(1);
+
+export const composeUrl = (url: string, params = { email: '' }) => {
+  const composedUrl = new URL(url);
+  return new URL(
+    `${composedUrl.origin}${composedUrl.pathname}?${new URLSearchParams([
+      ...Array.from(composedUrl.searchParams.entries()),
+      ...Object.entries(params),
+    ])}`,
+  );
+};
+
+export const getSearchQuery = (searchParams: URLSearchParams) => {
+  const query: Record<string, string> = {};
+  const entries = searchParams.entries();
+  for (const [key, value] of entries) query[key] = value;
+  return query;
+};
