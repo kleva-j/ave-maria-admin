@@ -18,6 +18,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "jsx": "preserve",
+    "downlevelIteration": true,
     "types": [
       "@types/jest",
       "jest-playwright-preset",
