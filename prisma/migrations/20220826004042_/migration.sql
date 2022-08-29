@@ -1,30 +1,19 @@
-/*
-  Warnings:
+-- CreateEnum
+CREATE TYPE "PosterSource" AS ENUM ('RAW', 'GITHUB');
 
-  - You are about to drop the column `emailVerified` on the `users` table. All the data in the column will be lost.
-  - You are about to drop the `Account` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `Session` table. If the table is not empty, all the data it contains will be lost.
-  - You are about to drop the `VerificationToken` table. If the table is not empty, all the data it contains will be lost.
+-- CreateEnum
+CREATE TYPE "Roles" AS ENUM ('editor', 'admin', 'user');
 
-*/
--- DropForeignKey
-ALTER TABLE "Account" DROP CONSTRAINT "Account_userId_fkey";
+-- CreateTable
+CREATE TABLE "Post" (
+    "id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "text" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
--- DropForeignKey
-ALTER TABLE "Session" DROP CONSTRAINT "Session_userId_fkey";
-
--- AlterTable
-ALTER TABLE "users" DROP COLUMN "emailVerified",
-ADD COLUMN     "email_verified" TIMESTAMP(3);
-
--- DropTable
-DROP TABLE "Account";
-
--- DropTable
-DROP TABLE "Session";
-
--- DropTable
-DROP TABLE "VerificationToken";
+    CONSTRAINT "Post_pkey" PRIMARY KEY ("id")
+);
 
 -- CreateTable
 CREATE TABLE "accounts" (
@@ -51,12 +40,27 @@ CREATE TABLE "sessions" (
     "id" TEXT NOT NULL,
     "user_id" TEXT NOT NULL,
     "expires" TIMESTAMP(3) NOT NULL,
-    "session_token" TEXT NOT NULL,
-    "access_token" TEXT NOT NULL,
+    "session_token" TEXT,
+    "access_token" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "sessions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "users" (
+    "id" TEXT NOT NULL,
+    "name" TEXT,
+    "email" TEXT,
+    "email_verified" TIMESTAMP(3),
+    "image" TEXT,
+    "passwordHash" TEXT,
+    "role" "Roles" NOT NULL DEFAULT 'user',
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3),
+
+    CONSTRAINT "users_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -70,6 +74,12 @@ CREATE TABLE "verification_requests" (
 
     CONSTRAINT "verification_requests_pkey" PRIMARY KEY ("id")
 );
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Post_createdAt_key" ON "Post"("createdAt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Post_updatedAt_key" ON "Post"("updatedAt");
 
 -- CreateIndex
 CREATE INDEX "providerAccountId" ON "accounts"("provider_account_id");
@@ -90,10 +100,16 @@ CREATE UNIQUE INDEX "sessions_session_token_key" ON "sessions"("session_token");
 CREATE UNIQUE INDEX "sessions_access_token_key" ON "sessions"("access_token");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "users_email_key" ON "users"("email");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "verification_requests_token_key" ON "verification_requests"("token");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "verification_requests_identifier_token_key" ON "verification_requests"("identifier", "token");
+
+-- AddForeignKey
+ALTER TABLE "Post" ADD CONSTRAINT "Post_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "accounts" ADD CONSTRAINT "accounts_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "users"("id") ON DELETE CASCADE ON UPDATE CASCADE;
