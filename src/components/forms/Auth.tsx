@@ -43,6 +43,7 @@ const IconMap: IconMaptype = {
 const AuthForm = ({ providers = {} }: Props) => {
   const theme = useMantineTheme();
   const { error: signInError } = useRouter().query;
+  const style = { border: '1px solid', borderColor: theme.colors.gray[4] };
 
   const [error, setError] = useState<null | formError>(
     signInError
@@ -100,9 +101,9 @@ const AuthForm = ({ providers = {} }: Props) => {
 
       <EmailModal
         isOpen={isOpen}
+        setError={setError}
         setOpened={setOpened}
         handleSubmit={handleSubmit('email')}
-        setError={setError}
       />
 
       <Group position="apart" grow>
@@ -112,7 +113,7 @@ const AuthForm = ({ providers = {} }: Props) => {
             <Button
               size="sm"
               variant="white"
-              style={{ border: '1px solid', borderColor: theme.colors.gray[4] }}
+              style={style}
               color="dark"
               key={name}
               leftIcon={IconMap[id]}
@@ -127,7 +128,7 @@ const AuthForm = ({ providers = {} }: Props) => {
           size="sm"
           variant="white"
           color="dark"
-          style={{ border: '1px solid', borderColor: theme.colors.gray[4] }}
+          style={style}
           leftIcon={<MdOutlineEmail />}
           onClick={() => setOpened(true)}
         >

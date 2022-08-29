@@ -1,3 +1,4 @@
+import { JWT } from 'next-auth/jwt';
 import { z } from 'zod';
 
 export type IconMaptype = { [key: string]: JSX.Element };
@@ -66,3 +67,5 @@ export const signupAuthSchema = AuthSchema.merge(
     name: z.string().min(2, { message: 'Name should have at least 2 letters' }),
   }),
 );
+
+export type InferTokenType<T> = T extends infer JWT ? JWT : never;
