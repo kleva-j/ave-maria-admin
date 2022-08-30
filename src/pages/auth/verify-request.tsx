@@ -10,20 +10,18 @@ import {
 } from '@mantine/core';
 import { useMediaQuery, useTimeout, useInterval } from '@mantine/hooks';
 import { showNotification } from '@mantine/notifications';
-import { useEffect, useState } from 'react';
+import { GetServerSideProps } from 'next';
 import { signIn } from 'next-auth/react';
-import { useRouter } from 'next/router';
 import { AuthState } from 'types';
+import { useState } from 'react';
 
 import Image from 'next/future/image';
 import Link from 'next/link';
 
 import img from '../../../public/images/mailbox.png';
 
-const VerifyRequest = () => {
+const VerifyRequest = ({ email }: any) => {
   const theme = useMantineTheme();
-  const { query, push } = useRouter();
-  const { provider = 'email', type = 'email', email } = query;
 
   const [seconds, setSeconds] = useState(60);
   const [loading, setLoading] = useState(false);
@@ -34,10 +32,6 @@ const VerifyRequest = () => {
     setSeconds(60);
   }, 60000);
   const interval = useInterval(() => setSeconds((s) => s - 1), 1000);
-
-  useEffect(() => {
-    if (!provider || !type || !email) push('/');
-  }, [provider, type, email]);
 
   const handleResendEmail = async () => {
     setLoading(true);
@@ -59,8 +53,17 @@ const VerifyRequest = () => {
   };
 
   const matches = useMediaQuery('(min-width: 456px)', true);
-  return provider === 'email' && email ? (
-    <Center sx={{ height: '100vh', backgroundColor: theme.colors.violet[8] }}>
+
+  return (
+    <Center
+      sx={{
+        height: '100vh',
+        backgroundColor:
+          theme.colorScheme === 'dark'
+            ? theme.colors['ocean-blue'][8]
+            : theme.colors.violet[8],
+      }}
+    >
       <Paper
         withBorder
         shadow="xs"
@@ -124,9 +127,24 @@ const VerifyRequest = () => {
         </Center>
       </Paper>
     </Center>
-  ) : null;
+  );
 };
 
 VerifyRequest.pageTitle = 'Verify Email';
+
+export const getServerSideProps: GetServerSideProps = async ({ query }) => {
+  const { provider = 'email', type = 'email', email } = query;
+  return {
+    ...(!email
+      ? {
+          redirect: {
+            permanent: true,
+            destination: '/',
+          },
+        }
+      : {}),
+    props: { provider, type, email },
+  };
+};
 
 export default VerifyRequest;
