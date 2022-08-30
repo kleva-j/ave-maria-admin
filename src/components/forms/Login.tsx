@@ -25,13 +25,12 @@ export const LoginForm = ({ handleSubmit, setError }: Props) => {
           authType: AuthState.login,
           redirect: false,
         });
-        if (status === 401 && !ok) {
+        if (status === 401 && !ok)
           setError({
             message: error ?? `You have entered the wrong credentials.`,
             title: 'Unauthorized',
             code: status,
           });
-        }
         if (status === 200 && ok) router.push('/');
       })}
     >

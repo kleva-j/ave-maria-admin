@@ -1,15 +1,22 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
+import { JWT, JWTEncodeParams, JWTDecodeParams } from 'next-auth/jwt';
+import type { NextApiRequest, NextApiResponse } from 'next';
 import type { NextAuthOptions } from 'next-auth';
 
-import { getSocialProfile, checkIfAdmin, Authorize } from 'lib/auth';
+import {
+  refreshAccessToken,
+  getSocialProfile,
+  checkIfAdmin,
+  Authorize,
+} from 'lib/auth';
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import { prisma } from 'server/db/prismaClient';
 
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
-import GithubProvider from 'next-auth/providers/github';
 import EmailProvider from 'next-auth/providers/email';
 import NextAuth from 'next-auth';
+import jwt from 'jsonwebtoken';
 
 export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
@@ -36,31 +43,50 @@ export const authOptions: NextAuthOptions = {
         }),
       profile: getSocialProfile,
     }),
-    GithubProvider({
-      clientId: process.env.GITHUB_CLIENT_ID ?? '',
-      clientSecret: process.env.GITHUB_CLIENT_SECRET ?? '',
-      profile: getSocialProfile,
-    }),
     EmailProvider({ server: process.env.EMAIL_SERVER ?? '' }),
   ],
   secret: process.env.NEXTAUTH_SECRET ?? '',
   pages: { signIn: '/auth/signin', verifyRequest: '/auth/verify-request' },
-  session: { strategy: 'jwt', maxAge: 60 * 60 * 24 * 7 },
+  session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },
   debug: true,
   callbacks: {
-    async session({ session, token }) {
-      // @ts-ignore
-      session.user.role = token.isAdmin ? 'admin' : 'user';
-      return session;
+    session: async ({ session, token }) => {
+      const { accessToken, user } = token;
+      return { ...session, accessToken, user: { ...user } };
     },
-    async jwt({ token, user }) {
+    async jwt({ token, user, account }) {
+      const { name, email, picture: image, sub, expires_at } = token;
+      const id = sub as string;
+      const reformedToken: JWT = {};
       if (user) {
-        token.isAdmin =
+        reformedToken.isAdmin =
           checkIfAdmin(user.email ?? '') && user?.role === 'admin';
       }
-      return token;
+      if (user && account) {
+        const emailVerified = user.emailVerified as Date | null;
+        const role = user.role as string;
+        reformedToken.provider = account.provider;
+        reformedToken.expires_at = account?.expires_at;
+        reformedToken.accessToken = account?.access_token;
+        reformedToken.refreshToken = account?.refresh_token;
+        reformedToken.user = { id, name, email, image, emailVerified, role };
+      }
+
+      if (reformedToken.expires_at) return reformedToken;
+      if (expires_at && Date.now() < expires_at * 1000) return token;
+      return token.provider === 'google' ? refreshAccessToken(token) : token;
     },
+  },
+  jwt: {
+    encode: async ({ token = {}, secret }: JWTEncodeParams) =>
+      jwt.sign({ ...token }, secret, { algorithm: 'HS512' }),
+    decode: async ({ secret, token = '' }: JWTDecodeParams) =>
+      jwt.verify(token, secret, {
+        algorithms: ['HS512'],
+      }) as JWT,
   },
 };
 
-export default NextAuth({ ...authOptions });
+export default async function auth(req: NextApiRequest, res: NextApiResponse) {
+  return NextAuth(req, res, authOptions);
+}

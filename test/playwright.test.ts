@@ -1,6 +1,6 @@
 jest.setTimeout(35e3);
 
-test('send message', async () => {
+test('Visit Homepage', async () => {
   // const viewer = await browser.newPage();
   // await viewer.goto('http://localhost:3000');
   // await page.goto('http://localhost:3000/api/auth/signin');
@@ -15,6 +15,12 @@ test('send message', async () => {
   // await page.click('[type=submit]');
   // await viewer.waitForSelector(`text=${nonce}`);
   // viewer.close();
+  // beforeAll(async () => {
+  //   await page.goto('http://localhost:3000');
+  // });
+  // it('should be titled "Home - Ave-maria"', async () => {
+  //   await expect(page.title()).resolves.toMatch('Home - Ave-maria');
+  // });
 });
 
 export {};
