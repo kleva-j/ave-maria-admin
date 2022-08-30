@@ -15,6 +15,7 @@
     "db-seed": "prisma db seed",
     "db-migrate-dev": "yarn prisma migrate dev",
     "db-nuke": "docker-compose down --volumes --remove-orphans",
+    "db-format": "prisma format",
     "dx": "run-s db-up db-migrate-dev db-seed dev",
     "dev-nuke": "rm -rf prisma/*.db**",
     "generate": "prisma generate",
@@ -27,7 +28,8 @@
     "test-dev": "cross-env APP_ENV=test start-server-and-test dev 3000 test",
     "test-start": "cross-env APP_ENV=test WS_URL=ws://localhost:3000 start-server-and-test start 3000 test",
     "ts-node": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\"",
-    "test": "jest"
+    "test": "jest",
+    "analyse": "ANALYZE=true yarn build"
   },
   "prisma": {
     "seed": "yarn ts-node prisma/seed.ts"
@@ -46,7 +48,8 @@
     "@mantine/next": "^5.1.0",
     "@mantine/notifications": "^5.2.0",
     "@next-auth/prisma-adapter": "^1.0.4",
-    "@prisma/client": "^3.0.1",
+    "@next/bundle-analyzer": "^12.2.5",
+    "@prisma/client": "^4.2.1",
     "@trpc/client": "^9.26.2",
     "@trpc/next": "^9.26.2",
     "@trpc/react": "^9.26.2",
@@ -54,6 +57,7 @@
     "bcryptjs": "^2.4.3",
     "clsx": "^1.1.1",
     "date-fns": "^2.29.2",
+    "jsonwebtoken": "^8.5.1",
     "next": "^12.1.6",
     "next-auth": "^4.10.3",
     "node-fetch": "^2.6.1",
@@ -71,6 +75,7 @@
   "devDependencies": {
     "@types/bcryptjs": "^2.4.2",
     "@types/jest": "^27.0.1",
+    "@types/jsonwebtoken": "^8.5.9",
     "@types/node": "^17.0.10",
     "@types/node-fetch": "^2.5.11",
     "@types/nodemailer": "^6.4.5",
@@ -92,9 +97,9 @@
     "npm-run-all": "^4.1.5",
     "playwright": "^1.19.1",
     "prettier": "^2.5.1",
-    "prisma": "^3.7.0",
+    "prisma": "^4.2.1",
     "ts-jest": "^27.0.5",
-    "typescript": "4.4.4"
+    "typescript": "4.8.2"
   },
   "publishConfig": {
     "access": "restricted"
