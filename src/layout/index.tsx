@@ -1,4 +1,4 @@
-import { Footer, Header, Navbar, Sidebar } from 'components/layout';
+import { Footer, Header, Navbar } from 'components/layout';
 import { AppShell, useMantineTheme } from '@mantine/core';
 import { ReactNode, useState } from 'react';
 import { useSession } from 'next-auth/react';
@@ -25,7 +25,6 @@ const Layout = (props: { children?: ReactNode }) => {
       header={<Header opened={opened} setOpened={setOpened} />}
       footer={<Footer />}
       {...(status === 'authenticated' && {
-        aside: <Sidebar />,
         navbar: <Navbar opened={opened} />,
       })}
     >
