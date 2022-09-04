@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authOptions } from 'pages/api/auth/[...nextauth]';
 import { withAuth } from 'next-auth/middleware';
+import { jwtAuthOptions } from 'lib/auth';
 
 export default withAuth(
   // `withAuth` augments your `Request` with the user's token.
   function middleware(req: NextRequest) {
     // console.log({ ...req });
-    console.log('<<<<<<<<<<< GOT HERE >>>>>>>>>>>>');
+    // console.log('<<<<<<<<<<< GOT HERE >>>>>>>>>>>>');
     // return NextResponse.rewrite(new URL('/admin', req.url));
   },
   {
-    // jwt: authOptions.jwt,
+    // jwt: { decode: jwtAuthOptions.decode },
     callbacks: {
       authorized: ({ token }) => {
         // console.log({ token }, '<<<<< TOKEN >>>>>');
