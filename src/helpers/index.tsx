@@ -57,3 +57,12 @@ export const getSearchQuery = (searchParams: URLSearchParams) => {
   for (const [key, value] of entries) query[key] = value;
   return query;
 };
+
+export const numberFormater = (number: number) =>
+  new Intl.NumberFormat().format(number);
+
+export const currencyFormatter = (value: number, currency = 'NGN') => {
+  return new Intl.NumberFormat('en-NG', { style: 'currency', currency }).format(
+    value,
+  );
+};
