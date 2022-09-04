@@ -71,12 +71,12 @@ export const PageHeader = ({ opened, setOpened }: Props) => {
                     passHref
                   >
                     <Button component="a" variant="subtle" id="sign-in-button">
-                      Sign in
+                      Log in
                     </Button>
                   </Link>
                 ) : (
                   <Button variant="light" onClick={handleSignOut}>
-                    Sign out
+                    Log out
                   </Button>
                 )}
               </Group>
