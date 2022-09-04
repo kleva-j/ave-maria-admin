@@ -5,22 +5,22 @@ import { ReactNode } from 'react';
 
 import type { NextPage } from 'next';
 
-type ViewUsersProps = NextPage & {
+type CustomersProps = NextPage & {
   pageTitle: string;
   Wrapper: (chilren: ReactNode) => JSX.Element;
 };
 
-const ViewUsersPage: ViewUsersProps = () => {
+const CustomersPage: CustomersProps = () => {
   return (
     <AdminLayout>
-      <Text>This is the View Users page</Text>
+      <Text>This is the Customers page</Text>
     </AdminLayout>
   );
 };
 
-ViewUsersPage.Wrapper = (children) => <>{children}</>;
+CustomersPage.Wrapper = (children) => <>{children}</>;
 
-ViewUsersPage.pageTitle = 'View users (Admin)';
-ViewUsersPage.displayName = 'View users (Admin)';
+CustomersPage.pageTitle = 'View users (Admin)';
+CustomersPage.displayName = 'View users (Admin)';
 
-export default ViewUsersPage;
+export default CustomersPage;
