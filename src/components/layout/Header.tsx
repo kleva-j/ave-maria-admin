@@ -52,30 +52,35 @@ export const PageHeader = ({ opened, setOpened }: Props) => {
           <Group position="apart" sx={{ width: '100%' }}>
             <Title order={3}>Ave Maria</Title>
 
-            <Group>
-              {isLoggedIn && (
-                <ActionIcon
-                  variant="outline"
-                  color={dark ? 'yellow' : 'blue'}
-                  onClick={() => toggleColorScheme()}
-                  title="Toggle color scheme"
-                >
-                  {dark ? <FiSun size={18} /> : <BsMoonStars size={18} />}
-                </ActionIcon>
-              )}
+            <MediaQuery smallerThan="sm" styles={{ display: 'none' }}>
+              <Group>
+                {isLoggedIn && (
+                  <ActionIcon
+                    variant="outline"
+                    color={dark ? 'yellow' : 'blue'}
+                    onClick={() => toggleColorScheme()}
+                    title="Toggle color scheme"
+                  >
+                    {dark ? <FiSun size={18} /> : <BsMoonStars size={18} />}
+                  </ActionIcon>
+                )}
 
-              {!isLoggedIn ? (
-                <Link href={`/auth/signin?CallbackUrl=${callbackUrl}`} passHref>
-                  <Button component="a" variant="subtle" id="sign-in-button">
-                    Sign in
+                {!isLoggedIn ? (
+                  <Link
+                    href={`/auth/signin?CallbackUrl=${callbackUrl}`}
+                    passHref
+                  >
+                    <Button component="a" variant="subtle" id="sign-in-button">
+                      Log in
+                    </Button>
+                  </Link>
+                ) : (
+                  <Button variant="light" onClick={handleSignOut}>
+                    Log out
                   </Button>
-                </Link>
-              ) : (
-                <Button variant="light" onClick={handleSignOut}>
-                  Sign out
-                </Button>
-              )}
-            </Group>
+                )}
+              </Group>
+            </MediaQuery>
           </Group>
         </div>
       </Container>

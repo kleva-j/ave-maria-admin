@@ -1,5 +1,4 @@
 /* eslint-disable @typescript-eslint/ban-ts-comment */
-import { JWT, JWTEncodeParams, JWTDecodeParams } from 'next-auth/jwt';
 import type { NextApiRequest, NextApiResponse } from 'next';
 import type { NextAuthOptions } from 'next-auth';
 
@@ -11,15 +10,14 @@ import {
 } from 'lib/auth';
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
 import { prisma } from 'server/db/prismaClient';
+import { JWT } from 'next-auth/jwt';
 
 import CredentialsProvider from 'next-auth/providers/credentials';
 import GoogleProvider from 'next-auth/providers/google';
 import EmailProvider from 'next-auth/providers/email';
 import NextAuth from 'next-auth';
-import jwt from 'jsonwebtoken';
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
   providers: [
     CredentialsProvider({
       name: 'Credentials',
@@ -48,7 +46,6 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET ?? '',
   pages: { signIn: '/auth/signin', verifyRequest: '/auth/verify-request' },
   session: { strategy: 'jwt', maxAge: 30 * 24 * 60 * 60 },
-  debug: true,
   callbacks: {
     session: async ({ session, token }) => {
       const { accessToken, user } = token;
@@ -77,16 +74,10 @@ export const authOptions: NextAuthOptions = {
       return token.provider === 'google' ? refreshAccessToken(token) : token;
     },
   },
-  jwt: {
-    encode: async ({ token = {}, secret }: JWTEncodeParams) =>
-      jwt.sign({ ...token }, secret, { algorithm: 'HS512' }),
-    decode: async ({ secret, token = '' }: JWTDecodeParams) =>
-      jwt.verify(token, secret, {
-        algorithms: ['HS512'],
-      }) as JWT,
-  },
+  // jwt: jwtAuthOptions,
+  adapter: PrismaAdapter(prisma),
 };
 
-export default async function auth(req: NextApiRequest, res: NextApiResponse) {
+export default async function (req: NextApiRequest, res: NextApiResponse) {
   return NextAuth(req, res, authOptions);
 }

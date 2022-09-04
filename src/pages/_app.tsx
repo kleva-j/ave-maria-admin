@@ -1,6 +1,7 @@
 import type { AppRouter } from 'server/routers/_app';
 
 import { useLocalStorage, useHotkeys, useColorScheme } from '@mantine/hooks';
+import { RouterTransition } from 'components/molecules/RouterTransition';
 import { wsLink, createWSClient } from '@trpc/client/links/wsLink';
 import { httpBatchLink } from '@trpc/client/links/httpBatchLink';
 import { getSession, SessionProvider } from 'next-auth/react';
@@ -33,15 +34,18 @@ const MyApp: AppType = (props) => {
     pageProps: { session, ...pageProps },
   } = props;
   const router = useRouter();
-  const { isProtected = false, pageTitle = '' } = { ...Component };
+  const {
+    isProtected = false,
+    pageTitle = '',
+    Wrapper = (children?: ReactNode) =>
+      isProtected ? <Layout>{children}</Layout> : <>{children}</>,
+  } = { ...Component };
+
   const [colorScheme, setColorScheme] = useLocalStorage<ColorScheme>({
     key: 'gitline-color-scheme',
     defaultValue: useColorScheme(session?.user ? 'dark' : 'light'),
     getInitialValueInEffect: true,
   });
-
-  const Wrapper = (children?: ReactNode) =>
-    isProtected ? <Layout>{children}</Layout> : <>{children}</>;
 
   const toggleColorScheme = (value?: ColorScheme) =>
     setColorScheme(value || (colorScheme === 'dark' ? 'light' : 'dark'));
@@ -64,6 +68,7 @@ const MyApp: AppType = (props) => {
       >
         <SessionProvider session={session}>
           <>
+            <RouterTransition />
             <Seo canonical={baseUrl + router.asPath} title={pageTitle} />
             {Wrapper(<Component {...pageProps} />)}
           </>
