@@ -1,6 +1,8 @@
+import { JWT, JWTEncodeParams, JWTDecodeParams } from 'next-auth/jwt';
 import { AuthSchema, signupAuthSchema, AuthState } from 'types';
 import { prisma } from 'server/db/prismaClient';
 import { hash, compare } from 'bcryptjs';
+import jwt from 'jsonwebtoken';
 
 export async function hashPassword(password: string) {
   return hash(password, 12);
@@ -159,4 +161,13 @@ export const refreshAccessToken = async (token: any) => {
 
     return { ...token, error: 'RefreshAccessTokenError' };
   }
+};
+
+export const jwtAuthOptions = {
+  encode: async ({ token = {}, secret }: JWTEncodeParams) =>
+    jwt.sign({ ...token }, secret, { algorithm: 'HS512' }),
+  decode: async ({ secret, token = '' }: JWTDecodeParams) =>
+    jwt.verify(token, secret, {
+      algorithms: ['HS512'],
+    }) as JWT,
 };
