@@ -1,6 +1,5 @@
 import { NavbarButton } from 'components/molecules/NavbarButton';
 import { UserCapsule } from 'components/molecules/UserCapsule';
-import { ButtonLink } from 'components/molecules/ButtonLink';
 import { MediaQuery, Navbar, Stack } from '@mantine/core';
 import { IoMdExit } from 'react-icons/io';
 import { signOut } from 'next-auth/react';
