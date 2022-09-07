@@ -14,21 +14,23 @@ import {
 } from '@mantine/core';
 import { MdAlternateEmail, MdOutlineEmail } from 'react-icons/md';
 import { useForm, zodResolver } from '@mantine/form';
+import { useFileUpload } from 'hooks/FileUpload';
 import { TbChevronDown } from 'react-icons/tb';
 import { BiPencil } from 'react-icons/bi';
+import { imgUrl } from 'helpers';
 import { z } from 'zod';
 
-const schema = z.object({
-  firstname: z
-    .string()
-    .min(2, { message: 'Firstname should have at least 2 letters' }),
-  lastname: z
-    .string()
-    .min(2, { message: 'Lastname should have at least 2 letters' }),
-  email: z.string().email({ message: 'Invalid email' }),
-});
-
-const validate = zodResolver(schema);
+const validate = zodResolver(
+  z.object({
+    firstname: z
+      .string()
+      .min(2, { message: 'Firstname should have at least 2 letters' }),
+    lastname: z
+      .string()
+      .min(2, { message: 'Lastname should have at least 2 letters' }),
+    email: z.string().email({ message: 'Invalid email' }),
+  }),
+);
 
 export const Profile = () => {
   const form = useForm({
@@ -36,11 +38,15 @@ export const Profile = () => {
     validate,
   });
 
+  const { Component, imagePreview, onClick, loading } = useFileUpload({
+    defaultImage: imgUrl,
+  });
+
   const theme = useMantineTheme();
   const labelColor = theme.colors.dark[3];
 
   return (
-    <Tabs.Panel value="profile" px="md" py="lg">
+    <Tabs.Panel value="profile" px="md" py="lg" sx={{ maxWidth: 850 }}>
       <form>
         <Group>
           <Stack sx={{ maxWidth: 450 }} spacing="lg">
@@ -56,7 +62,6 @@ export const Profile = () => {
             >
               <Input
                 mt="xs"
-                withAsterisk
                 icon={<MdOutlineEmail />}
                 rightSection={<MdAlternateEmail />}
                 placeholder="username@domain.com"
@@ -106,24 +111,23 @@ export const Profile = () => {
           >
             <Title order={5}>Profile photo</Title>
             <Center my="xl" sx={{ position: 'relative' }}>
-              <Avatar
-                size={120}
-                radius={60}
-                src="https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?ixid=MnwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8&ixlib=rb-1.2.1&auto=format&fit=crop&w=250&q=80"
-              />
+              <Avatar size={120} radius={60} src={imagePreview} />
               <ActionIcon
                 radius="xl"
                 variant="filled"
                 color="blue"
                 size="lg"
+                loading={loading}
                 sx={{
                   position: 'absolute',
                   bottom: '-0.3125rem',
                   marginLeft: '4.25rem',
                 }}
+                onClick={onClick}
               >
                 <BiPencil size={19} />
               </ActionIcon>
+              {Component}
             </Center>
           </Box>
         </Group>

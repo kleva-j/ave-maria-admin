@@ -1,12 +1,13 @@
 /* eslint-disable react/display-name */
 import { Autocomplete, Title, Stack, Group, Tabs } from '@mantine/core';
 import { Profile, Members, Integrations } from 'components/admin';
+import { Permissions } from 'components/admin/Permissions';
 import { AdminLayout } from 'components/admin/Layout';
 import { useState, ReactNode } from 'react';
 import { FiSearch } from 'react-icons/fi';
 
 import type { NextPage } from 'next';
-import { Permissions } from 'components/admin/Permissions';
+import { Notification } from 'components/admin/Notification';
 
 type SettingsPageProps = NextPage & {
   pageTitle: string;
@@ -42,11 +43,13 @@ const SettingsPage: SettingsPageProps = () => {
           <Tabs.List>
             <Tabs.Tab value="profile">Profile</Tabs.Tab>
             <Tabs.Tab value="members">Members</Tabs.Tab>
+            <Tabs.Tab value="notification">Notifications</Tabs.Tab>
             <Tabs.Tab value="integrations">Integrations</Tabs.Tab>
             <Tabs.Tab value="permissions">Permissions</Tabs.Tab>
           </Tabs.List>
           <Profile />
           <Members />
+          <Notification />
           <Integrations />
           <Permissions />
         </Tabs>

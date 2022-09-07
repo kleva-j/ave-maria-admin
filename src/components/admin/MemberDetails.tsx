@@ -1,14 +1,15 @@
 import {
   ActionIcon,
-  Avatar,
-  Table,
   Select,
+  Avatar,
   Group,
+  Table,
   Text,
   Box,
 } from '@mantine/core';
 import { RiDeleteBin6Line } from 'react-icons/ri';
 import { TbChevronDown } from 'react-icons/tb';
+import { femaleImageUrl } from 'helpers';
 
 interface IMemberDetails {
   userList: any[];
@@ -44,12 +45,7 @@ export const MemberDetails = ({ userList }: IMemberDetails) => {
             <tr key={item.name}>
               <td>
                 <Group>
-                  <Avatar
-                    src={
-                      'https://images.unsplash.com/photo-1508214751196-bcfd4ca60f91?ixid=MXwxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHw%3D&ixlib=rb-1.2.1&auto=format&fit=crop&w=255&q=80'
-                    }
-                    radius="xl"
-                  />
+                  <Avatar src={femaleImageUrl} radius="xl" />
                   <Box sx={{ flex: 1 }}>
                     <Text size="sm" weight={500}>
                       {item?.name}
