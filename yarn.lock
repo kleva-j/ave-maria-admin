@@ -753,13 +753,13 @@
   resolved "https://registry.yarnpkg.com/@mantine/hooks/-/hooks-5.2.3.tgz#76a57141665ee0fd97c436e44b8f252755a2e502"
   integrity sha512-8JuNVnC9Df1MsbQLbRxp6PakwakM2O+P6zXYYfFQNUmsHqBzvU8u7fzeiRVCefW7rP3o1+39Qpm3pkQUz+T90w==
 
-"@mantine/next@^5.2.4":
-  version "5.2.4"
-  resolved "https://registry.yarnpkg.com/@mantine/next/-/next-5.2.4.tgz#87870623c1cd9cc81a3bc521305fb6c2e876aa61"
-  integrity sha512-btCRh4fwe0i4iX04urBYRYoru1MVu6gmSi5FaU8WZYJ8/jVzfta6rwfoKp9uWwCx8hHXhXPQxSX/bjBkH5x5cg==
+"@mantine/next@^5.3.0":
+  version "5.3.0"
+  resolved "https://registry.yarnpkg.com/@mantine/next/-/next-5.3.0.tgz#f52a3b806f4ed4baf7033744f9231432f9dac14c"
+  integrity sha512-X1KtePJwonSCqoPfdmJ0n4YemfThTTA/Ae/iS1qv62BGET2AukmfzbGDawvwTjEYWGBJKSCo1wacZhuAUweTUg==
   dependencies:
-    "@mantine/ssr" "5.2.4"
-    "@mantine/styles" "5.2.4"
+    "@mantine/ssr" "5.3.0"
+    "@mantine/styles" "5.3.0"
 
 "@mantine/notifications@^5.2.0":
   version "5.2.3"
@@ -776,12 +776,12 @@
   dependencies:
     "@mantine/utils" "5.2.5"
 
-"@mantine/ssr@5.2.4":
-  version "5.2.4"
-  resolved "https://registry.yarnpkg.com/@mantine/ssr/-/ssr-5.2.4.tgz#f361c952c4318172b22ccbe9669824b1703e2962"
-  integrity sha512-+phpx1RfQl5n2EITOylkbcrtIkmDK6+G1mu7JLI4/xw7SffBz8jdafkgoPx++SuKFu6TMaiXYGXBuoXNyXktrg==
+"@mantine/ssr@5.3.0":
+  version "5.3.0"
+  resolved "https://registry.yarnpkg.com/@mantine/ssr/-/ssr-5.3.0.tgz#6654ffb9bfc1256b025fad91e6a50cc73c09ffb5"
+  integrity sha512-+Nu35NTXVjTOhpyBbpuPBaB3c8u2ViIfdDX3/TOqNLUYfy2J3ZvuS8CyT80BMmYhHsx3yuk5w3pVozXpzoKXuA==
   dependencies:
-    "@mantine/styles" "5.2.4"
+    "@mantine/styles" "5.3.0"
     html-react-parser "1.4.12"
 
 "@mantine/styles@5.2.3":
@@ -792,10 +792,10 @@
     clsx "1.1.1"
     csstype "3.0.9"
 
-"@mantine/styles@5.2.4":
-  version "5.2.4"
-  resolved "https://registry.yarnpkg.com/@mantine/styles/-/styles-5.2.4.tgz#a1912660faa44e014b2541e7a1e14e77624fd1d0"
-  integrity sha512-fSKVdM9epq3Zpbi3/Xs4kvLSa5Cj1p7v022m8k8sPqOOz5oji213r3bHDhzhgW57kBN2MI/bepcCu375EiYyGA==
+"@mantine/styles@5.3.0":
+  version "5.3.0"
+  resolved "https://registry.yarnpkg.com/@mantine/styles/-/styles-5.3.0.tgz#aea9810eab6b71c6ebe5189bafc47c051dd89f77"
+  integrity sha512-2JQ7m4XHq8sOeSQsrHenW6xK6vRQ+gdfObEZbFx15NsWiIUFKWi+7nzVlLGRjDzYa7rA75ZZ3AbnuYBbSp5hjA==
   dependencies:
     clsx "1.1.1"
     csstype "3.0.9"
