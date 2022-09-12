@@ -12,8 +12,8 @@ export default withAuth(
   {
     // jwt: { decode: jwtAuthOptions.decode },
     callbacks: {
-      authorized: ({ token }) => {
-        // console.log({ token }, '<<<<< TOKEN >>>>>');
+      authorized: (params) => {
+        const { token } = params;
         return token?.user?.role === 'admin';
       },
     },
@@ -23,6 +23,7 @@ export default withAuth(
 export const config = {
   matcher: [
     '/admin',
+    '/admin/:pages*',
     '/api/admin/users',
     '/api/admin/users/:id*',
     '/api/admin/analytics',

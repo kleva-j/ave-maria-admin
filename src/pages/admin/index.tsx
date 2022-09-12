@@ -1,4 +1,6 @@
 /* eslint-disable react/display-name */
+import type { NextPage } from 'next';
+
 import { SimpleGrid, Title, Stack, Select, Group, Grid } from '@mantine/core';
 import { currencyFormatter, numberFormater } from 'helpers';
 import { SalesChart } from 'components/admin/SalesChart';
@@ -12,7 +14,7 @@ import { useSession } from 'next-auth/react';
 import { ReactNode, useState } from 'react';
 import { AiFillEye } from 'react-icons/ai';
 import { HiUsers } from 'react-icons/hi';
-import type { NextPage } from 'next';
+import { trpc } from 'utils/trpc';
 
 type AdminPageProps = NextPage & {
   pageTitle: string;
@@ -23,6 +25,12 @@ const AdminPage: AdminPageProps = () => {
   const { data } = useSession();
   const firstname = data?.user.name?.split(' ')[0];
   const [value, setValue] = useState<string>('today');
+
+  // const { data: result } = trpc.useQuery([
+  //   'user.one',
+  //   { id: 'cl7vp3rsh0006ajxgzwiyln42' },
+  // ]);
+
   return (
     <AdminLayout>
       <Stack>

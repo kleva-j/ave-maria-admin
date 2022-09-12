@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { getAllUsers, getUserById } from 'lib/user';
+import { getManyUsersResolver, getSingleUserResolver } from 'lib/user';
 
 const allowedMethods = ['GET'];
 
@@ -17,7 +17,9 @@ export default async function handler(
       let { id } = req.query;
       id = id as string;
 
-      const result = id ? await getUserById(id) : await getAllUsers();
+      const result = id
+        ? await getSingleUserResolver({ where: { id } })
+        : await getManyUsersResolver({});
 
       return res.status(200).json({ message: 'Successful', result });
     }
