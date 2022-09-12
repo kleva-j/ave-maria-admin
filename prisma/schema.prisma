@@ -1,4 +1,3 @@
-// This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
 datasource db {
@@ -16,21 +15,95 @@ enum PosterSource {
 }
 
 enum Roles {
-  editor
   admin
+  agent
   user
+  guest
+}
+
+enum Status {
+  approved
+  pending
+  denied
+}
+
+enum UserStatus {
+  active
+  pending
+  invited
+  revoked
+  deleted
+  deactivated
+}
+
+enum RequestStatus {
+  approved
+  pending
+  denied
+  completed
+}
+
+enum CardStatus {
+  active
+  closed
+  deleted
+  finished
+}
+
+enum RequestType {
+  newCard
+  withdrawal
+  contributions
 }
 
 model Post {
-  id     String @id @default(uuid())
-  userId String @map("user_id")
-  text   String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  // To return `Date`s intact through the API we need to add data transformers
-  // https://trpc.io/docs/data-transformers
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  text      String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt DateTime @unique @default(now())
   updatedAt DateTime @unique @default(now())
+}
+
+model Card {
+  id                  String         @id @default(uuid())
+  userId              String         @map("user_id")
+  name                String
+  status              CardStatus     @default(active)
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  contributions       Contribution[]
+  withdrawal_requests Request[]
+  createdAt           DateTime       @unique @default(now())
+  updatedAt           DateTime       @unique @default(now())
+}
+
+model Contribution {
+  id         String   @id @default(uuid())
+  cardId     String
+  agentId    String
+  text       String
+  amount     Int
+  approvedAt DateTime
+  Card       Card     @relation(fields: [cardId], references: [id])
+  receivedBy User     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @unique @default(now())
+  updatedAt  DateTime @unique @default(now())
+}
+
+model Request {
+  id         String        @id @default(uuid())
+  userId     String        @map("user_id")
+  type       RequestType   @default(contributions)
+  cardId     String?
+  info       String?
+  amount     Int
+  Card       Card?         @relation(fields: [cardId], references: [id])
+  status     RequestStatus @default(pending)
+  approvedAt DateTime
+  approvedBy String
+  createdAt  DateTime      @unique @default(now())
+  updatedAt  DateTime      @unique @default(now())
+  date       DateTime      @default(now())
 }
 
 model Account {
@@ -58,33 +131,33 @@ model Account {
 }
 
 model Session {
-  id      String   @id @default(cuid())
-  userId  String   @map("user_id")
-  expires DateTime
-
-  sessionToken String? @unique @map(name: "session_token")
-  accessToken  String? @unique @map(name: "access_token")
-
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now()) @map(name: "created_at")
-  updatedAt DateTime @default(now()) @map(name: "updated_at")
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  expires      DateTime
+  sessionToken String?  @unique @map(name: "session_token")
+  accessToken  String?  @unique @map(name: "access_token")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt    DateTime @default(now()) @map(name: "created_at")
+  updatedAt    DateTime @default(now()) @map(name: "updated_at")
 
   @@map(name: "sessions")
 }
 
 model User {
-  id            String    @id @default(cuid())
-  name          String?
-  email         String?   @unique
-  emailVerified DateTime? @map(name: "email_verified")
-  image         String?
-  passwordHash  String?
-  accounts      Account[]
-  sessions      Session[]
-  posts         Post[]
-  role          Roles     @default(user)
-  createdAt     DateTime  @default(now()) @map(name: "created_at")
-  updatedAt     DateTime? @updatedAt @map(name: "updated_at")
+  id                    String         @id @default(cuid())
+  name                  String?
+  email                 String?        @unique
+  emailVerified         DateTime?      @map(name: "email_verified")
+  image                 String?
+  passwordHash          String?
+  accounts              Account[]
+  sessions              Session[]
+  cards                 Card[]
+  posts                 Post[]
+  role                  Roles          @default(user)
+  createdAt             DateTime       @default(now()) @map(name: "created_at")
+  updatedAt             DateTime?      @updatedAt @map(name: "updated_at")
+  contributionsApproved Contribution[]
 
   @@map(name: "users")
 }

@@ -1,11 +1,16 @@
 /**
  * This file contains the root router of your tRPC-backend
  */
-import { createRouter } from '../createRouter';
-import { postRouter } from './post';
 import { Subscription } from '@trpc/server';
-import superjson from 'superjson';
 import { clearInterval } from 'timers';
+
+import { createRouter } from '../createRouter';
+// import { requestRouter } from './request';
+import { userRouter } from './user';
+import { postRouter } from './post';
+import { cardRouter } from './card';
+
+import superjson from 'superjson';
 
 /**
  * Create your application's root router
@@ -24,12 +29,10 @@ export const appRouter = createRouter()
    * @link https://trpc.io/docs/error-formatting
    */
   // .formatError(({ shape, error }) => { })
-  .query('healthz', {
-    resolve() {
-      return 'yay!';
-    },
-  })
   .merge('post.', postRouter)
+  .merge('card.', cardRouter)
+  .merge('user.', userRouter)
+  // .merge('request.', requestRouter)
   .subscription('randomNumber', {
     resolve() {
       return new Subscription<number>((emit) => {
