@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/ban-ts-comment */
 import * as trpc from '@trpc/server';
 
 import { AccessControl } from 'accesscontrol';
@@ -382,7 +381,7 @@ export const handleAccess = async (params: accessType) => {
     .can(user.role)
     [`${action}${isOwnerFunc() ? 'Own' : 'Any'}`](resource);
   const { granted } = permission;
-  const q = granted ? await query(input) : {};
+  const q = granted ? await query({ where: { ...input } }) : {};
   if (!granted) throw new trpc.TRPCError({ code: 'FORBIDDEN' });
   return { granted, data: permission.filter(q) };
 };

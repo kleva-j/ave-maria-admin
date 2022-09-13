@@ -11,21 +11,18 @@ import { createProtectedRouter } from '../createRouter';
 const resource = 'request';
 
 const Schema = z.object({
-  id: z.string(),
-  userId: z.string(),
-  type: z.nativeEnum(RequestType),
-  cardId: z.string().nullable(),
-  info: z.string().nullable(),
-  amount: z.number(),
-  status: z.nativeEnum(RequestStatus),
-  approvedAt: z.date(),
-  approvedBy: z.string(),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-  date: z.date(),
+  id: z.string().cuid({ message: `invalid ${resource} id` }),
+  type: z.nativeEnum(RequestType).optional(),
+  status: z.nativeEnum(RequestStatus).optional(),
+  userId: z.string().cuid({ message: `invalid user id` }).optional(),
+  cardId: z.string().uuid({ message: `invalid card id` }).optional(),
+  amount: z
+    .number()
+    .min(100, { message: `Select an amount higher than 100` })
+    .optional(),
 });
 
-const InputSchema = Schema.omit({ updatedAt: true }).optional();
+const InputSchema = Schema.partial();
 
 export const requestRouter = createProtectedRouter()
   .query('one', {
@@ -48,7 +45,7 @@ export const requestRouter = createProtectedRouter()
     },
   })
   .query('all', {
-    input: InputSchema.optional(),
+    input: InputSchema,
     async resolve({ input, ctx: { prisma, session } }) {
       const user = session.user as any;
       const { data } = await handleManyAccess({

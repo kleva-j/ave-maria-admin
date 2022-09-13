@@ -5,7 +5,7 @@ import { Subscription } from '@trpc/server';
 import { clearInterval } from 'timers';
 
 import { createRouter } from '../createRouter';
-// import { requestRouter } from './request';
+import { requestRouter } from './request';
 import { userRouter } from './user';
 import { postRouter } from './post';
 import { cardRouter } from './card';
@@ -32,7 +32,7 @@ export const appRouter = createRouter()
   .merge('post.', postRouter)
   .merge('card.', cardRouter)
   .merge('user.', userRouter)
-  // .merge('request.', requestRouter)
+  .merge('request.', requestRouter)
   .subscription('randomNumber', {
     resolve() {
       return new Subscription<number>((emit) => {

@@ -11,7 +11,7 @@ import { createProtectedRouter } from '../createRouter';
 const resource = 'card';
 
 const InputSchema = z.object({
-  status: z.nativeEnum(CardStatus),
+  status: z.nativeEnum(CardStatus).optional(),
   id: z.string().cuid({ message: `invalid ${resource} id` }),
   name: z.string().min(2, { message: 'Name should have at least 2 letters' }),
 });

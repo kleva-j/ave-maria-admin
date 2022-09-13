@@ -38,7 +38,7 @@ export const userRouter = createProtectedRouter()
   .middleware(({ ctx, next }) => {
     const allowedRoles = [Roles.admin, Roles.agent];
     const user = ctx.session.user as any;
-    if (!allowedRoles.includes(user.roles))
+    if (!allowedRoles.includes(user.role))
       throw new trpc.TRPCError({ code: 'FORBIDDEN' });
     return next({
       ctx: { ...ctx, session: { ...ctx.session, user: ctx.session.user } },

@@ -26,10 +26,18 @@ const AdminPage: AdminPageProps = () => {
   const firstname = data?.user.name?.split(' ')[0];
   const [value, setValue] = useState<string>('today');
 
-  // const { data: result } = trpc.useQuery([
+  // const { data: user } = trpc.useQuery([
   //   'user.one',
   //   { id: 'cl7vp3rsh0006ajxgzwiyln42' },
   // ]);
+
+  const { data: users } = trpc.useQuery(['user.all', {}]);
+
+  // const { data: cards } = trpc.useQuery(['card.all', {}]);
+
+  // const { data: requests } = trpc.useQuery(['request.all', {}]);
+
+  // console.log({ user, users, cards, requests }, 'Output here >>>>');
 
   return (
     <AdminLayout>
