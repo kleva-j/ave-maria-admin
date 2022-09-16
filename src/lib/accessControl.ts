@@ -381,7 +381,7 @@ export const handleAccess = async (params: accessType) => {
     .can(user.role)
     [`${action}${isOwnerFunc() ? 'Own' : 'Any'}`](resource);
   const { granted } = permission;
-  const q = granted ? await query({ where: { ...input } }) : {};
+  const q = granted ? await query(input) : {};
   if (!granted) throw new trpc.TRPCError({ code: 'FORBIDDEN' });
   return { granted, data: permission.filter(q) };
 };

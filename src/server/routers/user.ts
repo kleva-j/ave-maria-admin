@@ -22,7 +22,8 @@ export const userRouter = createProtectedRouter()
       const user = session.user as any;
       try {
         const { data } = await handleAccess({
-          query: async (input) => await prisma.user.findUnique(input),
+          query: async (input) =>
+            await prisma.user.findUnique({ where: { ...input } }),
           isOwnerFunc: () => input.id === user.id,
           action: Action.read,
           resource,
@@ -31,7 +32,11 @@ export const userRouter = createProtectedRouter()
         });
         return { user: data };
       } catch (err) {
-        throw err;
+        console.log(err);
+        throw new trpc.TRPCError({
+          code: 'BAD_REQUEST',
+          message: `There was an error searching for User with id ${input.id}`,
+        });
       }
     },
   })
@@ -47,7 +52,10 @@ export const userRouter = createProtectedRouter()
   .query('all', {
     input: InputSchema.partial(),
     async resolve({ input, ctx: { prisma } }) {
-      const users = await prisma.user.findMany({ where: { ...input } });
+      const users = await prisma.user.findMany({
+        where: { ...input },
+        include: { cards: true, posts: true },
+      });
       return { users };
     },
   });

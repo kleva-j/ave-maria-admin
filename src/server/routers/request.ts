@@ -31,7 +31,8 @@ export const requestRouter = createProtectedRouter()
       const user = session.user as any;
       try {
         const { data } = await handleAccess({
-          query: async (input) => await prisma.request.findUnique(input),
+          query: async (input) =>
+            await prisma.request.findUnique({ where: { ...input } }),
           isOwnerFunc: () => input.id === user.id,
           action: Action.read,
           resource,
@@ -56,5 +57,17 @@ export const requestRouter = createProtectedRouter()
         user,
       });
       return { requests: data };
+    },
+  })
+  .mutation('create', {
+    input: z.object({ name: z.string().max(50) }),
+    async resolve({}) {
+      return { request: {} };
+    },
+  })
+  .mutation('delete', {
+    input: z.object({ id: z.number() }),
+    async resolve({}) {
+      return 'success';
     },
   });

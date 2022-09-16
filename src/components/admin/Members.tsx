@@ -2,7 +2,7 @@ import { Divider, Tabs } from '@mantine/core';
 
 import { MemberGroup } from './MemberGroup';
 
-const sampleUserList = [
+export const sampleUserList = [
   {
     name: 'Isla Watson',
     created_at: new Date(2020, 1, 3),
