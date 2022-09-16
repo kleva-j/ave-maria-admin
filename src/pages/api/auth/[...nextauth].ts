@@ -68,7 +68,6 @@ export const authOptions: NextAuthOptions = {
         reformedToken.refreshToken = account?.refresh_token;
         reformedToken.user = { id, name, email, image, emailVerified, role };
       }
-
       if (reformedToken.expires_at) return reformedToken;
       if (expires_at && Date.now() < expires_at * 1000) return token;
       return token.provider === 'google' ? refreshAccessToken(token) : token;

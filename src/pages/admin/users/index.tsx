@@ -1,9 +1,9 @@
 /* eslint-disable react/display-name */
 import { AdminLayout } from 'components/admin/Layout';
-import { Text } from '@mantine/core';
 import { ReactNode } from 'react';
 
 import type { NextPage } from 'next';
+import { UserList } from 'components/admin/Customers/UserList';
 
 type CustomersProps = NextPage & {
   pageTitle: string;
@@ -13,7 +13,7 @@ type CustomersProps = NextPage & {
 const CustomersPage: CustomersProps = () => {
   return (
     <AdminLayout>
-      <Text>This is the Customers page</Text>
+      <UserList />
     </AdminLayout>
   );
 };

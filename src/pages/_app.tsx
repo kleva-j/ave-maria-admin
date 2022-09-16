@@ -6,6 +6,8 @@ import { wsLink, createWSClient } from '@trpc/client/links/wsLink';
 import { httpBatchLink } from '@trpc/client/links/httpBatchLink';
 import { getSession, SessionProvider } from 'next-auth/react';
 import { loggerLink } from '@trpc/client/links/loggerLink';
+import { splitLink } from '@trpc/client/links/splitLink';
+import { httpLink } from '@trpc/client/links/httpLink';
 import { AppType } from 'next/dist/shared/lib/utils';
 import { useRouter } from 'next/router';
 import { withTRPC } from '@trpc/next';
@@ -82,9 +84,17 @@ MyApp.getInitialProps = async ({ ctx }) => {
   return { pageProps: { session: await getSession(ctx) } };
 };
 
+const url = `${APP_URL}/api/trpc`;
+
 function getEndingLink() {
   return typeof window === 'undefined'
-    ? httpBatchLink({ url: `${APP_URL}/api/trpc` })
+    ? splitLink({
+        condition(op) {
+          return op.context.skipBatch === true;
+        },
+        true: httpLink({ url }),
+        false: httpBatchLink({ url }),
+      })
     : wsLink<AppRouter>({ client: createWSClient({ url: WS_URL }) });
 }
 

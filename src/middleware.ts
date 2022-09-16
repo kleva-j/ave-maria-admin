@@ -5,8 +5,6 @@ import { jwtAuthOptions } from 'lib/auth';
 export default withAuth(
   // `withAuth` augments your `Request` with the user's token.
   function middleware(req: NextRequest) {
-    // console.log({ ...req });
-    // console.log('<<<<<<<<<<< GOT HERE >>>>>>>>>>>>');
     // return NextResponse.rewrite(new URL('/admin', req.url));
   },
   {
