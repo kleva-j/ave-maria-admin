@@ -1,7 +1,7 @@
 export const hostingPlaform = {
   vercel: {
-    hostname: process.env.VERCEL_URL ?? '',
-    url: `https://${process.env.VERCEL_URL}`,
+    hostname: process.env.NEXT_PUBLIC_VERCEL_URL ?? '',
+    url: `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`,
   },
   render: {
     hostname: process.env.RENDER_EXTERNAL_HOSTNAME ?? '',
@@ -11,13 +11,15 @@ export const hostingPlaform = {
 
 export const getBaseUrl = () => {
   if (typeof window !== 'undefined') return '';
-  if (process.env.VERCEL_URL) return hostingPlaform['vercel']['url'];
+  if (process.env.NEXT_PUBLIC_VERCEL_URL)
+    return hostingPlaform['vercel']['url'];
   if (process.env.RENDER_EXTERNAL_URL) return hostingPlaform['render']['url'];
   return `http://localhost:${process.env.PORT ?? 3000}`; // dev SSR should use localhost
 };
 
 export const getHostname = (): string => {
-  if (process.env.VERCEL_URL) return hostingPlaform.vercel['hostname'];
+  if (process.env.NEXT_PUBLIC_VERCEL_URL)
+    return hostingPlaform.vercel['hostname'];
   if (process.env.RENDER_EXTERNAL_URL) return hostingPlaform.render['hostname'];
   return '';
 };
