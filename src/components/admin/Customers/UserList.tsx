@@ -7,7 +7,10 @@ import { TableComponent } from './Table';
 import { Tablist } from './Tablist';
 
 export const UserList = () => {
-  const { data: users } = trpc.useQuery(['user.all', {}]);
+  const { data: users } = trpc.useQuery(['user.all', {}], {
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
+  });
 
   return (
     <Stack>
