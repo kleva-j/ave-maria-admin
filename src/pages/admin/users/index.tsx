@@ -1,9 +1,9 @@
 /* eslint-disable react/display-name */
+import type { NextPage } from 'next';
+
+import { UserList } from 'components/admin/Customers/UserList';
 import { AdminLayout } from 'components/admin/Layout';
 import { ReactNode } from 'react';
-
-import type { NextPage } from 'next';
-import { UserList } from 'components/admin/Customers/UserList';
 
 type CustomersProps = NextPage & {
   pageTitle: string;
@@ -18,9 +18,17 @@ const CustomersPage: CustomersProps = () => {
   );
 };
 
+// export const getServerSideProps: GetServerSideProps = async (context) => {
+//   const { prefetchQuery, dehydrate } = await ssgHelpers(context);
+//   await prefetchQuery('user.all', {});
+//   return {
+//     props: { trpcState: dehydrate() },
+//   };
+// };
+
 CustomersPage.Wrapper = (children) => <>{children}</>;
 
-CustomersPage.pageTitle = 'View users (Admin)';
-CustomersPage.displayName = 'View users (Admin)';
+CustomersPage.pageTitle = 'Customers (Admin)';
+CustomersPage.displayName = 'Customers (Admin)';
 
 export default CustomersPage;
