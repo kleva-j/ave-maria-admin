@@ -24,6 +24,11 @@ export const appRouter = createRouter()
       },
     };
   })
+  .query('healthz', {
+    resolve() {
+      return 'yay!';
+    },
+  })
   .merge('post.', postRouter)
   .merge('card.', cardRouter)
   .merge('user.', userRouter)
