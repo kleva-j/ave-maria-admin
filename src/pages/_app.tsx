@@ -84,7 +84,7 @@ MyApp.getInitialProps = async ({ ctx }) => {
   return { pageProps: { session: await getSession(ctx) } };
 };
 
-const url = `${APP_URL}/api/trpc`;
+const url = `${APP_URL ?? process.env.VERCEL_URL}/api/trpc`;
 
 function getEndingLink() {
   return typeof window === 'undefined'
@@ -95,7 +95,9 @@ function getEndingLink() {
         true: httpLink({ url }),
         false: httpBatchLink({ url }),
       })
-    : wsLink<AppRouter>({ client: createWSClient({ url: WS_URL }) });
+    : wsLink<AppRouter>({
+        client: createWSClient({ url: WS_URL ?? process.env.VERCEL_URL }),
+      });
 }
 
 export default withTRPC<AppRouter>({

@@ -1,5 +1,5 @@
-import { Footer, Header, Sidebar } from 'components/layout';
 import { AppShell, useMantineTheme } from '@mantine/core';
+import { Footer, Header } from 'components/layout';
 import {
   isValidElement,
   cloneElement,
@@ -26,7 +26,6 @@ export const AdminLayout = ({ children }: LayoutProps) => {
       header={<Header opened={opened} setOpened={setOpened} />}
       navbar={<AdminNavbar opened={opened} />}
       footer={<Footer />}
-      // aside={<Sidebar />}
       styles={{
         main: {
           backgroundColor:

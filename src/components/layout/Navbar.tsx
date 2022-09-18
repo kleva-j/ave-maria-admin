@@ -24,44 +24,41 @@ export const PageNavbar = (props: { opened: boolean }) => {
     >
       <Navbar.Section grow mt="xs">
         <Stack>
-          {/* {data?.user?.role === 'admin' && ( */}
-          <Link href={`/admin`} passHref>
-            <UnstyledButton
-              component="a"
-              sx={(theme) => ({
-                display: 'block',
-                width: '100%',
-                padding: theme.spacing.xs,
-                borderRadius: theme.radius.sm,
-                color:
-                  theme.colorScheme === 'dark'
-                    ? theme.colors.dark[0]
-                    : theme.black,
-
-                '&:hover': {
-                  backgroundColor:
+          {data?.user?.role === 'admin' && (
+            <Link href={`/admin`} passHref>
+              <UnstyledButton
+                component="a"
+                sx={(theme) => ({
+                  display: 'block',
+                  width: '100%',
+                  padding: theme.spacing.xs,
+                  borderRadius: theme.radius.sm,
+                  color:
                     theme.colorScheme === 'dark'
-                      ? theme.colors.dark[6]
-                      : theme.colors.gray[0],
-                },
-              })}
-            >
-              <Group>
-                <ThemeIcon color="blue" variant="light">
-                  <MdAdminPanelSettings />
-                </ThemeIcon>
-                <Text size="sm">Admin Page</Text>
-              </Group>
-            </UnstyledButton>
-          </Link>
-          {/* )} */}
+                      ? theme.colors.dark[0]
+                      : theme.black,
+
+                  '&:hover': {
+                    backgroundColor:
+                      theme.colorScheme === 'dark'
+                        ? theme.colors.dark[6]
+                        : theme.colors.gray[0],
+                  },
+                })}
+              >
+                <Group>
+                  <ThemeIcon color="blue" variant="light">
+                    <MdAdminPanelSettings />
+                  </ThemeIcon>
+                  <Text size="sm">Admin Page</Text>
+                </Group>
+              </UnstyledButton>
+            </Link>
+          )}
         </Stack>
-        {/* <Text>Application navbar</Text> */}
       </Navbar.Section>
     </Navbar>
   );
 };
 
-{
-  /* <UserCapsule /> */
-}
+/* <UserCapsule /> */
