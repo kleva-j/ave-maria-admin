@@ -11,7 +11,7 @@ import { httpLink } from '@trpc/client/links/httpLink';
 import { AppType } from 'next/dist/shared/lib/utils';
 import { useRouter } from 'next/router';
 import { withTRPC } from '@trpc/next';
-import { getBaseUrl } from 'helpers';
+import { getBaseUrl, getHostname } from 'helpers';
 import { Seo } from 'components/seo';
 import { ReactNode } from 'react';
 import {
@@ -31,9 +31,11 @@ const { APP_URL, WS_URL } = publicRuntimeConfig;
 const baseUrl = getBaseUrl();
 
 const url = `${APP_URL ?? baseUrl}/api/trpc`;
+const ws_url =
+  process.env.NODE_ENV === 'development' ? WS_URL : `ws://${getHostname()}`;
 
 const MyApp: AppType = (props) => {
-  console.log({ url, baseUrl }, 'API URL here');
+  console.log({ url, baseUrl, ws_url }, 'API URL here');
   const {
     Component,
     pageProps: { session, ...pageProps },
@@ -96,9 +98,7 @@ function getEndingLink() {
         true: httpLink({ url }),
         false: httpBatchLink({ url }),
       })
-    : wsLink<AppRouter>({
-        client: createWSClient({ url: WS_URL ?? baseUrl }),
-      });
+    : wsLink<AppRouter>({ client: createWSClient({ url: ws_url }) });
 }
 
 export default withTRPC<AppRouter>({
