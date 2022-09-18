@@ -85,7 +85,9 @@ export const TableComponent = ({ userList = [] }: Props) => {
               </td>
               <td>
                 <Text size="xs">
-                  {new Date(createdAt ?? Date.now()).toLocaleDateString()}
+                  {new Date(createdAt ?? Date.now()).toLocaleDateString(
+                    'en-GB',
+                  )}
                 </Text>
               </td>
               <td>
@@ -96,7 +98,9 @@ export const TableComponent = ({ userList = [] }: Props) => {
               </td>
               <td>
                 <Text size="xs">
-                  {new Date(updatedAt ?? Date.now()).toLocaleDateString()}
+                  {new Date(updatedAt ?? Date.now()).toLocaleDateString(
+                    'en-GB',
+                  )}
                 </Text>
               </td>
               <td>
