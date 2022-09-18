@@ -30,7 +30,10 @@ const { APP_URL, WS_URL } = publicRuntimeConfig;
 
 const baseUrl = getBaseUrl();
 
+const url = `${APP_URL ?? baseUrl}/api/trpc`;
+
 const MyApp: AppType = (props) => {
+  console.log({ url, baseUrl }, 'API URL here');
   const {
     Component,
     pageProps: { session, ...pageProps },
@@ -84,8 +87,6 @@ MyApp.getInitialProps = async ({ ctx }) => {
   return { pageProps: { session: await getSession(ctx) } };
 };
 
-const url = `${APP_URL ?? process.env.VERCEL_URL}/api/trpc`;
-
 function getEndingLink() {
   return typeof window === 'undefined'
     ? splitLink({
@@ -96,7 +97,7 @@ function getEndingLink() {
         false: httpBatchLink({ url }),
       })
     : wsLink<AppRouter>({
-        client: createWSClient({ url: WS_URL ?? process.env.VERCEL_URL }),
+        client: createWSClient({ url: WS_URL ?? baseUrl }),
       });
 }
 
