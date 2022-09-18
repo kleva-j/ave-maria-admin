@@ -32,7 +32,7 @@ const baseUrl = getBaseUrl();
 
 const url = `${APP_URL ?? baseUrl}/api/trpc`;
 const ws_url =
-  process.env.NODE_ENV === 'development' ? WS_URL : `ws://${getHostname()}`;
+  process.env.NODE_ENV === 'development' ? WS_URL : `wss://${getHostname()}`;
 
 const MyApp: AppType = (props) => {
   console.log({ url, baseUrl, ws_url }, 'API URL here');
