@@ -2,9 +2,7 @@
 
 > ℹ️ WebSockets is a beta feature & may change without major version bump ℹ️
 
-
 - Try demo http://websockets.trpc.io/
-
 
 ## Features
 
@@ -19,7 +17,6 @@
   - ✅ E2E testing with [Playwright](https://playwright.dev/)
   - ✅ Linting
 
-
 ## Setup
 
 ```bash
@@ -33,10 +30,9 @@ yarn dx
 
 ### Using [Render](https://render.com/)
 
-The project contains a [`render.yaml`](./render.yaml) [*"Blueprint"*](https://render.com/docs/blueprint-spec) which makes the project easily deployable on [Render](https://render.com/).
+The project contains a [`render.yaml`](./render.yaml) [_"Blueprint"_](https://render.com/docs/blueprint-spec) which makes the project easily deployable on [Render](https://render.com/).
 
 Go to [dashboard.render.com/blueprints](https://dashboard.render.com/blueprints) and connect to this Blueprint and see how the app and database automatically gets deployed.
-
 
 ## Files of note
 
@@ -69,12 +65,13 @@ Go to [dashboard.render.com/blueprints](https://dashboard.render.com/blueprints)
 yarn build      # runs `prisma generate` + `prisma migrate` + `next build`
 yarn db-nuke    # resets local db
 yarn dev        # starts next.js + WebSocket server
-yarn dx         # starts postgres db + runs migrations + seeds + starts next.js 
+yarn dx         # starts postgres db + runs migrations + seeds + starts next.js
 yarn test-dev   # runs e2e tests on dev
 yarn test-start # runs e2e tests on `next start` - build required before
 yarn test:unit  # runs normal jest unit tests
 yarn test:e2e   # runs e2e tests
 ```
+
 ---
 
 Created by [@alexdotjs](https://twitter.com/alexdotjs).
