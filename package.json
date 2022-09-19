@@ -35,7 +35,8 @@
     "ts-node": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\"",
     "test": "jest",
     "analyse": "ANALYZE=true yarn build",
-    "prettier": "prettier --write ."
+    "prettier": "prettier --write .",
+    "prepare": "husky install"
   },
   "prisma": {
     "seed": "yarn ts-node prisma/seed.ts"
@@ -100,6 +101,7 @@
     "eslint-plugin-prettier": "^4.0.0",
     "eslint-plugin-react": "^7.25.1",
     "eslint-plugin-react-hooks": "^4.2.0",
+    "husky": "^8.0.1",
     "jest": "^27.1.0",
     "jest-playwright": "^0.0.1",
     "jest-playwright-preset": "^1.4.5",
