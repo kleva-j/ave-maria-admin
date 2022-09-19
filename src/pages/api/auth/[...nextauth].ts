@@ -2,20 +2,20 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import type { NextAuthOptions } from 'next-auth';
 
-import {
-  refreshAccessToken,
-  getSocialProfile,
-  checkIfAdmin,
-  Authorize,
-} from 'lib/auth';
 import { PrismaAdapter } from '@next-auth/prisma-adapter';
-import { prisma } from 'server/db/prismaClient';
+import {
+  Authorize,
+  checkIfAdmin,
+  getSocialProfile,
+  refreshAccessToken
+} from 'lib/auth';
 import { JWT } from 'next-auth/jwt';
+import { prisma } from 'server/db/prismaClient';
 
-import CredentialsProvider from 'next-auth/providers/credentials';
-import GoogleProvider from 'next-auth/providers/google';
-import EmailProvider from 'next-auth/providers/email';
 import NextAuth from 'next-auth';
+import CredentialsProvider from 'next-auth/providers/credentials';
+import EmailProvider from 'next-auth/providers/email';
+import GoogleProvider from 'next-auth/providers/google';
 
 export const authOptions: NextAuthOptions = {
   providers: [

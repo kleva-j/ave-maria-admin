@@ -4,7 +4,7 @@
   "private": true,
   "engines": {
     "node": ">=14.20.0",
-    "yarn": ">=1.22.19",
+    "yarn": ">=1.22.0",
     "npm": "please-use-yarn"
   },
   "scripts": {
@@ -14,7 +14,7 @@
     "build:4-server": "tsc --project tsconfig.server.json",
     "build": "run-s build:*",
     "dev:wss": "cross-env PORT=3001 nodemon --watch src --ext .ts,.tsx,js,jsx --signal SIGTERM --exec \"ts-node --project tsconfig.server.json src/server/wssDevServer.ts\"",
-    "dev:next": "next dev",
+    "dev:next": "cross-env NODE_OPTIONS='--inspect' next dev",
     "dev": "run-p dev:*",
     "db-up": "docker-compose up -d",
     "db-seed": "prisma db seed",

@@ -1,29 +1,29 @@
 import type { AppRouter } from 'server/routers/_app';
 
-import { useLocalStorage, useHotkeys, useColorScheme } from '@mantine/hooks';
-import { RouterTransition } from 'components/molecules/RouterTransition';
-import { wsLink, createWSClient } from '@trpc/client/links/wsLink';
+import {
+  ColorScheme,
+  ColorSchemeProvider,
+  MantineProvider
+} from '@mantine/core';
+import { useColorScheme, useHotkeys, useLocalStorage } from '@mantine/hooks';
 import { httpBatchLink } from '@trpc/client/links/httpBatchLink';
-import { getSession, SessionProvider } from 'next-auth/react';
+import { httpLink } from '@trpc/client/links/httpLink';
 import { loggerLink } from '@trpc/client/links/loggerLink';
 import { splitLink } from '@trpc/client/links/splitLink';
-import { httpLink } from '@trpc/client/links/httpLink';
+import { createWSClient, wsLink } from '@trpc/client/links/wsLink';
+import { withTRPC } from '@trpc/next';
+import { RouterTransition } from 'components/molecules/RouterTransition';
+import { Seo } from 'components/seo';
+import { getBaseUrl, getHostname } from 'helpers';
+import { getSession, SessionProvider } from 'next-auth/react';
 import { AppType } from 'next/dist/shared/lib/utils';
 import { useRouter } from 'next/router';
-import { withTRPC } from '@trpc/next';
-import { getBaseUrl, getHostname } from 'helpers';
-import { Seo } from 'components/seo';
 import { ReactNode } from 'react';
-import {
-  ColorSchemeProvider,
-  MantineProvider,
-  ColorScheme,
-} from '@mantine/core';
 
-import GlobalThemeConfig from 'utils/theme';
+import Layout from 'layout';
 import getConfig from 'next/config';
 import superjson from 'superjson';
-import Layout from 'layout';
+import GlobalThemeConfig from 'utils/theme';
 
 const { publicRuntimeConfig } = getConfig();
 const { APP_URL, WS_URL } = publicRuntimeConfig;
@@ -35,7 +35,6 @@ const ws_url =
   process.env.NODE_ENV === 'development' ? WS_URL : `wss://${getHostname()}`;
 
 const MyApp: AppType = (props) => {
-  console.log({ url, baseUrl, ws_url }, 'API URL here');
   const {
     Component,
     pageProps: { session, ...pageProps },

@@ -1,19 +1,19 @@
 import {
-  useMantineTheme,
-  Center,
   Button,
-  Paper,
-  Title,
-  Stack,
+  Center,
   Group,
+  Paper,
+  Stack,
   Text,
+  Title,
+  useMantineTheme
 } from '@mantine/core';
-import { useMediaQuery, useTimeout, useInterval } from '@mantine/hooks';
+import { useInterval, useMediaQuery, useTimeout } from '@mantine/hooks';
 import { showNotification } from '@mantine/notifications';
 import { GetServerSideProps } from 'next';
 import { signIn } from 'next-auth/react';
-import { AuthState } from 'types';
 import { useState } from 'react';
+import { AuthState } from 'types';
 
 import Image from 'next/future/image';
 import Link from 'next/link';
