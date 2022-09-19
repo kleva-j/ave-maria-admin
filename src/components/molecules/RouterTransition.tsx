@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/exhaustive-deps */
 // components/RouterTransition.tsx
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';

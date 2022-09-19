@@ -2,6 +2,11 @@
   "name": "@examples/next-starter-websockets",
   "version": "9.26.2",
   "private": true,
+  "engines": {
+    "node": ">=14.20.0",
+    "yarn": ">=1.22.0",
+    "npm": "please-use-yarn"
+  },
   "scripts": {
     "build:1-generate": "prisma generate",
     "build:2-migrate": "prisma migrate deploy",
@@ -9,7 +14,7 @@
     "build:4-server": "tsc --project tsconfig.server.json",
     "build": "run-s build:*",
     "dev:wss": "cross-env PORT=3001 nodemon --watch src --ext .ts,.tsx,js,jsx --signal SIGTERM --exec \"ts-node --project tsconfig.server.json src/server/wssDevServer.ts\"",
-    "dev:next": "next dev",
+    "dev:next": "cross-env NODE_OPTIONS='--inspect' next dev",
     "dev": "run-p dev:*",
     "db-up": "docker-compose up -d",
     "db-seed": "prisma db seed",
@@ -23,13 +28,15 @@
     "migrate": "prisma migrate deploy",
     "start": "cross-env NODE_ENV=production node dist/server/prodServer.js",
     "studio": "prisma studio",
-    "lint": "eslint src",
+    "lint": "next lint",
     "lint-fix": "yarn lint --fix",
     "test-dev": "cross-env APP_ENV=test start-server-and-test dev 3000 test",
     "test-start": "cross-env APP_ENV=test WS_URL=ws://localhost:3000 start-server-and-test start 3000 test",
     "ts-node": "ts-node --compiler-options \"{\\\"module\\\":\\\"commonjs\\\"}\"",
     "test": "jest",
-    "analyse": "ANALYZE=true yarn build"
+    "analyse": "ANALYZE=true yarn build",
+    "prettier": "prettier --write .",
+    "prepare": "husky install"
   },
   "prisma": {
     "seed": "yarn ts-node prisma/seed.ts"
@@ -77,6 +84,8 @@
     "zod": "^3.0.0"
   },
   "devDependencies": {
+    "@commitlint/cli": "^17.1.2",
+    "@commitlint/config-conventional": "^17.1.0",
     "@types/bcryptjs": "^2.4.2",
     "@types/jest": "^27.0.1",
     "@types/jsonwebtoken": "^8.5.9",
@@ -94,6 +103,7 @@
     "eslint-plugin-prettier": "^4.0.0",
     "eslint-plugin-react": "^7.25.1",
     "eslint-plugin-react-hooks": "^4.2.0",
+    "husky": "^8.0.1",
     "jest": "^27.1.0",
     "jest-playwright": "^0.0.1",
     "jest-playwright-preset": "^1.4.5",

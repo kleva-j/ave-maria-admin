@@ -1,10 +1,30 @@
-export const getBaseUrl = () => {
-  if (typeof window !== 'undefined') {
-    return '';
-  }
-  if (process.env.VERCEL_URL) return `https://${process.env.VERCEL_URL}`; // SSR should use vercel url
+export const hostingPlaform = {
+  vercel: {
+    hostname: process.env.NEXT_PUBLIC_VERCEL_URL ?? '',
+    url: `https://${process.env.NEXT_PUBLIC_VERCEL_URL}`,
+  },
+  render: {
+    hostname: process.env.NEXT_PUBLIC_RENDER_EXTERNAL_HOSTNAME ?? '',
+    url: process.env.NEXT_PUBLIC_RENDER_EXTERNAL_URL ?? '',
+  },
+};
 
-  return `http://localhost:${process.env.PORT ?? 3000}`; // dev SSR should use localhost
+export const getBaseUrl = () => {
+  if (typeof window !== 'undefined') return '';
+  if (process.env.NEXT_PUBLIC_VERCEL_URL)
+    return hostingPlaform['vercel']['url'];
+  if (process.env.RENDER_EXTERNAL_URL) return hostingPlaform['render']['url'];
+  return process.env.NODE_ENV === 'development'
+    ? `http://localhost:${process.env.PORT ?? 3000}`
+    : ''; // dev SSR should use localhost
+};
+
+export const getHostname = (): string => {
+  if (process.env.NEXT_PUBLIC_VERCEL_URL)
+    return hostingPlaform.vercel['hostname'];
+  if (process.env.NEXT_PUBLIC_RENDER_EXTERNAL_URL)
+    return hostingPlaform.render['hostname'];
+  return '';
 };
 
 export const requirements = [

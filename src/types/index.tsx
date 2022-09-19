@@ -1,4 +1,3 @@
-import { JWT } from 'next-auth/jwt';
 import { z } from 'zod';
 
 export type IconMaptype = { [key: string]: JSX.Element };
