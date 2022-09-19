@@ -28,7 +28,7 @@
     "migrate": "prisma migrate deploy",
     "start": "cross-env NODE_ENV=production node dist/server/prodServer.js",
     "studio": "prisma studio",
-    "lint": "eslint src",
+    "lint": "next lint",
     "lint-fix": "yarn lint --fix",
     "test-dev": "cross-env APP_ENV=test start-server-and-test dev 3000 test",
     "test-start": "cross-env APP_ENV=test WS_URL=ws://localhost:3000 start-server-and-test start 3000 test",
@@ -84,6 +84,8 @@
     "zod": "^3.0.0"
   },
   "devDependencies": {
+    "@commitlint/cli": "^17.1.2",
+    "@commitlint/config-conventional": "^17.1.0",
     "@types/bcryptjs": "^2.4.2",
     "@types/jest": "^27.0.1",
     "@types/jsonwebtoken": "^8.5.9",

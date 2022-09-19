@@ -77,6 +77,6 @@ export const authOptions: NextAuthOptions = {
   adapter: PrismaAdapter(prisma),
 };
 
-export default async function (req: NextApiRequest, res: NextApiResponse) {
+export default async function Auth(req: NextApiRequest, res: NextApiResponse) {
   return NextAuth(req, res, authOptions);
 }

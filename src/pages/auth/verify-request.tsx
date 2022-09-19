@@ -92,6 +92,7 @@ const VerifyRequest = ({ email }: any) => {
               src={img}
               priority
               style={{ maxWidth: '70%', height: 'auto', margin: 'auto' }}
+              alt="Verify your email address"
             />
             <Text
               size="sm"
