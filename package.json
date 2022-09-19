@@ -2,11 +2,6 @@
   "name": "@examples/next-starter-websockets",
   "version": "9.26.2",
   "private": true,
-  "engines": {
-    "node": ">=14.20.0",
-    "yarn": ">=1.22.0",
-    "npm": "please-use-yarn"
-  },
   "scripts": {
     "build:1-generate": "prisma generate",
     "build:2-migrate": "prisma migrate deploy",
