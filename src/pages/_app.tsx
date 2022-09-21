@@ -35,10 +35,8 @@ const ws_url =
   process.env.NODE_ENV === 'development' ? WS_URL : `wss://${getHostname()}`;
 
 const MyApp: AppType = (props) => {
-  const {
-    Component,
-    pageProps: { session, ...pageProps },
-  } = props;
+  const { Component, pageProps } = props;
+  const { session } = pageProps as any;
   const router = useRouter();
   const {
     isProtected = false,

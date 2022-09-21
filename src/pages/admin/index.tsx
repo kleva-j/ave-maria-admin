@@ -1,9 +1,15 @@
 /* eslint-disable react/display-name */
 import type { NextPage } from 'next';
 
-import { Dashboard } from 'components/admin/Dashboard';
 import { AdminLayout } from 'components/admin/Layout';
-import { ReactNode } from 'react';
+import { ReactNode, Suspense } from 'react';
+
+import dynamic from 'next/dynamic';
+
+const DynamicDashboard = dynamic(
+  () => import('components/admin/Dashboard').then((mod) => mod.Dashboard),
+  { loading: () => <div>Loading here...</div> }
+);
 
 type AdminPageProps = NextPage & {
   pageTitle: string;
@@ -13,7 +19,9 @@ type AdminPageProps = NextPage & {
 const AdminPage: AdminPageProps = () => {
   return (
     <AdminLayout>
-      <Dashboard />
+      <Suspense fallback={`Loading...`}>
+        <DynamicDashboard />
+      </Suspense>
     </AdminLayout>
   );
 };

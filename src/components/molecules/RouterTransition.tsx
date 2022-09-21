@@ -1,12 +1,9 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-// components/RouterTransition.tsx
+import {
+  NavigationProgress, resetNavigationProgress, startNavigationProgress
+} from '@mantine/nprogress';
 import { useRouter } from 'next/router';
 import { useEffect } from 'react';
-import {
-  startNavigationProgress,
-  resetNavigationProgress,
-  NavigationProgress,
-} from '@mantine/nprogress';
 
 export const RouterTransition = () => {
   const router = useRouter();
