@@ -50,7 +50,7 @@
     "@mantine/hooks": "^5.1.0",
     "@mantine/next": "^5.2.4",
     "@mantine/notifications": "^5.2.0",
-    "@mantine/nprogress": "^5.2.5",
+    "@mantine/nprogress": "^5.9.5",
     "@next-auth/prisma-adapter": "^1.0.4",
     "@next/bundle-analyzer": "^12.2.5",
     "@prisma/client": "^4.3.1",
