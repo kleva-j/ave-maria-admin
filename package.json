@@ -64,7 +64,7 @@
     "date-fns": "^2.29.2",
     "dayjs": "^1.11.5",
     "jsonwebtoken": "^8.5.1",
-    "next": "^12.3.4",
+    "next": "^13.1.5",
     "next-auth": "^4.10.3",
     "node-fetch": "^2.6.1",
     "nodemailer": "^6.7.8",
