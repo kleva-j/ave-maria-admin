@@ -949,14 +949,6 @@
     clsx "1.1.1"
     csstype "3.0.9"
 
-"@mantine/styles@5.4.0":
-  version "5.4.0"
-  resolved "https://registry.yarnpkg.com/@mantine/styles/-/styles-5.4.0.tgz#ba7fd2fd4db15906775a1c2eb4175cb98d6fa3c8"
-  integrity sha512-WnCRaqX8D1l4Y7QQD4e/tBKkLgTHbl0BeAOe/U4UDBM916mEboOmR8sa81zCUj4eJQoMlloe0WR1+erYX4JHLQ==
-  dependencies:
-    clsx "1.1.1"
-    csstype "3.0.9"
-
 "@mantine/utils@5.10.1":
   version "5.10.1"
   resolved "https://registry.yarnpkg.com/@mantine/utils/-/utils-5.10.1.tgz#95e77b29d27a596970cf8ae33665185b4a92d2a8"
@@ -2406,10 +2398,10 @@ date-fns@^2.29.2:
   resolved "https://registry.yarnpkg.com/date-fns/-/date-fns-2.29.3.tgz#27402d2fc67eb442b511b70bbdf98e6411cd68a8"
   integrity sha512-dDCnyH2WnnKusqvZZ6+jA1O51Ibt8ZMRNkDZdyAyK4YfbDwa/cEmuztzG5pk6hqlp9aSBPYcjOlktquahGwGeA==
 
-dayjs@^1.11.5:
-  version "1.11.5"
-  resolved "https://registry.yarnpkg.com/dayjs/-/dayjs-1.11.5.tgz#00e8cc627f231f9499c19b38af49f56dc0ac5e93"
-  integrity sha512-CAdX5Q3YW3Gclyo5Vpqkgpj8fSdLQcRuzfX6mC6Phy0nfJ0eGYOeS7m4mt2plDWLAtA4TqTakvbboHvUxfe4iA==
+dayjs@^1.11.7:
+  version "1.11.7"
+  resolved "https://registry.yarnpkg.com/dayjs/-/dayjs-1.11.7.tgz#4b296922642f70999544d1144a2c25730fce63e2"
+  integrity sha512-+Yw9U6YO5TQohxLcIkrXBeY73WP3ejHWVvx8XCk3gxvQDCTEmS48ZrSZCKciI7Bhl/uCMyxYtE9UqRILmFphkQ==
 
 debug@4, debug@4.3.4, debug@^4.1.0, debug@^4.1.1, debug@^4.3.2, debug@^4.3.4:
   version "4.3.4"
