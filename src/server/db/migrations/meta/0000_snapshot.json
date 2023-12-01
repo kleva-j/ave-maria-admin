@@ -1,11 +1,11 @@
 {
   "version": "5",
   "dialect": "pg",
-  "id": "43b6ace1-e54c-490c-afb4-60bd930ded97",
+  "id": "c56bffac-c960-44fa-a12d-0f8931d2a65c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "tables": {
-    "stimpad_post": {
-      "name": "stimpad_post",
+    "Ave-Maria-Admin_post": {
+      "name": "Ave-Maria-Admin_post",
       "schema": "",
       "columns": {
         "id": {
@@ -52,10 +52,10 @@
         }
       },
       "foreignKeys": {
-        "stimpad_post_author_id_stimpad_user_tenant_id_fk": {
-          "name": "stimpad_post_author_id_stimpad_user_tenant_id_fk",
-          "tableFrom": "stimpad_post",
-          "tableTo": "stimpad_user",
+        "Ave-Maria-Admin_post_author_id_Ave-Maria-Admin_user_tenant_id_fk": {
+          "name": "Ave-Maria-Admin_post_author_id_Ave-Maria-Admin_user_tenant_id_fk",
+          "tableFrom": "Ave-Maria-Admin_post",
+          "tableTo": "Ave-Maria-Admin_user",
           "columnsFrom": [
             "author_id"
           ],
@@ -69,8 +69,8 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {}
     },
-    "stimpad_user": {
-      "name": "stimpad_user",
+    "Ave-Maria-Admin_user": {
+      "name": "Ave-Maria-Admin_user",
       "schema": "",
       "columns": {
         "id": {
@@ -147,15 +147,15 @@
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {
-        "stimpad_user_email_unique": {
-          "name": "stimpad_user_email_unique",
+        "Ave-Maria-Admin_user_email_unique": {
+          "name": "Ave-Maria-Admin_user_email_unique",
           "nullsNotDistinct": false,
           "columns": [
             "email"
           ]
         },
-        "stimpad_user_tenant_id_unique": {
-          "name": "stimpad_user_tenant_id_unique",
+        "Ave-Maria-Admin_user_tenant_id_unique": {
+          "name": "Ave-Maria-Admin_user_tenant_id_unique",
           "nullsNotDistinct": false,
           "columns": [
             "tenant_id"
@@ -163,8 +163,8 @@
         }
       }
     },
-    "stimpad_teams": {
-      "name": "stimpad_teams",
+    "Ave-Maria-Admin_teams": {
+      "name": "Ave-Maria-Admin_teams",
       "schema": "",
       "columns": {
         "id": {
@@ -191,8 +191,8 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {}
     },
-    "stimpad_session": {
-      "name": "stimpad_session",
+    "Ave-Maria-Admin_session": {
+      "name": "Ave-Maria-Admin_session",
       "schema": "",
       "columns": {
         "session_id": {
@@ -255,10 +255,10 @@
       },
       "indexes": {},
       "foreignKeys": {
-        "stimpad_session_tenant_id_stimpad_user_tenant_id_fk": {
-          "name": "stimpad_session_tenant_id_stimpad_user_tenant_id_fk",
-          "tableFrom": "stimpad_session",
-          "tableTo": "stimpad_user",
+        "Ave-Maria-Admin_session_tenant_id_Ave-Maria-Admin_user_tenant_id_fk": {
+          "name": "Ave-Maria-Admin_session_tenant_id_Ave-Maria-Admin_user_tenant_id_fk",
+          "tableFrom": "Ave-Maria-Admin_session",
+          "tableTo": "Ave-Maria-Admin_user",
           "columnsFrom": [
             "tenant_id"
           ],
