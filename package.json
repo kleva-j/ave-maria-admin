@@ -75,7 +75,7 @@
     "start-server-and-test": "^1.15.2",
     "superjson": "^1.12.1",
     "ts-node": "^10.3.0",
-    "ws": "^8.12.0",
+    "ws": "^8.17.1",
     "zod": "^3.20.2"
   },
   "devDependencies": {
