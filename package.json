@@ -60,7 +60,7 @@
     "@trpc/server": "^9.26.2",
     "accesscontrol": "^2.2.1",
     "bcryptjs": "^2.4.3",
-    "clsx": "^1.1.1",
+    "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "dayjs": "^1.11.5",
     "jsonwebtoken": "^9.0.0",
