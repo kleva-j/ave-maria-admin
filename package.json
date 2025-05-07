@@ -44,7 +44,7 @@
   "dependencies": {
     "@emotion/react": "^11.10.0",
     "@emotion/server": "^11.10.0",
-    "@mantine/core": "^5.9.6",
+    "@mantine/core": "^7.0.0",
     "@mantine/dates": "^5.9.6",
     "@mantine/form": "^7.17.2",
     "@mantine/hooks": "^5.9.6",
