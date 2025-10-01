@@ -62,7 +62,7 @@
     "bcryptjs": "^2.4.3",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
-    "dayjs": "^1.11.13",
+    "dayjs": "^1.11.18",
     "jsonwebtoken": "^9.0.0",
     "next": "^15.4.2",
     "next-auth": "^4.24.11",
