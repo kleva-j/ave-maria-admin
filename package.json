@@ -86,7 +86,7 @@
     "@types/jsonwebtoken": "^9.0.1",
     "@types/node": "^18.11.18",
     "@types/node-fetch": "^2.5.11",
-    "@types/nodemailer": "^7.0.1",
+    "@types/nodemailer": "^7.0.2",
     "@types/react": "^18.0.9",
     "@types/ws": "^8.2.0",
     "@typescript-eslint/eslint-plugin": "^5.48.2",
