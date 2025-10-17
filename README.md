@@ -1,77 +1,85 @@
-# Prisma + tRPC + WebSockets
+# admin
 
-> ℹ️ WebSockets is a beta feature & may change without major version bump ℹ️
-
-- Try demo http://websockets.trpc.io/
+This project was created with [Better-T-Stack](https://github.com/AmanVarshney01/create-better-t-stack), a modern TypeScript stack that combines React, TanStack Router, Hono, ORPC, and more.
 
 ## Features
 
-- 🧙‍♂️ E2E type safety with [tRPC](https://trpc.io)
-- ⚡ Full-stack React with Next.js
-- ⚡ WebSockets / Subscription support
-- ⚡ Database with Prisma
-- 🔐 Authorization using [next-auth](https://next-auth.js.org/)
-- ⚙️ VSCode extensions
-- 🎨 ESLint + Prettier
-- 💚 CI setup using GitHub Actions:
-  - ✅ E2E testing with [Playwright](https://playwright.dev/)
-  - ✅ Linting
+- **TypeScript** - For type safety and improved developer experience
+- **TanStack Router** - File-based routing with full type safety
+- **React Native** - Build mobile apps using React
+- **Expo** - Tools for React Native development
+- **TailwindCSS** - Utility-first CSS for rapid UI development
+- **shadcn/ui** - Reusable UI components
+- **Hono** - Lightweight, performant server framework
+- **oRPC** - End-to-end type-safe APIs with OpenAPI integration
+- **Bun** - Runtime environment
+- **Drizzle** - TypeScript-first ORM
+- **PostgreSQL** - Database engine
+- **Authentication** - Better-Auth
+- **PWA** - Progressive Web App support
+- **Tauri** - Build native desktop applications
+- **Turborepo** - Optimized monorepo build system
 
-## Setup
+## Getting Started
 
-```bash
-yarn create next-app --example https://github.com/trpc/trpc --example-path examples/next-prisma-starter-websockets trpc-prisma-starter-websockets
-cd trpc-prisma-starter-websockets
-yarn
-yarn dx
-```
-
-## Deployment
-
-### Using [Render](https://render.com/)
-
-The project contains a [`render.yaml`](./render.yaml) [_"Blueprint"_](https://render.com/docs/blueprint-spec) which makes the project easily deployable on [Render](https://render.com/).
-
-Go to [dashboard.render.com/blueprints](https://dashboard.render.com/blueprints) and connect to this Blueprint and see how the app and database automatically gets deployed.
-
-## Files of note
-
-<table>
-  <thead>
-    <tr>
-      <th>Path</th>
-      <th>Description</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td><a href="./prisma/schema.prisma"><code>./prisma/schema.prisma</code></a></td>
-      <td>Prisma schema</td>
-    </tr>
-    <tr>
-      <td><a href="./src/api/trpc/[trpc].tsx"><code>./src/api/trpc/[trpc].tsx</code></a></td>
-      <td>tRPC response handler</td>
-    </tr>
-    <tr>
-      <td><a href="./src/server/routers"><code>./src/server/routers</code></a></td>
-      <td>Your app's different tRPC-routers</td>
-    </tr>
-  </tbody>
-</table>
-
-## Commands
+First, install the dependencies:
 
 ```bash
-yarn build      # runs `prisma generate` + `prisma migrate` + `next build`
-yarn db-nuke    # resets local db
-yarn dev        # starts next.js + WebSocket server
-yarn dx         # starts postgres db + runs migrations + seeds + starts next.js
-yarn test-dev   # runs e2e tests on dev
-yarn test-start # runs e2e tests on `next start` - build required before
-yarn test:unit  # runs normal jest unit tests
-yarn test:e2e   # runs e2e tests
+pnpm install
+```
+## Database Setup
+
+This project uses PostgreSQL with Drizzle ORM.
+
+1. Make sure you have a PostgreSQL database set up.
+2. Update your `apps/server/.env` file with your PostgreSQL connection details.
+
+3. Apply the schema to your database:
+```bash
+pnpm db:push
 ```
 
----
 
-Created by [@alexdotjs](https://twitter.com/alexdotjs).
+Then, run the development server:
+
+```bash
+pnpm dev
+```
+
+Open [http://localhost:3001](http://localhost:3001) in your browser to see the web application.
+Use the Expo Go app to run the mobile application.
+The API is running at [http://localhost:3000](http://localhost:3000).
+
+
+
+
+
+
+
+## Project Structure
+
+```
+admin/
+├── apps/
+│   ├── web/         # Frontend application (React + TanStack Router)
+│   ├── native/      # Mobile application (React Native, Expo)
+│   └── server/      # Backend API (Hono, ORPC)
+├── packages/
+│   ├── api/         # API layer / business logic
+│   ├── auth/        # Authentication configuration & logic
+│   └── db/          # Database schema & queries
+```
+
+## Available Scripts
+
+- `pnpm dev`: Start all applications in development mode
+- `pnpm build`: Build all applications
+- `pnpm dev:web`: Start only the web application
+- `pnpm dev:server`: Start only the server
+- `pnpm check-types`: Check TypeScript types across all apps
+- `pnpm dev:native`: Start the React Native/Expo development server
+- `pnpm db:push`: Push schema changes to database
+- `pnpm db:studio`: Open database studio UI
+- `cd apps/web && pnpm generate-pwa-assets`: Generate PWA assets
+- `cd apps/web && pnpm desktop:dev`: Start Tauri desktop app in development
+- `cd apps/web && pnpm desktop:build`: Build Tauri desktop app
