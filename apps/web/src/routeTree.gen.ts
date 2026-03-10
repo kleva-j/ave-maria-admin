@@ -11,7 +11,9 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TodosRouteImport } from './routes/todos'
 import { Route as SignoutRouteImport } from './routes/signout'
+import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ProtectedDashboardRouteImport } from './routes/_protected/dashboard'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 
 const TodosRoute = TodosRouteImport.update({
@@ -24,10 +26,19 @@ const SignoutRoute = SignoutRouteImport.update({
   path: '/signout',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProtectedRoute = ProtectedRouteImport.update({
+  id: '/_protected',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const ProtectedDashboardRoute = ProtectedDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => ProtectedRoute,
 } as any)
 const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
   id: '/api/auth/callback',
@@ -39,31 +50,43 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/signout': typeof SignoutRoute
   '/todos': typeof TodosRoute
+  '/dashboard': typeof ProtectedDashboardRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/signout': typeof SignoutRoute
   '/todos': typeof TodosRoute
+  '/dashboard': typeof ProtectedDashboardRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/_protected': typeof ProtectedRouteWithChildren
   '/signout': typeof SignoutRoute
   '/todos': typeof TodosRoute
+  '/_protected/dashboard': typeof ProtectedDashboardRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/signout' | '/todos' | '/api/auth/callback'
+  fullPaths: '/' | '/signout' | '/todos' | '/dashboard' | '/api/auth/callback'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/signout' | '/todos' | '/api/auth/callback'
-  id: '__root__' | '/' | '/signout' | '/todos' | '/api/auth/callback'
+  to: '/' | '/signout' | '/todos' | '/dashboard' | '/api/auth/callback'
+  id:
+    | '__root__'
+    | '/'
+    | '/_protected'
+    | '/signout'
+    | '/todos'
+    | '/_protected/dashboard'
+    | '/api/auth/callback'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ProtectedRoute: typeof ProtectedRouteWithChildren
   SignoutRoute: typeof SignoutRoute
   TodosRoute: typeof TodosRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
@@ -85,12 +108,26 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignoutRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_protected': {
+      id: '/_protected'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof ProtectedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/_protected/dashboard': {
+      id: '/_protected/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof ProtectedDashboardRouteImport
+      parentRoute: typeof ProtectedRoute
     }
     '/api/auth/callback': {
       id: '/api/auth/callback'
@@ -102,8 +139,21 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface ProtectedRouteChildren {
+  ProtectedDashboardRoute: typeof ProtectedDashboardRoute
+}
+
+const ProtectedRouteChildren: ProtectedRouteChildren = {
+  ProtectedDashboardRoute: ProtectedDashboardRoute,
+}
+
+const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(
+  ProtectedRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ProtectedRoute: ProtectedRouteWithChildren,
   SignoutRoute: SignoutRoute,
   TodosRoute: TodosRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,

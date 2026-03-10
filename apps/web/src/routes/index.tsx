@@ -1,16 +1,15 @@
 import { CalendarWidget } from "@avm-daily/ui/components/calendar-widget";
-import { ClockWidget } from "@avm-daily/ui/components/clock-widget";
-import { api } from "@avm-daily/backend/convex/_generated/api";
-import { createFileRoute, Link } from "@tanstack/react-router";
-import { convexQuery } from "@convex-dev/react-query";
-import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@workos/authkit-tanstack-react-start/client";
 import { getSignInUrl } from "@workos/authkit-tanstack-react-start";
+import { ClockWidget } from "@avm-daily/ui/components/clock-widget";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { api } from "@avm-daily/backend/convex/_generated/api";
+import { convexQuery } from "@convex-dev/react-query";
+import { useQuery } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/")({
   loader: async () => {
-    const signInUrl = await getSignInUrl();
-    return { signInUrl };
+    return { signInUrl: await getSignInUrl() };
   },
   component: HomeComponent,
 });

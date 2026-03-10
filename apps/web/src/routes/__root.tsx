@@ -1,8 +1,8 @@
 import type { ConvexQueryClient } from "@convex-dev/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 
-import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { AuthKitProvider } from "@workos/authkit-tanstack-react-start/client";
+import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { Toaster } from "@avm-daily/ui/components/sonner";
 import { ConvexProvider } from "convex/react";
 
