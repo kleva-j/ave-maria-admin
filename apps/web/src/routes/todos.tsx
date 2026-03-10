@@ -1,25 +1,26 @@
-import { api } from "@avm-daily/backend/convex/_generated/api";
 import type { Id } from "@avm-daily/backend/convex/_generated/dataModel";
-import { Button } from "@avm-daily/ui/components/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@avm-daily/ui/components/card";
+import type { ChangeEvent } from "react";
+
+import { api } from "@avm-daily/backend/convex/_generated/api";
 import { Checkbox } from "@avm-daily/ui/components/checkbox";
-import { Input } from "@avm-daily/ui/components/input";
-import { convexQuery } from "@convex-dev/react-query";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { Button } from "@avm-daily/ui/components/button";
+import { Input } from "@avm-daily/ui/components/input";
+import { convexQuery } from "@convex-dev/react-query";
 import { useMutation } from "convex/react";
 import { Trash2 } from "lucide-react";
 import { useState } from "react";
 
-export const Route = createFileRoute("/todos")({
-  component: TodosRoute,
-});
+import {
+  CardDescription,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  Card,
+} from "@avm-daily/ui/components/card";
+
+export const Route = createFileRoute("/todos")({ component: TodosRoute });
 
 function TodosRoute() {
   const [newTodoText, setNewTodoText] = useState("");
@@ -31,7 +32,7 @@ function TodosRoute() {
   const toggleTodo = useMutation(api.todos.toggle);
   const removeTodo = useMutation(api.todos.deleteTodo);
 
-  const handleAddTodo = async (e) => {
+  const handleAddTodo = async (e: ChangeEvent<HTMLFormElement>) => {
     e.preventDefault();
     const text = newTodoText.trim();
     if (text) {
@@ -69,7 +70,10 @@ function TodosRoute() {
           <CardDescription>Manage your tasks efficiently</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={handleAddTodo} className="mb-6 flex items-center space-x-2">
+          <form
+            onSubmit={handleAddTodo}
+            className="mb-6 flex items-center space-x-2"
+          >
             <Input
               value={newTodoText}
               onChange={(e) => setNewTodoText(e.target.value)}
@@ -92,12 +96,18 @@ function TodosRoute() {
                   <div className="flex items-center space-x-2">
                     <Checkbox
                       checked={todo.completed}
-                      onCheckedChange={() => handleToggleTodo(todo._id, todo.completed)}
+                      onCheckedChange={() =>
+                        handleToggleTodo(todo._id, todo.completed)
+                      }
                       id={`todo-${todo._id}`}
                     />
                     <label
                       htmlFor={`todo-${todo._id}`}
-                      className={`${todo.completed ? "text-muted-foreground line-through" : ""}`}
+                      className={`${
+                        todo.completed
+                          ? "text-muted-foreground line-through"
+                          : ""
+                      }`}
                     >
                       {todo.text}
                     </label>

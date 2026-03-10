@@ -1,7 +1,9 @@
+import { CalendarWidget } from "@avm-daily/ui/components/calendar-widget";
+import { ClockWidget } from "@avm-daily/ui/components/clock-widget";
 import { api } from "@avm-daily/backend/convex/_generated/api";
+import { createFileRoute } from "@tanstack/react-router";
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/")({
   component: HomeComponent,
@@ -34,17 +36,27 @@ function HomeComponent() {
           <h2 className="mb-2 font-medium">API Status</h2>
           <div className="flex items-center gap-2">
             <div
-              className={`h-2 w-2 rounded-full ${healthCheck.data === "OK" ? "bg-green-500" : healthCheck.isLoading ? "bg-orange-400" : "bg-red-500"}`}
+              className={`h-2 w-2 rounded-full ${
+                healthCheck.data === "OK"
+                  ? "bg-green-500"
+                  : healthCheck.isLoading
+                  ? "bg-orange-400"
+                  : "bg-red-500"
+              }`}
             />
             <span className="text-muted-foreground text-sm">
               {healthCheck.isLoading
                 ? "Checking..."
                 : healthCheck.data === "OK"
-                  ? "Connected"
-                  : "Error"}
+                ? "Connected"
+                : "Error"}
             </span>
           </div>
         </section>
+      </div>
+      <div className="mt-4 flex gap-6">
+        <ClockWidget />
+        <CalendarWidget />
       </div>
     </div>
   );
