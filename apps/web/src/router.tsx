@@ -1,13 +1,14 @@
-import { env } from "@avm-daily/env/web";
+import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
+import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { ConvexQueryClient } from "@convex-dev/react-query";
 import { QueryClient } from "@tanstack/react-query";
-import { createRouter as createTanStackRouter } from "@tanstack/react-router";
-import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
+import { env } from "@avm-daily/env/web";
+
+import { routeTree } from "./routeTree.gen";
 
 import Loader from "./components/loader";
 
 import "./index.css";
-import { routeTree } from "./routeTree.gen";
 
 export function getRouter() {
   const convexUrl = env.VITE_CONVEX_URL;
@@ -25,20 +26,22 @@ export function getRouter() {
       },
     },
   });
+
+  // Connect the Convex query client to the TanStack Query client
   convexQueryClient.connect(queryClient);
 
+  // Create the TanStack Router
   const router = createTanStackRouter({
     routeTree,
+    scrollRestoration: true,
     defaultPreload: "intent",
     defaultPendingComponent: () => <Loader />,
     defaultNotFoundComponent: () => <div>Not Found</div>,
     context: { queryClient, convexQueryClient },
   });
 
-  setupRouterSsrQueryIntegration({
-    router,
-    queryClient,
-  });
+  // Connect the TanStack Router to the TanStack Query client
+  setupRouterSsrQueryIntegration({ router, queryClient });
 
   return router;
 }

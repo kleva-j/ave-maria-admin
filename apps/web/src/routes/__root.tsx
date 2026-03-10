@@ -1,12 +1,18 @@
-import { Toaster } from "@avm-daily/ui/components/sonner";
 import type { ConvexQueryClient } from "@convex-dev/react-query";
 import type { QueryClient } from "@tanstack/react-query";
-import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
+
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+import { Toaster } from "@avm-daily/ui/components/sonner";
 import { ConvexProvider } from "convex/react";
 
-import Header from "../components/header";
+import {
+  createRootRouteWithContext,
+  HeadContent,
+  Scripts,
+  Outlet,
+} from "@tanstack/react-router";
 
+import Header from "../components/header";
 import appCss from "../index.css?url";
 
 export interface RouterAppContext {
@@ -17,23 +23,11 @@ export interface RouterAppContext {
 export const Route = createRootRouteWithContext<RouterAppContext>()({
   head: () => ({
     meta: [
-      {
-        charSet: "utf-8",
-      },
-      {
-        name: "viewport",
-        content: "width=device-width, initial-scale=1",
-      },
-      {
-        title: "My App",
-      },
+      { charSet: "utf-8" },
+      { name: "viewport", content: "width=device-width, initial-scale=1" },
+      { title: "My App" },
     ],
-    links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-    ],
+    links: [{ rel: "stylesheet", href: appCss }],
   }),
 
   component: RootDocument,
