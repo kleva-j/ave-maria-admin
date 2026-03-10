@@ -1,0 +1,32 @@
+{
+  "name": "avm-daily",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "check-types": "turbo check-types",
+    "dev:native": "turbo -F native dev",
+    "dev:web": "turbo -F web dev",
+    "dev:server": "turbo -F @avm-daily/backend dev",
+    "dev:setup": "turbo -F @avm-daily/backend dev:setup",
+    "check": "oxlint && oxfmt --write"
+  },
+  "dependencies": {
+    "@avm-daily/env": "workspace:*",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@avm-daily/config": "workspace:*",
+    "oxfmt": "^0.26.0",
+    "oxlint": "^1.41.0",
+    "turbo": "^2.8.12",
+    "typescript": "^5"
+  },
+  "packageManager": "pnpm@10.13.1"
+}

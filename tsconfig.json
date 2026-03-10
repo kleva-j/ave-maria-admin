@@ -1,0 +1,3 @@
+{
+  "extends": "@avm-daily/config/tsconfig.base.json"
+}

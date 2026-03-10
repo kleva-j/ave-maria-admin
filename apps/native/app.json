@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "scheme": "avm-daily",
+    "userInterfaceStyle": "automatic",
+    "orientation": "default",
+    "web": {
+      "bundler": "metro"
+    },
+    "name": "avm-daily",
+    "slug": "avm-daily",
+    "plugins": ["expo-font"],
+    "experiments": {
+      "typedRoutes": true,
+      "reactCompiler": true
+    }
+  }
+}
