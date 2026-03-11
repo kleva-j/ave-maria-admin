@@ -1,18 +1,20 @@
-import { getAuth, getSignInUrl } from "@workos/authkit-tanstack-react-start";
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { getAuth } from "@workos/authkit-tanstack-react-start";
+import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_protected")({
   component: RouteComponent,
-  loader: async () => {
+  loader: async ({ location }) => {
     const { user } = await getAuth();
     if (!user) {
-      const signInUrl = await getSignInUrl();
-      throw redirect({ href: signInUrl });
+      const returnTo = encodeURIComponent(
+        `${location.pathname}${location.search}`,
+      );
+      throw redirect({ href: `/login?returnTo=${returnTo}` });
     }
     return { user };
   },
 });
 
 function RouteComponent() {
-  return <div>Hello "/_protected"!</div>;
+  return <Outlet />;
 }

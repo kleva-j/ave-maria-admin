@@ -13,6 +13,7 @@
     "@avm-daily/ui": "workspace:*",
     "@convex-dev/react-query": "^0.1.0",
     "@tailwindcss/vite": "^4.1.18",
+    "@tanstack/react-form": "^1.28.4",
     "@tanstack/react-query": "^5.80.6",
     "@tanstack/react-router": "^1.141.1",
     "@tanstack/react-router-ssr-query": "^1.142.7",

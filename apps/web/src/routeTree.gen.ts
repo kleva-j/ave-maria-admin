@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as TodosRouteImport } from './routes/todos'
 import { Route as SignoutRouteImport } from './routes/signout'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProtectedDashboardRouteImport } from './routes/_protected/dashboard'
@@ -24,6 +25,11 @@ const TodosRoute = TodosRouteImport.update({
 const SignoutRoute = SignoutRouteImport.update({
   id: '/signout',
   path: '/signout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProtectedRoute = ProtectedRouteImport.update({
@@ -48,6 +54,7 @@ const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/signout': typeof SignoutRoute
   '/todos': typeof TodosRoute
   '/dashboard': typeof ProtectedDashboardRoute
@@ -55,6 +62,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/login': typeof LoginRoute
   '/signout': typeof SignoutRoute
   '/todos': typeof TodosRoute
   '/dashboard': typeof ProtectedDashboardRoute
@@ -64,6 +72,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_protected': typeof ProtectedRouteWithChildren
+  '/login': typeof LoginRoute
   '/signout': typeof SignoutRoute
   '/todos': typeof TodosRoute
   '/_protected/dashboard': typeof ProtectedDashboardRoute
@@ -71,13 +80,26 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/signout' | '/todos' | '/dashboard' | '/api/auth/callback'
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/signout'
+    | '/todos'
+    | '/dashboard'
+    | '/api/auth/callback'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/signout' | '/todos' | '/dashboard' | '/api/auth/callback'
+  to:
+    | '/'
+    | '/login'
+    | '/signout'
+    | '/todos'
+    | '/dashboard'
+    | '/api/auth/callback'
   id:
     | '__root__'
     | '/'
     | '/_protected'
+    | '/login'
     | '/signout'
     | '/todos'
     | '/_protected/dashboard'
@@ -87,6 +109,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ProtectedRoute: typeof ProtectedRouteWithChildren
+  LoginRoute: typeof LoginRoute
   SignoutRoute: typeof SignoutRoute
   TodosRoute: typeof TodosRoute
   ApiAuthCallbackRoute: typeof ApiAuthCallbackRoute
@@ -106,6 +129,13 @@ declare module '@tanstack/react-router' {
       path: '/signout'
       fullPath: '/signout'
       preLoaderRoute: typeof SignoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_protected': {
@@ -154,6 +184,7 @@ const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ProtectedRoute: ProtectedRouteWithChildren,
+  LoginRoute: LoginRoute,
   SignoutRoute: SignoutRoute,
   TodosRoute: TodosRoute,
   ApiAuthCallbackRoute: ApiAuthCallbackRoute,
