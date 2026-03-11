@@ -1,14 +1,9 @@
 import { DEFAULT_RETURN_PATH, getSafeReturnPathname } from "@/lib/auth";
-import { buttonVariants } from "@avm-daily/ui/components/button";
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import { Button } from "@avm-daily/ui/components/button";
 import { Input } from "@avm-daily/ui/components/input";
-import { cn } from "@avm-daily/ui/lib/utils";
+import { useForm } from "@tanstack/react-form";
 import { z } from "zod";
-
-import {
-  getSignInUrl,
-  getSignUpUrl,
-} from "@workos/authkit-tanstack-react-start";
 
 import {
   CardDescription,
@@ -22,134 +17,123 @@ import {
   FieldDescription,
   FieldGroup,
   FieldLabel,
+  FieldError,
   Field,
 } from "@avm-daily/ui/components/field";
 
+const formSchema = z.object({
+  email: z.email("Email is required"),
+  password: z.string().min(10, "Password must be at least 10 characters"),
+});
+
 export const Route = createFileRoute("/login")({
   validateSearch: z.object({
-    mode: z.enum(["signin", "signup"]).optional(),
-    returnTo: z.string().optional(),
+    returnTo: z.string().optional().default(DEFAULT_RETURN_PATH),
   }),
-  loader: async ({ location }) => {
-    const search = location.search as Record<string, string>;
+  loader: async () => {
     const returnTo = getSafeReturnPathname(
-      new URLSearchParams(search).toString(),
+      new URLSearchParams().toString(),
       DEFAULT_RETURN_PATH
     );
 
-    const signInUrl = await getSignInUrl();
-    const signUpUrl = await getSignUpUrl();
-
-    return {
-      signInUrl,
-      signUpUrl,
-      returnTo,
-      mode: search.mode ?? "signin",
-    };
+    return { returnTo };
   },
   component: LoginPage,
 });
 
 function LoginPage() {
   const loaderData = Route.useLoaderData();
-  const { signInUrl, signUpUrl, returnTo, mode } = loaderData;
+  const { returnTo } = loaderData;
 
-  const isSignUp = mode === "signup";
+  console.log("returnTo", { returnTo });
 
-  const authUrl = isSignUp ? signUpUrl : signInUrl;
-
-  const authUrlWithReturn = returnTo
-    ? `${authUrl}${
-        authUrl.includes("?") ? "&" : "?"
-      }returnTo=${encodeURIComponent(returnTo)}`
-    : authUrl;
-
-  console.log({ authUrlWithReturn });
+  const form = useForm({
+    defaultValues: { email: "", password: "" },
+    onSubmit: async ({ value }) => {
+      const { email, password } = value;
+      console.log({ email, password });
+    },
+    validators: { onSubmit: formSchema },
+  });
 
   return (
-    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
-      <div className="w-full max-w-sm">
-        <div className={cn("flex flex-col gap-6")}>
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {isSignUp ? "Create an account" : "Login to your account"}
-              </CardTitle>
-              <CardDescription>
-                {isSignUp
-                  ? "Enter your details below to create your account"
-                  : "Enter your email below to login to your account"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <FieldGroup>
-                <Field>
-                  <a
-                    href={authUrlWithReturn}
-                    className={cn(
-                      buttonVariants({ variant: "default" }),
-                      "w-full"
-                    )}
-                  >
-                    {isSignUp ? "Sign up with AuthKit" : "Sign in with AuthKit"}
-                  </a>
-                </Field>
+    <div className="flex h-[calc(100vh-2.5rem)] w-full items-center justify-center p-6 md:p-10">
+      <Card className="w-full max-w-sm">
+        <CardHeader>
+          <CardTitle>Login to your account</CardTitle>
+          <CardDescription>
+            Enter your email below to login to your account"
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={form.handleSubmit}>
+            <FieldGroup>
+              <form.Field name="email">
+                {(field) => {
+                  const isInvalid =
+                    field.state.meta.isTouched && !field.state.meta.isValid;
+                  return (
+                    <Field data-invalid={isInvalid}>
+                      <FieldLabel htmlFor={field.name}>Email</FieldLabel>
+                      <Input
+                        id={field.name}
+                        name={field.name}
+                        type="email"
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        aria-invalid={isInvalid}
+                        placeholder="example@example.com"
+                        autoComplete="off"
+                        required
+                      />
+                      {isInvalid && (
+                        <FieldError errors={field.state.meta.errors} />
+                      )}
+                    </Field>
+                  );
+                }}
+              </form.Field>
 
-                <div className="relative my-2">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">
-                      Or
-                    </span>
-                  </div>
-                </div>
+              <form.Field name="password">
+                {(field) => {
+                  const isInvalid =
+                    field.state.meta.isTouched && !field.state.meta.isValid;
+                  return (
+                    <Field data-invalid={isInvalid}>
+                      <FieldLabel htmlFor={field.name}>Password</FieldLabel>
+                      <Input
+                        id={field.name}
+                        name={field.name}
+                        type="password"
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.value)}
+                        aria-invalid={isInvalid}
+                        placeholder="Enter your password"
+                        autoComplete="off"
+                        required
+                      />
+                      <FieldDescription>
+                        Must be at least 8 characters long.
+                      </FieldDescription>
+                      {isInvalid && (
+                        <FieldError errors={field.state.meta.errors} />
+                      )}
+                    </Field>
+                  );
+                }}
+              </form.Field>
 
-                <Field>
-                  <FieldLabel htmlFor="email">Email</FieldLabel>
-                  <Input id="email" type="email" placeholder="m@example.com" />
-                </Field>
-
-                <Field>
-                  <FieldLabel htmlFor="password">Password</FieldLabel>
-                  <Input id="password" type="password" />
-                </Field>
-
-                <Field>
-                  <a
-                    href={authUrlWithReturn}
-                    className={cn(
-                      buttonVariants({ variant: "outline" }),
-                      "w-full"
-                    )}
-                  >
-                    Continue with Email
-                  </a>
-
-                  <FieldDescription className="text-center">
-                    {isSignUp ? (
-                      <>
-                        Already have an account?{" "}
-                        <Link to="/login" search={{ mode: "signin" }}>
-                          Sign in
-                        </Link>
-                      </>
-                    ) : (
-                      <>
-                        Don't have an account?{" "}
-                        <Link to="/login" search={{ mode: "signup" }}>
-                          Sign up
-                        </Link>
-                      </>
-                    )}
-                  </FieldDescription>
-                </Field>
-              </FieldGroup>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+              <Field>
+                <Button type="submit" className="cursor-pointer w-full">
+                  Login
+                </Button>
+              </Field>
+            </FieldGroup>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }
