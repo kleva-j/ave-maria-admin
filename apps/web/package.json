@@ -5,7 +5,10 @@
   "scripts": {
     "build": "vite build",
     "serve": "vite preview",
-    "dev": "vite dev"
+    "dev": "vite dev",
+    "test": "vitest run --coverage",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
     "@avm-daily/backend": "workspace:*",
@@ -13,6 +16,7 @@
     "@avm-daily/ui": "workspace:*",
     "@convex-dev/react-query": "^0.1.0",
     "@tailwindcss/vite": "^4.1.18",
+    "@tanstack/pacer": "^0.19.0",
     "@tanstack/react-form": "^1.28.4",
     "@tanstack/react-query": "^5.80.6",
     "@tanstack/react-router": "^1.141.1",
@@ -20,6 +24,7 @@
     "@tanstack/react-router-with-query": "^1.130.17",
     "@tanstack/react-start": "^1.141.1",
     "@tanstack/router-plugin": "^1.141.1",
+    "@workos-inc/node": "^8.8.0",
     "@workos/authkit-tanstack-react-start": "^0.5.0",
     "convex": "catalog:",
     "dotenv": "catalog:",
@@ -35,14 +40,15 @@
   "devDependencies": {
     "@avm-daily/config": "workspace:*",
     "@tanstack/react-router-devtools": "^1.141.1",
-    "@testing-library/dom": "^10.4.0",
-    "@testing-library/react": "^16.2.0",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.2.10",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "^5.0.4",
-    "jsdom": "^26.0.0",
+    "jsdom": "^26.1.0",
     "typescript": "^5",
     "vite": "^7.0.2",
+    "vitest": "^4.0.18",
     "web-vitals": "^5.0.3"
   }
 }
