@@ -1,9 +1,25 @@
 import { Button } from "@avm-daily/ui/components/button";
 import { Link } from "@tanstack/react-router";
+import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "@workos/authkit-tanstack-react-start/client";
 
+import { signOutUser } from "@/server/auth.functions";
+
 export default function Header() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading } = useAuth();
+  const signOutMutation = useMutation({
+    mutationFn: async () => {
+      const result = await signOutUser({ data: { returnTo: "/" } });
+      if (result instanceof Response) {
+        const message = await result.text();
+        throw new Error(message || "Unable to sign out.");
+      }
+      return result;
+    },
+    onSuccess: ({ logoutUrl }) => {
+      window.location.assign(logoutUrl);
+    },
+  });
   const links = [
     { to: "/", label: "Home" },
     { to: "/todos", label: "Todos" },
@@ -32,9 +48,10 @@ export default function Header() {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => void signOut({ returnTo: "/" })}
+                disabled={signOutMutation.isPending}
+                onClick={() => signOutMutation.mutate()}
               >
-                Sign out
+                {signOutMutation.isPending ? "Signing out..." : "Sign out"}
               </Button>
             </>
           ) : (
@@ -42,9 +59,6 @@ export default function Header() {
               <Link to="/login" className="text-sm">
                 Sign in
               </Link>
-              <a href="/login?mode=signup" className="text-sm">
-                Sign up
-              </a>
             </>
           )}
         </div>

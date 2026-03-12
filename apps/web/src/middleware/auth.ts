@@ -1,4 +1,4 @@
-import { getAuth } from "@workOS/authkit-tanstack-react-start";
+import { getAuth } from "@workos/authkit-tanstack-react-start";
 import { createMiddleware } from "@tanstack/react-start";
 import { logger } from "@/server/logging";
 
@@ -11,7 +11,11 @@ export const authMiddleware = createMiddleware().server(
       return new Response("Forbidden", { status: 403 });
     }
 
-    logger("info", "auth.middleware", { auth });
+    logger("info", "auth.middleware", {
+      userId: auth.user?.id ?? null,
+      sessionId: auth.sessionId ?? null,
+      organizationId: auth.organizationId ?? null,
+    });
 
     return next({ context: { auth } });
   }

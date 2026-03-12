@@ -7,7 +7,55 @@ const BLOCKED_RETURN_PATHS = new Set([
   "/api/auth/callback",
 ]);
 
-export const DEFAULT_RETURN_PATH = "/_protected/dashboard";
+export const DEFAULT_RETURN_PATH = "/dashboard";
+
+export type AuthStep =
+  | "email_verification"
+  | "mfa_enrollment"
+  | "mfa_challenge"
+  | "organization_selection";
+
+export type AuthenticationFactor = {
+  id?: string;
+  type: string;
+};
+
+export type AvailableOrganization = {
+  id: string;
+  name?: string;
+};
+
+export type AuthSuccess = {
+  status: "success";
+};
+
+export type AuthNextStep =
+  | {
+      status: "next_step";
+      step: "email_verification";
+      pendingAuthenticationToken: string;
+      email: string;
+    }
+  | {
+      status: "next_step";
+      step: "mfa_enrollment";
+      pendingAuthenticationToken: string;
+      email: string;
+    }
+  | {
+      status: "next_step";
+      step: "mfa_challenge";
+      pendingAuthenticationToken: string;
+      authenticationFactors: AuthenticationFactor[];
+    }
+  | {
+      status: "next_step";
+      step: "organization_selection";
+      pendingAuthenticationToken: string;
+      availableOrganizations: AvailableOrganization[];
+    };
+
+export type AuthResponse = AuthSuccess | AuthNextStep;
 
 export function getSafeReturnPathname(
   search: string | undefined,

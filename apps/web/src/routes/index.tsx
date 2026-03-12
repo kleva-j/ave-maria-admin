@@ -4,9 +4,10 @@ import { ClockWidget } from "@avm-daily/ui/components/clock-widget";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { api } from "@avm-daily/backend/convex/_generated/api";
 import { convexQuery } from "@convex-dev/react-query";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 
 import Header from "@/components/header";
+import { signOutUser } from "@/server/auth.functions";
 
 export const Route = createFileRoute("/")({
   component: HomeComponent,
@@ -31,6 +32,19 @@ const TITLE_TEXT = `
 function HomeComponent() {
   const healthCheck = useQuery(convexQuery(api.healthCheck.get, {}));
   const { user, loading: authLoading } = useAuth();
+  const signOutMutation = useMutation({
+    mutationFn: async () => {
+      const result = await signOutUser({ data: { returnTo: "/" } });
+      if (result instanceof Response) {
+        const message = await result.text();
+        throw new Error(message || "Unable to sign out.");
+      }
+      return result;
+    },
+    onSuccess: ({ logoutUrl }) => {
+      window.location.assign(logoutUrl);
+    },
+  });
 
   return (
     <>
@@ -53,12 +67,14 @@ function HomeComponent() {
                     </span>
                   </p>
                 </div>
-                <Link
-                  to="/signout"
-                  className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700"
+                <button
+                  type="button"
+                  onClick={() => signOutMutation.mutate()}
+                  disabled={signOutMutation.isPending}
+                  className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-70"
                 >
-                  Sign Out
-                </Link>
+                  {signOutMutation.isPending ? "Signing out..." : "Sign Out"}
+                </button>
               </div>
             ) : (
               <div className="flex items-center justify-between">
