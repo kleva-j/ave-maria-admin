@@ -1,12 +1,6 @@
-import type {
-  AvailableOrganization,
-  AuthResponse,
-  AuthNextStep,
-  AuthStep,
-} from "@/lib/auth";
-
 import { DEFAULT_RETURN_PATH, getSafeReturnPathname } from "@/lib/auth";
 import { useAuth } from "@workos/authkit-tanstack-react-start/client";
+import { toast } from "@avm-daily/ui/components/sonner";
 import { Button } from "@avm-daily/ui/components/button";
 import { Input } from "@avm-daily/ui/components/input";
 import { useMutation } from "@tanstack/react-query";
@@ -14,6 +8,19 @@ import { loginSchema } from "@/lib/auth-schema";
 import { useForm } from "@tanstack/react-form";
 import { useMemo, useState } from "react";
 import { z } from "zod";
+
+import type {
+  EmailVerificationSchema,
+  ChallengeSchema,
+  LoginSchema,
+} from "@/lib/auth-schema";
+
+import type {
+  AvailableOrganization,
+  AuthResponse,
+  AuthNextStep,
+  AuthStep,
+} from "@/lib/auth";
 
 import {
   CardContent,
@@ -171,40 +178,49 @@ function LoginPage() {
   };
 
   const loginMutation = useMutation({
-    mutationFn: async (payload: { email: string; password: string }) => {
+    mutationFn: async (payload: LoginSchema) => {
       const result = await loginWithPassword({ data: payload });
       if (result instanceof Response) throw result;
       return result as AuthResponse;
     },
     onSuccess: async (result) => {
       if (result.status === "success") {
+        toast.success("Successfully signed in!");
         await finalizeAuth();
       } else {
         await handleNextStep(result);
       }
     },
+    onError: (error) => {
+      toast.error(
+        error instanceof Response
+          ? "Invalid email or password"
+          : "Unable to sign in. Please try again.",
+      );
+    },
   });
 
   const verifyEmailMutation = useMutation({
-    mutationFn: async (payload: {
-      code: string;
-      pendingAuthenticationToken: string;
-    }) => {
+    mutationFn: async (payload: EmailVerificationSchema) => {
       const result = await verifyEmail({ data: payload });
       if (result instanceof Response) throw result;
       return result as AuthResponse;
     },
     onSuccess: async (result) => {
       if (result.status === "success") {
+        toast.success("Email verified successfully!");
         await finalizeAuth();
       } else {
         await handleNextStep(result);
       }
     },
+    onError: () => {
+      toast.error("Invalid verification code. Please try again.");
+    },
   });
 
   const startTotpEnrollmentMutation = useMutation({
-    mutationFn: async (payload: { email: string }) => {
+    mutationFn: async (payload: Omit<LoginSchema, "password">) => {
       const result = await startTotpEnrollment({ data: payload });
       if (result instanceof Response) throw result;
       return result as {
@@ -213,10 +229,13 @@ function LoginPage() {
         secret: string;
       };
     },
+    onSuccess: () => {
+      toast.info("Scan the QR code with your authenticator app");
+    },
   });
 
   const startTotpChallengeMutation = useMutation({
-    mutationFn: async (payload: { authenticationFactorId: string }) => {
+    mutationFn: async (payload: ChallengeSchema) => {
       const result = await startTotpChallenge({ data: payload });
       if (result instanceof Response) throw result;
       return result as { authenticationChallengeId: string };
@@ -235,10 +254,14 @@ function LoginPage() {
     },
     onSuccess: async (result) => {
       if (result.status === "success") {
+        toast.success("MFA verified successfully!");
         await finalizeAuth();
       } else {
         await handleNextStep(result);
       }
+    },
+    onError: () => {
+      toast.error("Invalid MFA code. Please try again.");
     },
   });
 
@@ -253,10 +276,14 @@ function LoginPage() {
     },
     onSuccess: async (result) => {
       if (result.status === "success") {
+        toast.success("Organization selected!");
         await finalizeAuth();
       } else {
         await handleNextStep(result);
       }
+    },
+    onError: () => {
+      toast.error("Unable to select organization. Please try again.");
     },
   });
 
