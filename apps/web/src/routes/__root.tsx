@@ -1,6 +1,7 @@
 import type { ConvexQueryClient } from "@convex-dev/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 
+import { AuthKitProvider } from "@workos/authkit-tanstack-react-start/client";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { Toaster } from "@avm-daily/ui/components/sonner";
 import { ConvexProvider } from "convex/react";
@@ -12,7 +13,6 @@ import {
   Outlet,
 } from "@tanstack/react-router";
 
-import Header from "../components/header";
 import appCss from "../index.css?url";
 
 export interface RouterAppContext {
@@ -36,21 +36,22 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
 function RootDocument() {
   const { convexQueryClient } = Route.useRouteContext();
   return (
-    <ConvexProvider client={convexQueryClient.convexClient}>
-      <html lang="en" className="dark">
-        <head>
-          <HeadContent />
-        </head>
-        <body>
-          <div className="grid h-svh grid-rows-[auto_1fr]">
-            <Header />
-            <Outlet />
-          </div>
-          <Toaster richColors />
-          <TanStackRouterDevtools position="bottom-left" />
-          <Scripts />
-        </body>
-      </html>
-    </ConvexProvider>
+    <AuthKitProvider>
+      <ConvexProvider client={convexQueryClient.convexClient}>
+        <html lang="en" className="dark">
+          <head>
+            <HeadContent />
+          </head>
+          <body>
+            <div className="grid h-svh grid-rows-[auto_1fr]">
+              <Outlet />
+            </div>
+            <Toaster richColors />
+            <TanStackRouterDevtools position="bottom-left" />
+            <Scripts />
+          </body>
+        </html>
+      </ConvexProvider>
+    </AuthKitProvider>
   );
 }
