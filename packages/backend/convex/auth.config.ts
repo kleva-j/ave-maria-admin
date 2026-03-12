@@ -1,5 +1,5 @@
-import { auth } from "./auth";
+import { authKit } from "./auth";
 
 export default {
-  providers: auth.getAuthConfigProviders(),
+  providers: authKit.getAuthConfigProviders(),
 };
