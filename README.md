@@ -13,6 +13,7 @@ This project was created with [Better-T-Stack](https://github.com/AmanVarshney01
 - **Convex** - Reactive backend-as-a-service platform
 - **Oxlint** - Oxlint + Oxfmt (linting & formatting)
 - **Turborepo** - Optimized monorepo build system
+- **Vitest** - Fast unit testing framework with jsdom support
 
 ## Getting Started
 
@@ -95,3 +96,9 @@ avm-daily/
 - `pnpm run check-types`: Check TypeScript types across all apps
 - `pnpm run dev:native`: Start the React Native/Expo development server
 - `pnpm run check`: Run Oxlint and Oxfmt
+- `pnpm test`: Run tests (in apps/web)
+- `pnpm test:watch`: Run tests in watch mode
+
+## Testing
+
+See [TESTING.md](apps/web/TESTING.md) for detailed testing documentation.

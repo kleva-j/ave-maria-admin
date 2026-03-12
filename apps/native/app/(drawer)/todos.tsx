@@ -1,21 +1,22 @@
-import { api } from "@avm-daily/backend/convex/_generated/api";
 import type { Id } from "@avm-daily/backend/convex/_generated/dataModel";
-import { Ionicons } from "@expo/vector-icons";
+
+import { api } from "@avm-daily/backend/convex/_generated/api";
+import { View, Text, ScrollView, Alert } from "react-native";
 import { useMutation, useQuery } from "convex/react";
+import { Container } from "@/components/container";
+import { Ionicons } from "@expo/vector-icons";
+import { useState } from "react";
+
 import {
-  Button,
+  useThemeColor,
+  TextField,
   Checkbox,
-  Chip,
   Spinner,
   Surface,
+  Button,
   Input,
-  TextField,
-  useThemeColor,
+  Chip,
 } from "heroui-native";
-import { useState } from "react";
-import { View, Text, ScrollView, Alert } from "react-native";
-
-import { Container } from "@/components/container";
 
 export default function TodosScreen() {
   const [newTodoText, setNewTodoText] = useState("");
@@ -59,7 +60,9 @@ export default function TodosScreen() {
       <ScrollView className="flex-1" contentContainerClassName="p-4">
         <View className="py-4 mb-4">
           <View className="flex-row items-center justify-between">
-            <Text className="text-2xl font-semibold text-foreground tracking-tight">Tasks</Text>
+            <Text className="text-2xl font-semibold text-foreground tracking-tight">
+              Tasks
+            </Text>
             {totalCount > 0 && (
               <Chip variant="secondary" color="accent" size="sm">
                 <Chip.Label>
@@ -107,25 +110,42 @@ export default function TodosScreen() {
         )}
 
         {todos && todos.length === 0 && !isLoading && (
-          <Surface variant="secondary" className="items-center justify-center py-10 rounded-lg">
+          <Surface
+            variant="secondary"
+            className="items-center justify-center py-10 rounded-lg"
+          >
             <Ionicons name="checkbox-outline" size={40} color={mutedColor} />
-            <Text className="text-foreground font-medium mt-3">No tasks yet</Text>
-            <Text className="text-muted text-xs mt-1">Add your first task to get started</Text>
+            <Text className="text-foreground font-medium mt-3">
+              No tasks yet
+            </Text>
+            <Text className="text-muted text-xs mt-1">
+              Add your first task to get started
+            </Text>
           </Surface>
         )}
 
         {todos && todos.length > 0 && (
           <View className="gap-2">
             {todos.map((todo) => (
-              <Surface key={todo._id} variant="secondary" className="p-3 rounded-lg">
+              <Surface
+                key={todo._id}
+                variant="secondary"
+                className="p-3 rounded-lg"
+              >
                 <View className="flex-row items-center gap-3">
                   <Checkbox
                     isSelected={todo.completed}
-                    onSelectedChange={() => handleToggleTodo(todo._id, todo.completed)}
+                    onSelectedChange={() =>
+                      handleToggleTodo(todo._id, todo.completed)
+                    }
                   />
                   <View className="flex-1">
                     <Text
-                      className={`text-sm ${todo.completed ? "text-muted line-through" : "text-foreground"}`}
+                      className={`text-sm ${
+                        todo.completed
+                          ? "text-muted line-through"
+                          : "text-foreground"
+                      }`}
                     >
                       {todo.text}
                     </Text>
@@ -136,7 +156,11 @@ export default function TodosScreen() {
                     onPress={() => handleDeleteTodo(todo._id)}
                     size="sm"
                   >
-                    <Ionicons name="trash-outline" size={16} color={dangerColor} />
+                    <Ionicons
+                      name="trash-outline"
+                      size={16}
+                      color={dangerColor}
+                    />
                   </Button>
                 </View>
               </Surface>

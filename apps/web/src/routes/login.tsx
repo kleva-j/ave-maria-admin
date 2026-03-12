@@ -60,7 +60,7 @@ function LoginPage() {
     <div className="flex h-[calc(100vh-2.5rem)] w-full items-center justify-center p-6 md:p-10">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>Login to your account</CardTitle>
+          <CardTitle className="text-lg">Login to your account</CardTitle>
           <CardDescription>
             Enter your email below to login to your account"
           </CardDescription>
