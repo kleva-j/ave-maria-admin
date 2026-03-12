@@ -9,6 +9,7 @@
     "dev:setup": "convex dev --configure --until-success"
   },
   "dependencies": {
+    "@convex-dev/workos-authkit": "^0.1.6",
     "convex": "catalog:",
     "dotenv": "catalog:",
     "zod": "catalog:"
