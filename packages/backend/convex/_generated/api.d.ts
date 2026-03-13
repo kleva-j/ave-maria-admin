@@ -13,7 +13,6 @@ import type * as crons from "../crons.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as kpis from "../kpis.js";
-import type * as todos from "../todos.js";
 import type * as users from "../users.js";
 
 import type {
@@ -28,7 +27,6 @@ declare const fullApi: ApiFromModules<{
   healthCheck: typeof healthCheck;
   http: typeof http;
   kpis: typeof kpis;
-  todos: typeof todos;
   users: typeof users;
 }>;
 

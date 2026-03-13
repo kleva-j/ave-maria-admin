@@ -45,6 +45,13 @@ const adminRole = v.union(
   v.literal("support"),
 );
 
+export type WithdrawalStatus = typeof withdrawalStatus.type;
+export type UserStatus = typeof userStatus.type;
+export type PlanStatus = typeof planStatus.type;
+export type KycStatus = typeof kycStatus.type;
+export type AdminRole = typeof adminRole.type;
+export type TxnType = typeof txnType.type;
+
 const users = defineTable({
   workosId: v.string(),
   phone: v.string(),

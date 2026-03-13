@@ -12,7 +12,8 @@
     "@convex-dev/workos-authkit": "^0.1.6",
     "convex": "catalog:",
     "dotenv": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "date-fns": "catalog:"
   },
   "devDependencies": {
     "@avm-daily/config": "workspace:*",
