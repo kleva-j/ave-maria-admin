@@ -323,6 +323,9 @@ importers:
       convex:
         specifier: 'catalog:'
         version: 1.32.0(react@19.2.4)
+      convex-audit-log:
+        specifier: ^0.2.0
+        version: 0.2.0(convex@1.32.0(react@19.2.4))(react@19.2.4)
       date-fns:
         specifier: 'catalog:'
         version: 4.1.0
@@ -988,6 +991,11 @@ packages:
   '@bcoe/v8-coverage@1.0.2':
     resolution: {integrity: sha512-6zABk/ECA/QYSCQ1NGiVwwbQerUCZ+TQbp64Q3AgmfNvurHH0j8TtXa1qbShXA6qqkpAj4V5W8pP6mLe1mcMqA==}
     engines: {node: '>=18'}
+
+  '@convex-dev/aggregate@0.2.1':
+    resolution: {integrity: sha512-z8GeUC+cIZEgtMXecX6WTBQHNW4E2ioRsc5IkO8BWnCjgDOru/Mw8zXe9JPe35JkqDjlSVKuwxiQHKs/jaYAyA==}
+    peerDependencies:
+      convex: ^1.24.8
 
   '@convex-dev/crons@0.2.0':
     resolution: {integrity: sha512-JowF/DDPl8FuhXml2/0jmEa6uIKr/UK1UwP+FdbPt2BRVxACRX4CNlzDQEtHbO2p2FVKiJh4zEg8p5/YM27PEA==}
@@ -3644,6 +3652,15 @@ packages:
 
   convert-source-map@2.0.0:
     resolution: {integrity: sha512-Kvp459HrV2FEJ1CAsi1Ku+MY3kasH19TFykTz2xWmMeq6bk2NU3XXvfJ+Q61m0xktWwt+1HSYf3JZsTms3aRJg==}
+
+  convex-audit-log@0.2.0:
+    resolution: {integrity: sha512-/AH5FE7W19Rs0tlmkErj0sbK0Pi7aBONm0Q+2qzzi8bNGsqIPamu7oFopHeD7GZMKIpSi107uSmNP0lvPX4XfA==}
+    peerDependencies:
+      convex: ^1.29.3
+      react: ^18.3.1 || ^19.0.0
+    peerDependenciesMeta:
+      react:
+        optional: true
 
   convex-helpers@0.1.114:
     resolution: {integrity: sha512-elEdh+gG6BDv2dWIWVvBeJPbHnDQS5+WexUuwlGVJXz1EbMkXz/UIQwFIfLMZIXUwW6ot4JYf/1JJKNStrE6lg==}
@@ -7724,6 +7741,10 @@ snapshots:
 
   '@bcoe/v8-coverage@1.0.2': {}
 
+  '@convex-dev/aggregate@0.2.1(convex@1.32.0(react@19.2.4))':
+    dependencies:
+      convex: 1.32.0(react@19.2.4)
+
   '@convex-dev/crons@0.2.0(convex@1.32.0(react@19.2.4))':
     dependencies:
       convex: 1.32.0(react@19.2.4)
@@ -10586,6 +10607,13 @@ snapshots:
   content-type@1.0.5: {}
 
   convert-source-map@2.0.0: {}
+
+  convex-audit-log@0.2.0(convex@1.32.0(react@19.2.4))(react@19.2.4):
+    dependencies:
+      '@convex-dev/aggregate': 0.2.1(convex@1.32.0(react@19.2.4))
+      convex: 1.32.0(react@19.2.4)
+    optionalDependencies:
+      react: 19.2.4
 
   convex-helpers@0.1.114(@standard-schema/spec@1.1.0)(convex@1.32.0(react@19.2.4))(hono@4.12.6)(react@19.2.4)(typescript@5.9.3)(zod@4.3.6):
     dependencies:

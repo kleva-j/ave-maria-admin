@@ -1,9 +1,11 @@
 import type { QueryCtx } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 
+import { AuditActions } from "convex-audit-log";
 import { v } from "convex/values";
 
 import { internalMutation, mutation, query } from "./_generated/server";
+import { auditLog } from "./auditLog";
 import { authKit } from "./auth";
 
 /**
@@ -55,6 +57,16 @@ export const updateUserProfile = mutation({
     if (!user) {
       throw new Error("Not authenticated");
     }
+
+    await auditLog.logChange(ctx, {
+      action: AuditActions.USER_UPDATED,
+      actorId: user._id,
+      resourceType: "users",
+      resourceId: user._id,
+      before: { onboarding_complete: user.onboarding_complete },
+      after: { onboarding_complete: args.onboardingComplete },
+      severity: "info",
+    });
 
     await ctx.db.patch(user._id, {
       onboarding_complete: args.onboardingComplete ?? user.onboarding_complete,
@@ -168,6 +180,13 @@ export const deleteUser = internalMutation({
       .unique();
 
     if (existing) {
+      await auditLog.log(ctx, {
+        action: AuditActions.USER_DELETED,
+        actorId: existing._id,
+        resourceType: "users",
+        resourceId: existing._id,
+        severity: "warning",
+      });
       await ctx.db.delete(existing._id);
     }
   },

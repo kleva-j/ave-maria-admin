@@ -1,8 +1,11 @@
 import type { AuthFunctions } from "@convex-dev/workos-authkit";
 import type { DataModel } from "./_generated/dataModel";
 
-import { components, internal } from "./_generated/api";
 import { AuthKit } from "@convex-dev/workos-authkit";
+import { AuditActions } from "convex-audit-log";
+
+import { components, internal } from "./_generated/api";
+import { auditLog } from "./auditLog";
 
 const authFunctions: AuthFunctions = internal.auth;
 
@@ -12,6 +15,11 @@ export const authKit = new AuthKit<DataModel>(components.workOSAuthKit, {
 
 export const { authKitEvent } = authKit.events({
   "user.created": async (ctx, event) => {
+    await auditLog.log(ctx, {
+      action: "workos.user_created",
+      severity: "info",
+      metadata: { workosId: event.data.id, email: event.data.email },
+    });
     await ctx.runMutation(internal.users.upsertFromWorkOS, {
       workosId: event.data.id,
       email: event.data.email,
@@ -24,6 +32,11 @@ export const { authKitEvent } = authKit.events({
     });
   },
   "user.updated": async (ctx, event) => {
+    await auditLog.log(ctx, {
+      action: "workos.user_updated",
+      severity: "info",
+      metadata: { workosId: event.data.id, email: event.data.email },
+    });
     await ctx.runMutation(internal.users.upsertFromWorkOS, {
       workosId: event.data.id,
       email: event.data.email,
@@ -36,6 +49,11 @@ export const { authKitEvent } = authKit.events({
     });
   },
   "user.deleted": async (ctx, event) => {
+    await auditLog.log(ctx, {
+      action: "workos.user_deleted",
+      severity: "warning",
+      metadata: { workosId: event.data.id },
+    });
     await ctx.runMutation(internal.users.deleteUser, {
       workosId: event.data.id,
     });
@@ -56,6 +74,12 @@ export const { authKitAction } = authKit.actions({
     const { user } = action;
 
     if (user) {
+      await auditLog.log(ctx, {
+        action: AuditActions.USER_LOGIN,
+        actorId: user.id,
+        severity: "info",
+        metadata: { email: user.email },
+      });
       await ctx.runMutation(internal.users.upsertFromWorkOS, {
         workosId: user.id,
         email: user.email,
@@ -71,6 +95,12 @@ export const { authKitAction } = authKit.actions({
     // We can also sync user registration data
     const user = (action as { user?: WorkOSUserPayload }).user;
     if (user) {
+      await auditLog.log(ctx, {
+        action: AuditActions.USER_CREATED,
+        actorId: user.id,
+        severity: "info",
+        metadata: { email: user.email },
+      });
       await ctx.runMutation(internal.users.upsertFromWorkOS, {
         workosId: user.id,
         email: user.email,

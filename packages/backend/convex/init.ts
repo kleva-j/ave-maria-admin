@@ -2,6 +2,7 @@ import { createFunctionHandle } from "convex/server";
 
 import { internal, components } from "./_generated/api";
 import { internalAction } from "./_generated/server";
+import { auditLog } from "./auditLog";
 
 /**
  * Idempotent setup function to register dynamic cron jobs via the crons component.
@@ -12,6 +13,11 @@ export const setup = internalAction({
   args: {},
   handler: async (ctx) => {
     const jobName = "refresh dashboard kpis";
+
+    await auditLog.log(ctx, {
+      action: "system.setup_executed",
+      severity: "info",
+    });
 
     // Define the configuration for the cron job
     const config = { identifier: { name: jobName } };
