@@ -18,6 +18,9 @@ export const { authKitEvent } = authKit.events({
       firstName: event.data.firstName ?? undefined,
       lastName: event.data.lastName ?? undefined,
       profilePictureUrl: event.data.profilePictureUrl ?? undefined,
+      lastLoginAt: event.data.lastSignInAt
+        ? Number(new Date(event.data.lastSignInAt))
+        : null,
     });
   },
   "user.updated": async (ctx, event) => {
@@ -27,6 +30,9 @@ export const { authKitEvent } = authKit.events({
       firstName: event.data.firstName ?? undefined,
       lastName: event.data.lastName ?? undefined,
       profilePictureUrl: event.data.profilePictureUrl ?? undefined,
+      lastLoginAt: event.data.lastSignInAt
+        ? Number(new Date(event.data.lastSignInAt))
+        : null,
     });
   },
   "user.deleted": async (ctx, event) => {
@@ -47,7 +53,8 @@ interface WorkOSUserPayload {
 export const { authKitAction } = authKit.actions({
   authentication: async (ctx, action, response) => {
     // Sync last login time on successful authentication
-    const user = action.user;
+    const { user } = action;
+
     if (user) {
       await ctx.runMutation(internal.users.upsertFromWorkOS, {
         workosId: user.id,
@@ -70,6 +77,7 @@ export const { authKitAction } = authKit.actions({
         firstName: user.firstName ?? undefined,
         lastName: user.lastName ?? undefined,
         profilePictureUrl: user.profilePictureUrl ?? undefined,
+        lastLoginAt: null,
       });
     }
     return response.allow();

@@ -1,25 +1,214 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+const userStatus = v.union(
+  v.literal("active"),
+  v.literal("pending_kyc"),
+  v.literal("suspended"),
+  v.literal("closed"),
+);
+
+const planStatus = v.union(
+  v.literal("active"),
+  v.literal("paused"),
+  v.literal("completed"),
+  v.literal("expired"),
+);
+
+const txnType = v.union(
+  v.literal("contribution"),
+  v.literal("interest_accrual"),
+  v.literal("withdrawal"),
+  v.literal("referral_bonus"),
+  v.literal("reversal"),
+  v.literal("investment_yield"),
+);
+
+const withdrawalStatus = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("rejected"),
+  v.literal("processed"),
+);
+
+const kycStatus = v.union(
+  v.literal("pending"),
+  v.literal("approved"),
+  v.literal("rejected"),
+);
+
+const adminRole = v.union(
+  v.literal("super_admin"),
+  v.literal("operations"),
+  v.literal("finance"),
+  v.literal("compliance"),
+  v.literal("support"),
+);
+
+const users = defineTable({
+  workosId: v.string(),
+  phone: v.string(),
+  email: v.optional(v.string()),
+  first_name: v.string(),
+  last_name: v.string(),
+  profile_picture_url: v.optional(v.string()),
+  onboarding_complete: v.boolean(),
+  referral_code: v.string(),
+  referred_by: v.optional(v.id("users")),
+  total_balance_kobo: v.int64(),
+  savings_balance_kobo: v.int64(),
+  status: userStatus,
+  bvn_encrypted: v.optional(v.string()),
+  nin_encrypted: v.optional(v.string()),
+  created_at: v.number(),
+  updated_at: v.number(),
+  deleted_at: v.optional(v.number()),
+  last_login_at: v.nullable(v.number()),
+})
+  .index("by_workos_id", ["workosId"])
+  .index("by_phone", ["phone"])
+  .index("by_email", ["email"])
+  .index("by_referral_code", ["referral_code"])
+  .index("by_referred_by", ["referred_by"])
+  .index("by_status", ["status"]);
+
+const admin_users = defineTable({
+  workosId: v.string(),
+  email: v.string(),
+  first_name: v.string(),
+  last_name: v.string(),
+  profile_picture_url: v.optional(v.string()),
+  role: adminRole,
+  last_login_at: v.nullable(v.number()),
+  status: userStatus,
+  created_at: v.number(),
+  deleted_at: v.optional(v.number()),
+})
+  .index("by_workos_id", ["workosId"])
+  .index("by_email", ["email"])
+  .index("by_role", ["role"])
+  .index("by_status", ["status"]);
+
+const savings_plan_templates = defineTable({
+  name: v.string(),
+  description: v.optional(v.string()),
+  default_target_kobo: v.int64(),
+  duration_days: v.number(),
+  interest_rate: v.number(),
+  automation_type: v.optional(v.string()),
+  is_active: v.boolean(),
+  created_at: v.number(),
+})
+  .index("by_name", ["name"])
+  .index("by_is_active", ["is_active"]);
+
+const user_savings_plans = defineTable({
+  user_id: v.id("users"),
+  template_id: v.optional(v.id("savings_plan_templates")),
+  custom_target_kobo: v.int64(),
+  current_amount_kobo: v.int64(),
+  start_date: v.string(),
+  end_date: v.string(),
+  status: planStatus,
+  automation_enabled: v.boolean(),
+  metadata: v.optional(v.any()),
+  created_at: v.number(),
+  updated_at: v.number(),
+})
+  .index("by_user_id", ["user_id"])
+  .index("by_user_id_and_status", ["user_id", "status"])
+  .index("by_template_id", ["template_id"])
+  .index("by_status", ["status"])
+  .index("by_end_date", ["end_date"]);
+
+const transactions = defineTable({
+  user_id: v.id("users"),
+  user_plan_id: v.optional(v.id("user_savings_plans")),
+  type: txnType,
+  amount_kobo: v.int64(),
+  reference: v.string(),
+  metadata: v.optional(v.any()),
+  created_at: v.number(),
+})
+  .index("by_user_id", ["user_id"])
+  .index("by_user_plan_id", ["user_plan_id"])
+  .index("by_reference", ["reference"])
+  .index("by_type", ["type"])
+  .index("by_user_id_and_created_at", ["user_id", "created_at"]);
+
+const withdrawals = defineTable({
+  transaction_id: v.id("transactions"),
+  requested_amount_kobo: v.int64(),
+  status: withdrawalStatus,
+  requested_at: v.number(),
+  approved_by: v.optional(v.id("admin_users")),
+  approved_at: v.optional(v.number()),
+  rejection_reason: v.optional(v.string()),
+  bank_account_details: v.optional(v.any()),
+})
+  .index("by_transaction_id", ["transaction_id"])
+  .index("by_status", ["status"])
+  .index("by_requested_at", ["requested_at"])
+  .index("by_approved_by", ["approved_by"]);
+
+const user_bank_accounts = defineTable({
+  user_id: v.id("users"),
+  bank_name: v.string(),
+  account_number: v.string(),
+  account_name: v.optional(v.string()),
+  is_primary: v.boolean(),
+  created_at: v.number(),
+})
+  .index("by_user_id", ["user_id"])
+  .index("by_user_id_and_is_primary", ["user_id", "is_primary"])
+  .index("by_account_number", ["account_number"]);
+
+const mv_dashboard_kpis = defineTable({
+  total_aum_kobo: v.int64(),
+  active_users: v.number(),
+  active_plans: v.number(),
+  total_savings_kobo: v.int64(),
+  computed_at: v.number(),
+}).index("by_computed_at", ["computed_at"]);
+
+const kyc_documents = defineTable({
+  user_id: v.id("users"),
+  document_type: v.string(),
+  file_url: v.optional(v.string()),
+  status: kycStatus,
+  reviewed_by: v.optional(v.id("admin_users")),
+  reviewed_at: v.optional(v.number()),
+  created_at: v.number(),
+})
+  .index("by_user_id", ["user_id"])
+  .index("by_status", ["status"])
+  .index("by_user_id_and_status", ["user_id", "status"])
+  .index("by_reviewed_by", ["reviewed_by"]);
+
+const audit_logs = defineTable({
+  admin_id: v.optional(v.id("admin_users")),
+  action: v.string(),
+  entity_type: v.optional(v.string()),
+  entity_id: v.optional(v.string()),
+  old_values: v.optional(v.any()),
+  new_values: v.optional(v.any()),
+  ip_address: v.optional(v.string()),
+  user_agent: v.optional(v.string()),
+  created_at: v.number(),
+})
+  .index("by_admin_id", ["admin_id"])
+  .index("by_entity_type_and_entity_id", ["entity_type", "entity_id"])
+  .index("by_created_at", ["created_at"]);
+
 export default defineSchema({
-  users: defineTable({
-    // Mirrored from WorkOS
-    workosId: v.string(),
-    email: v.string(),
-    firstName: v.optional(v.string()),
-    lastName: v.optional(v.string()),
-    profilePictureUrl: v.optional(v.string()),
-
-    // App specific
-    isAdmin: v.optional(v.boolean()),
-    onboardingComplete: v.optional(v.boolean()),
-    lastLoginAt: v.optional(v.number()),
-  })
-    .index("by_workos_id", ["workosId"])
-    .index("by_email", ["email"]),
-
-  todos: defineTable({
-    text: v.string(),
-    completed: v.boolean(),
-  }),
+  users,
+  admin_users,
+  savings_plan_templates,
+  user_savings_plans,
+  transactions,
+  withdrawals,
+  user_bank_accounts,
+  mv_dashboard_kpis,
+  kyc_documents,
+  audit_logs,
 });

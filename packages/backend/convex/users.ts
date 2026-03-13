@@ -7,15 +7,28 @@ import { internalMutation, mutation, query } from "./_generated/server";
 import { authKit } from "./auth";
 
 /**
- * Helper to get the current authenticated user's profile.
+ * Helper to get the current authenticated regular user's profile.
  */
-async function getViewer(ctx: QueryCtx): Promise<Doc<"users"> | null> {
-  const user = await authKit.getAuthUser(ctx);
-  if (!user) return null;
+async function getUser(ctx: QueryCtx): Promise<Doc<"users"> | null> {
+  const authUser = await authKit.getAuthUser(ctx);
+  if (!authUser) return null;
 
   return await ctx.db
     .query("users")
-    .withIndex("by_workos_id", (q) => q.eq("workosId", user.id))
+    .withIndex("by_workos_id", (q) => q.eq("workosId", authUser.id))
+    .unique();
+}
+
+/**
+ * Helper to get the current authenticated admin user's profile.
+ */
+async function getAdminUser(ctx: QueryCtx): Promise<Doc<"admin_users"> | null> {
+  const authUser = await authKit.getAuthUser(ctx);
+  if (!authUser) return null;
+
+  return await ctx.db
+    .query("admin_users")
+    .withIndex("by_workos_id", (q) => q.eq("workosId", authUser.id))
     .unique();
 }
 
@@ -25,7 +38,7 @@ async function getViewer(ctx: QueryCtx): Promise<Doc<"users"> | null> {
 export const viewer = query({
   args: {},
   handler: async (ctx) => {
-    return await getViewer(ctx);
+    return await getUser(ctx);
   },
 });
 
@@ -38,27 +51,16 @@ export const updateUserProfile = mutation({
     onboardingComplete: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const user = await getViewer(ctx);
+    const user = await getUser(ctx);
     if (!user) {
       throw new Error("Not authenticated");
     }
 
     await ctx.db.patch(user._id, {
-      onboardingComplete: args.onboardingComplete ?? user.onboardingComplete,
+      onboarding_complete: args.onboardingComplete ?? user.onboarding_complete,
     });
 
     return user._id;
-  },
-});
-
-/**
- * Check if the current user is an admin.
- */
-export const isAdmin = query({
-  args: {},
-  handler: async (ctx) => {
-    const user = await getViewer(ctx);
-    return !!user?.isAdmin;
   },
 });
 
@@ -68,10 +70,18 @@ export const isAdmin = query({
 export const list = query({
   args: {},
   handler: async (ctx) => {
-    const user = await getViewer(ctx);
-    if (!user?.isAdmin) {
-      throw new Error("Unauthorized");
+    const user = await authKit.getAuthUser(ctx);
+    if (!user) return null;
+
+    const adminUser = await ctx.db
+      .query("admin_users")
+      .withIndex("by_workos_id", (q) => q.eq("workosId", user.id))
+      .unique();
+
+    if (!adminUser) {
+      throw new Error("Not authorized to view users");
     }
+
     return await ctx.db.query("users").collect();
   },
 });
@@ -81,14 +91,17 @@ export const list = query({
  * Access is restricted to the user themselves or an admin.
  */
 export const get = query({
-  args: { id: v.id("users") },
+  args: { id: v.id("users"), role: v.optional(v.string()) },
   handler: async (ctx, args) => {
-    const viewer = await getViewer(ctx);
-    if (!viewer) {
+    const regularUser = await getUser(ctx);
+    const adminUser = regularUser ? null : await getAdminUser(ctx);
+
+    if (!regularUser && !adminUser) {
       throw new Error("Not authenticated");
     }
 
-    if (viewer._id !== args.id && !viewer.isAdmin) {
+    // Regular users can only fetch their own profile; admins can fetch any
+    if (regularUser && regularUser._id !== args.id) {
       throw new Error("Unauthorized");
     }
 
@@ -106,7 +119,7 @@ export const upsertFromWorkOS = internalMutation({
     firstName: v.optional(v.string()),
     lastName: v.optional(v.string()),
     profilePictureUrl: v.optional(v.string()),
-    lastLoginAt: v.optional(v.number()),
+    lastLoginAt: v.nullable(v.number()),
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
@@ -117,22 +130,28 @@ export const upsertFromWorkOS = internalMutation({
     if (existing) {
       await ctx.db.patch(existing._id, {
         email: args.email,
-        firstName: args.firstName,
-        lastName: args.lastName,
-        profilePictureUrl: args.profilePictureUrl,
-        lastLoginAt: args.lastLoginAt ?? existing.lastLoginAt,
+        first_name: args.firstName,
+        last_name: args.lastName,
+        profile_picture_url: args.profilePictureUrl,
+        last_login_at: args.lastLoginAt,
       });
       return existing._id;
     }
     return await ctx.db.insert("users", {
       workosId: args.workosId,
       email: args.email,
-      firstName: args.firstName,
-      lastName: args.lastName,
-      profilePictureUrl: args.profilePictureUrl,
-      lastLoginAt: args.lastLoginAt,
-      isAdmin: false,
-      onboardingComplete: false,
+      first_name: args.firstName ?? "",
+      last_name: args.lastName ?? "",
+      profile_picture_url: args.profilePictureUrl,
+      onboarding_complete: false,
+      phone: "",
+      referral_code: "",
+      total_balance_kobo: BigInt(0),
+      savings_balance_kobo: BigInt(0),
+      status: "pending_kyc",
+      created_at: Date.now(),
+      updated_at: Date.now(),
+      last_login_at: args.lastLoginAt,
     });
   },
 });
