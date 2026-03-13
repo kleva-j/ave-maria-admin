@@ -6,14 +6,16 @@
   "author": "",
   "scripts": {
     "dev": "convex dev",
-    "dev:setup": "convex dev --configure --until-success"
+    "dev:setup": "convex dev --configure --until-success",
+    "setup:crons": "convex run init:setup"
   },
   "dependencies": {
+    "@convex-dev/crons": "^0.2.0",
     "@convex-dev/workos-authkit": "^0.1.6",
     "convex": "catalog:",
+    "date-fns": "catalog:",
     "dotenv": "catalog:",
-    "zod": "catalog:",
-    "date-fns": "catalog:"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@avm-daily/config": "workspace:*",
