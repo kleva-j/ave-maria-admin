@@ -1,7 +1,8 @@
+import type { UserStatus, PlanStatus } from "./schema";
+
 import { v } from "convex/values";
 
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
-import { UserStatus, PlanStatus } from "./schema";
 import { internal } from "./_generated/api";
 
 import { isSameDay } from "date-fns";

@@ -9,5 +9,6 @@ export const auditLog = new AuditLog(components.auditLog, {
     "first_name",
     "last_name",
     "referral_code",
+    "account_number",
   ],
 });

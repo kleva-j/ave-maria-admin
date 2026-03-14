@@ -45,6 +45,20 @@ const adminRole = v.union(
   v.literal("support"),
 );
 
+const bankAccountVerificationStatus = v.union(
+  v.literal("pending"),
+  v.literal("verified"),
+  v.literal("rejected"),
+);
+
+const bankAccountEventType = v.union(
+  v.literal("created"),
+  v.literal("updated"),
+  v.literal("set_primary"),
+  v.literal("verification_status_changed"),
+  v.literal("deleted"),
+);
+
 export type WithdrawalStatus = typeof withdrawalStatus.type;
 export type UserStatus = typeof userStatus.type;
 export type PlanStatus = typeof planStatus.type;
@@ -165,10 +179,28 @@ const user_bank_accounts = defineTable({
   account_name: v.optional(v.string()),
   is_primary: v.boolean(),
   created_at: v.number(),
+  updated_at: v.number(),
+  verification_status: bankAccountVerificationStatus,
+  verified_at: v.optional(v.number()),
 })
   .index("by_user_id", ["user_id"])
   .index("by_user_id_and_is_primary", ["user_id", "is_primary"])
-  .index("by_account_number", ["account_number"]);
+  .index("by_account_number", ["account_number"])
+  .index("by_verification_status", ["verification_status"]);
+
+const user_bank_account_events = defineTable({
+  user_id: v.id("users"),
+  account_id: v.id("user_bank_accounts"),
+  event_type: bankAccountEventType,
+  previous_values: v.optional(v.any()),
+  new_values: v.optional(v.any()),
+  actor_user_id: v.optional(v.id("users")),
+  actor_admin_id: v.optional(v.id("admin_users")),
+  created_at: v.number(),
+})
+  .index("by_user_id", ["user_id"])
+  .index("by_account_id", ["account_id"])
+  .index("by_event_type", ["event_type"]);
 
 const mv_dashboard_kpis = defineTable({
   total_aum_kobo: v.int64(),
@@ -200,6 +232,7 @@ export default defineSchema({
   transactions,
   withdrawals,
   user_bank_accounts,
+  user_bank_account_events,
   mv_dashboard_kpis,
   kyc_documents,
 });

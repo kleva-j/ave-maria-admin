@@ -171,7 +171,7 @@ export const upsertFromWorkOS = internalMutation({
 /**
  * Internal mutation to delete a user record when they are removed from WorkOS.
  */
-export const deleteUser = internalMutation({
+export const deleteFromWorkOS = internalMutation({
   args: { workosId: v.string() },
   handler: async (ctx, args) => {
     const existing = await ctx.db

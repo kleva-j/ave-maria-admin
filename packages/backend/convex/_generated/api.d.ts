@@ -14,7 +14,9 @@ import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as init from "../init.js";
 import type * as kpis from "../kpis.js";
+import type * as userBankAccounts from "../userBankAccounts.js";
 import type * as users from "../users.js";
+import type * as utils from "../utils.js";
 
 import type {
   ApiFromModules,
@@ -29,7 +31,9 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   init: typeof init;
   kpis: typeof kpis;
+  userBankAccounts: typeof userBankAccounts;
   users: typeof users;
+  utils: typeof utils;
 }>;
 
 /**

@@ -54,7 +54,7 @@ export const { authKitEvent } = authKit.events({
       severity: "warning",
       metadata: { workosId: event.data.id },
     });
-    await ctx.runMutation(internal.users.deleteUser, {
+    await ctx.runMutation(internal.users.deleteFromWorkOS, {
       workosId: event.data.id,
     });
   },
