@@ -192,21 +192,6 @@ const kyc_documents = defineTable({
   .index("by_user_id_and_status", ["user_id", "status"])
   .index("by_reviewed_by", ["reviewed_by"]);
 
-const audit_logs = defineTable({
-  admin_id: v.optional(v.id("admin_users")),
-  action: v.string(),
-  entity_type: v.optional(v.string()),
-  entity_id: v.optional(v.string()),
-  old_values: v.optional(v.any()),
-  new_values: v.optional(v.any()),
-  ip_address: v.optional(v.string()),
-  user_agent: v.optional(v.string()),
-  created_at: v.number(),
-})
-  .index("by_admin_id", ["admin_id"])
-  .index("by_entity_type_and_entity_id", ["entity_type", "entity_id"])
-  .index("by_created_at", ["created_at"]);
-
 export default defineSchema({
   users,
   admin_users,
@@ -217,5 +202,4 @@ export default defineSchema({
   user_bank_accounts,
   mv_dashboard_kpis,
   kyc_documents,
-  audit_logs,
 });
