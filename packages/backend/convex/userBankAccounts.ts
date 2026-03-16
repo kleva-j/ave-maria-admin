@@ -299,14 +299,14 @@ async function unsetOtherPrimaries(
 ) {
   const primaries = await ctx.db
     .query("user_bank_accounts")
-    .withIndex("by_user_id_and_is_primary", (q: any) =>
+    .withIndex("by_user_id_and_is_primary", (q) =>
       q.eq("user_id", userId).eq("is_primary", true),
     )
     .collect();
 
-  // Iterate through all current primary accounts and unset them
-  for (const account of primaries) {
-    if (account._id === keepId) continue; // Skip the account we're keeping as primary
+  // Iterate through all current primary accounts and unset them concurrently
+  const unsetPromises = primaries.map(async (account) => {
+    if (account._id === keepId) return; // Skip the account we're keeping as primary
 
     const previous = accountSnapshot(account);
     await ctx.db.patch(account._id, {
@@ -323,7 +323,9 @@ async function unsetOtherPrimaries(
       actorUserId,
       actorAdminId,
     });
-  }
+  });
+
+  await Promise.all(unsetPromises);
 }
 
 /**
@@ -456,9 +458,8 @@ export const create = mutation({
     bank_name: v.string(),
     account_number: v.string(),
     account_name: v.optional(v.string()),
-    make_primary: v.optional(v.boolean()),
   },
-  returns: bankAccountValidator,
+  returns: maskedBankAccountValidator,
   handler: async (ctx, args) => {
     const user = await getUser(ctx);
 
@@ -482,8 +483,8 @@ export const create = mutation({
       )
       .take(1);
 
-    // BUSINESS LOGIC: First account OR explicitly requested becomes primary
-    const shouldBePrimary = args.make_primary ?? existingPrimary.length === 0;
+    // BUSINESS LOGIC: First account becomes primary
+    const shouldBePrimary = existingPrimary.length === 0;
     const now = Date.now();
 
     // Insert the new account with initial state
@@ -528,7 +529,7 @@ export const create = mutation({
       actorUserId: user._id,
     });
 
-    return account;
+    return toMaskedAccount(account);
   },
 });
 
@@ -553,7 +554,7 @@ export const updateDetails = mutation({
     bank_name: v.optional(v.string()),
     account_name: v.optional(v.string()),
   },
-  returns: bankAccountValidator,
+  returns: maskedBankAccountValidator,
   handler: async (ctx, args) => {
     const user = await getUser(ctx);
     const account = await ctx.db.get(args.account_id);
@@ -599,7 +600,7 @@ export const updateDetails = mutation({
       actorUserId: user._id,
     });
 
-    return updated;
+    return toMaskedAccount(updated);
   },
 });
 
@@ -620,7 +621,7 @@ export const setPrimary = mutation({
   args: {
     account_id: v.id("user_bank_accounts"),
   },
-  returns: bankAccountValidator,
+  returns: maskedBankAccountValidator,
   handler: async (ctx, args) => {
     const user = await getUser(ctx);
     const account = await ctx.db.get(args.account_id);
@@ -636,7 +637,7 @@ export const setPrimary = mutation({
 
     // No-op if already primary - avoids unnecessary writes and events
     if (account.is_primary) {
-      return account;
+      return toMaskedAccount(account);
     }
 
     const now = Date.now();
@@ -673,7 +674,7 @@ export const setPrimary = mutation({
       actorUserId: user._id,
     });
 
-    return updated;
+    return toMaskedAccount(updated);
   },
 });
 
@@ -740,24 +741,31 @@ export const remove = mutation({
 
       if (remaining.length > 0) {
         // BUSINESS LOGIC: Oldest account becomes new primary (most established)
-        // Sort by creation date ascending (oldest first)
-        remaining.sort((a, b) => a.created_at - b.created_at);
-        const nextPrimary = remaining[0];
-        const now = Date.now();
-        await ctx.db.patch(nextPrimary._id, {
-          is_primary: true,
-          updated_at: now,
-        });
+        // Only promote verified accounts
+        const verifiedRemaining = remaining.filter(
+          (a) => a.verification_status === "verified",
+        );
 
-        // Log the automatic primary change
-        await logAccountEvent(ctx, {
-          userId: user._id,
-          accountId: nextPrimary._id,
-          eventType: "set_primary",
-          previous: accountSnapshot(nextPrimary),
-          next: { ...accountSnapshot(nextPrimary), is_primary: true },
-          actorUserId: user._id,
-        });
+        if (verifiedRemaining.length > 0) {
+          // Sort by creation date ascending (oldest first)
+          verifiedRemaining.sort((a, b) => a.created_at - b.created_at);
+          const nextPrimary = verifiedRemaining[0];
+          const now = Date.now();
+          await ctx.db.patch(nextPrimary._id, {
+            is_primary: true,
+            updated_at: now,
+          });
+
+          // Log the automatic primary change
+          await logAccountEvent(ctx, {
+            userId: user._id,
+            accountId: nextPrimary._id,
+            eventType: "set_primary",
+            previous: accountSnapshot(nextPrimary),
+            next: { ...accountSnapshot(nextPrimary), is_primary: true },
+            actorUserId: user._id,
+          });
+        }
       }
     }
 
