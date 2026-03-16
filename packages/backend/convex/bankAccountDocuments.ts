@@ -15,8 +15,19 @@
 import { ConvexError, v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
-import { DOCUMENT_TYPES, getAdmin, getUser } from "./utils";
 import { auditLog } from "./auditLog";
+import {
+  // Enums & Types
+  KYC_VERIFICATION_STATUS,
+  VERFICATION_STATUS,
+  DOCUMENT_TYPES,
+  RESOURCE_TYPE,
+  EVENT_TYPE,
+  // Utils
+  getAdmin,
+  getUser,
+} from "./utils";
+import { bankAccountDocumentType } from "./shared";
 
 // Constants for file validation
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -148,12 +159,7 @@ export const listDocuments = query({
 export const getUploadUrl = mutation({
   args: {
     accountId: v.id("user_bank_accounts"),
-    documentType: v.union(
-      v.literal("government_id"),
-      v.literal("proof_of_address"),
-      v.literal("bank_statement"),
-      v.literal("selfie_with_id"),
-    ),
+    documentType: bankAccountDocumentType,
     fileName: v.string(),
     mimeType: v.string(),
   },
@@ -237,7 +243,9 @@ export const uploadDocument = mutation({
     const existing = await ctx.db
       .query("bank_account_documents")
       .withIndex("by_account_id_and_status", (q) =>
-        q.eq("account_id", args.accountId).eq("status", "pending"),
+        q
+          .eq("account_id", args.accountId)
+          .eq("status", KYC_VERIFICATION_STATUS.PENDING),
       )
       .filter((q) => q.eq(q.field("document_type"), args.documentType))
       .first();
@@ -258,7 +266,7 @@ export const uploadDocument = mutation({
       file_name: args.fileName,
       file_size: args.fileSize,
       mime_type: args.mimeType,
-      status: "pending",
+      status: VERFICATION_STATUS.PENDING,
       uploaded_at: now,
     });
 
@@ -271,7 +279,7 @@ export const uploadDocument = mutation({
     await auditLog.log(ctx, {
       action: "bank_account.document_uploaded",
       actorId: user._id,
-      resourceType: "bank_account_documents",
+      resourceType: RESOURCE_TYPE.BANK_ACCOUNT_DOCUMENTS,
       resourceId: document._id,
       severity: "info",
       metadata: {
@@ -286,12 +294,12 @@ export const uploadDocument = mutation({
     await ctx.db.insert("user_bank_account_events", {
       user_id: user._id,
       account_id: args.accountId,
-      event_type: "document_uploaded",
+      event_type: EVENT_TYPE.DOCUMENT_UPLOADED,
       created_at: now,
       new_values: {
         document_type: args.documentType,
         file_name: args.fileName,
-        status: "pending",
+        status: VERFICATION_STATUS.PENDING,
       },
       actor_user_id: user._id,
     });
@@ -347,7 +355,7 @@ export const deleteDocument = mutation({
     await auditLog.log(ctx, {
       action: "bank_account.document_deleted",
       actorId: user._id,
-      resourceType: "bank_account_documents",
+      resourceType: RESOURCE_TYPE.BANK_ACCOUNT_DOCUMENTS,
       resourceId: args.documentId,
       severity: "warning",
       metadata: {
@@ -408,7 +416,7 @@ export const checkVerificationReadiness = query({
     const documents = await ctx.db
       .query("bank_account_documents")
       .withIndex("by_account_id", (q) => q.eq("account_id", args.accountId))
-      .filter((q) => q.eq(q.field("status"), "pending"))
+      .filter((q) => q.eq(q.field("status"), VERFICATION_STATUS.PENDING))
       .collect();
 
     const uploadedDocs = documents.map((d) => d.document_type);

@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { DOCUMENT_TYPES } from "./utils";
+
+import { bankAccountDocumentType } from "./shared";
 
 const userStatus = v.union(
   v.literal("active"),
@@ -211,16 +212,6 @@ const user_bank_account_events = defineTable({
   .index("by_user_id", ["user_id"])
   .index("by_account_id", ["account_id"])
   .index("by_event_type", ["event_type"]);
-
-// Document types for bank account verification
-const bankAccountDocumentType = v.union(
-  v.literal(DOCUMENT_TYPES.GOVERNMENT_ID), // International passport, Driver's license, National ID
-  v.literal(DOCUMENT_TYPES.PROOF_OF_ADDRESS), // Utility bill, Bank statement
-  v.literal(DOCUMENT_TYPES.BANK_STATEMENT), // Recent bank statement
-  v.literal(DOCUMENT_TYPES.SELFIE_WITH_ID), // Selfie holding ID
-);
-
-export type BankAccountDocumentType = typeof bankAccountDocumentType.type;
 
 const bank_account_documents = defineTable({
   user_id: v.id("users"),
