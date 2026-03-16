@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { DOCUMENT_TYPES } from "./utils";
 
 const userStatus = v.union(
   v.literal("active"),
@@ -57,6 +58,10 @@ const bankAccountEventType = v.union(
   v.literal("set_primary"),
   v.literal("verification_status_changed"),
   v.literal("deleted"),
+  v.literal("document_uploaded"),
+  v.literal("verification_submitted"),
+  v.literal("verification_approved"),
+  v.literal("verification_rejected"),
 );
 
 export type WithdrawalStatus = typeof withdrawalStatus.type;
@@ -182,11 +187,16 @@ const user_bank_accounts = defineTable({
   updated_at: v.number(),
   verification_status: bankAccountVerificationStatus,
   verified_at: v.optional(v.number()),
+  // Verification workflow fields
+  verification_submitted_at: v.optional(v.number()),
+  verified_by_admin_id: v.optional(v.id("admin_users")),
+  rejection_reason: v.optional(v.string()),
 })
   .index("by_user_id", ["user_id"])
   .index("by_user_id_and_is_primary", ["user_id", "is_primary"])
   .index("by_account_number", ["account_number"])
-  .index("by_verification_status", ["verification_status"]);
+  .index("by_verification_status", ["verification_status"])
+  .index("by_verification_submitted_at", ["verification_submitted_at"]);
 
 const user_bank_account_events = defineTable({
   user_id: v.id("users"),
@@ -201,6 +211,37 @@ const user_bank_account_events = defineTable({
   .index("by_user_id", ["user_id"])
   .index("by_account_id", ["account_id"])
   .index("by_event_type", ["event_type"]);
+
+// Document types for bank account verification
+const bankAccountDocumentType = v.union(
+  v.literal(DOCUMENT_TYPES.GOVERNMENT_ID), // International passport, Driver's license, National ID
+  v.literal(DOCUMENT_TYPES.PROOF_OF_ADDRESS), // Utility bill, Bank statement
+  v.literal(DOCUMENT_TYPES.BANK_STATEMENT), // Recent bank statement
+  v.literal(DOCUMENT_TYPES.SELFIE_WITH_ID), // Selfie holding ID
+);
+
+export type BankAccountDocumentType = typeof bankAccountDocumentType.type;
+
+const bank_account_documents = defineTable({
+  user_id: v.id("users"),
+  account_id: v.id("user_bank_accounts"),
+  document_type: bankAccountDocumentType,
+  storage_id: v.id("_storage"), // Convex file storage ID
+  file_name: v.string(), // Original file name
+  file_size: v.number(), // Size in bytes
+  mime_type: v.string(), // File MIME type
+  status: kycStatus, // pending, approved, rejected
+  uploaded_at: v.number(),
+  reviewed_by: v.optional(v.id("admin_users")),
+  reviewed_at: v.optional(v.number()),
+  rejection_reason: v.optional(v.string()),
+})
+  .index("by_user_id", ["user_id"])
+  .index("by_account_id", ["account_id"])
+  .index("by_status", ["status"])
+  .index("by_user_id_and_status", ["user_id", "status"])
+  .index("by_account_id_and_status", ["account_id", "status"])
+  .index("by_reviewed_by", ["reviewed_by"]);
 
 const mv_dashboard_kpis = defineTable({
   total_aum_kobo: v.int64(),
@@ -235,4 +276,5 @@ export default defineSchema({
   user_bank_account_events,
   mv_dashboard_kpis,
   kyc_documents,
+  bank_account_documents,
 });

@@ -13,48 +13,33 @@
  * - user_bank_accounts: Stores bank account details
  * - user_bank_account_events: Immutable event log for all account changes
  */
-import type { MutationCtx, QueryCtx } from "./_generated/server";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { VerificationStatus, EventType } from "./utils";
+import type { MutationCtx } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 
 import { ConvexError, v } from "convex/values";
 
 import { auditLog } from "./auditLog";
-import { authKit } from "./auth";
+import {
+  // Enums
+  VERFICATION_STATUS,
+  verificationStatus,
+  DOCUMENT_TYPES,
+  RESOURCE_TYPE,
+  EVENT_TYPE,
+  // Functions
+  sortAccounts,
+  eventType,
+  getAdmin,
+  getUser,
+} from "./utils";
+
 import {
   internalMutation,
   internalQuery,
   mutation,
   query,
 } from "./_generated/server";
-
-/**
- * Verification status for bank accounts
- * - pending: Awaiting verification
- * - verified: Successfully verified
- * - rejected: Verification failed or rejected
- */
-const verificationStatus = v.union(
-  v.literal("pending"),
-  v.literal("verified"),
-  v.literal("rejected"),
-);
-
-/**
- * Event types for bank account audit trail
- * Tracks all state changes throughout an account's lifecycle
- */
-const eventType = v.union(
-  v.literal("created"),
-  v.literal("updated"),
-  v.literal("set_primary"),
-  v.literal("verification_status_changed"),
-  v.literal("deleted"),
-);
-
-// Type aliases for validator types
-// These extract the TypeScript types from Convex validators for type-safe usage
-type EventType = typeof eventType.type;
-type VerificationStatus = typeof verificationStatus.type;
 
 /**
  * Validator schema for bank account records
@@ -164,75 +149,6 @@ function toMaskedAccount(account: {
 }
 
 /**
- * Sorts bank accounts by primary status then by creation date (newest first)
- *
- * @param accounts - List of bank accounts to sort
- * @returns Sorted list of accounts
- */
-function sortAccounts(accounts: Doc<"user_bank_accounts">[]) {
-  return [...accounts].sort((a, b) => {
-    if (a.is_primary !== b.is_primary) {
-      return a.is_primary ? -1 : 1;
-    }
-    return b.created_at - a.created_at;
-  });
-}
-
-/**
- * Retrieves the authenticated user from the database
- * Uses WorkOS authentication ID to lookup user record
- *
- * @param ctx - Query or mutation context
- * @returns User record from database
- * @throws ConvexError if not authenticated or user not found
- */
-async function getUser(ctx: QueryCtx | MutationCtx) {
-  const authUser = await authKit.getAuthUser(ctx);
-  if (!authUser) {
-    throw new ConvexError("Not authenticated");
-  }
-
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_workos_id", (q) => q.eq("workosId", authUser.id))
-    .unique();
-
-  if (!user) {
-    throw new ConvexError("User not found");
-  }
-
-  return user;
-}
-
-/**
- * Retrieves an authenticated admin user from the database
- * Uses WorkOS authentication ID to lookup admin record
- *
- * SECURITY: Admin-only operations require successful execution
- *
- * @param ctx - Query or mutation context
- * @returns Admin user record from database
- * @throws ConvexError if not authenticated or not an admin
- */
-async function getAdmin(ctx: QueryCtx | MutationCtx) {
-  const authUser = await authKit.getAuthUser(ctx);
-  if (!authUser) {
-    throw new ConvexError("Not authenticated");
-  }
-
-  const admin = await ctx.db
-    .query("admin_users")
-    .withIndex("by_workos_id", (q) => q.eq("workosId", authUser.id))
-    .unique();
-
-  if (!admin) {
-    throw new ConvexError("Not authorized");
-  }
-
-  return admin;
-}
-
-/**
  * Logs a bank account event to the immutable event table
  * Used for audit trail and compliance requirements
  *
@@ -317,7 +233,7 @@ async function unsetOtherPrimaries(
     await logAccountEvent(ctx, {
       userId,
       accountId: account._id,
-      eventType: "updated",
+      eventType: EVENT_TYPE.UPDATED,
       previous,
       next: { ...previous, is_primary: false },
       actorUserId,
@@ -496,7 +412,7 @@ export const create = mutation({
       is_primary: shouldBePrimary,
       created_at: now,
       updated_at: now,
-      verification_status: "pending", // Start with pending verification - requires admin approval
+      verification_status: VERFICATION_STATUS.PENDING, // Start with pending verification - requires admin approval
     });
 
     // If this is now primary, remove primary from other accounts
@@ -514,7 +430,7 @@ export const create = mutation({
     await auditLog.log(ctx, {
       action: "bank_account.created",
       actorId: user._id,
-      resourceType: "user_bank_accounts",
+      resourceType: RESOURCE_TYPE.BANK_ACCOUNTS,
       resourceId: account._id,
       severity: "info",
       metadata: accountSnapshot(account),
@@ -524,7 +440,7 @@ export const create = mutation({
     await logAccountEvent(ctx, {
       userId: user._id,
       accountId: account._id,
-      eventType: "created",
+      eventType: EVENT_TYPE.CREATED,
       next: accountSnapshot(account),
       actorUserId: user._id,
     });
@@ -583,7 +499,7 @@ export const updateDetails = mutation({
     await auditLog.logChange(ctx, {
       action: "bank_account.updated",
       actorId: user._id,
-      resourceType: "user_bank_accounts",
+      resourceType: RESOURCE_TYPE.BANK_ACCOUNTS,
       resourceId: args.account_id,
       before: previous,
       after: accountSnapshot(updated),
@@ -594,7 +510,7 @@ export const updateDetails = mutation({
     await logAccountEvent(ctx, {
       userId: user._id,
       accountId: args.account_id,
-      eventType: "updated",
+      eventType: EVENT_TYPE.UPDATED,
       previous,
       next: accountSnapshot(updated),
       actorUserId: user._id,
@@ -657,7 +573,7 @@ export const setPrimary = mutation({
     await auditLog.logChange(ctx, {
       action: "bank_account.primary_set",
       actorId: user._id,
-      resourceType: "user_bank_accounts",
+      resourceType: RESOURCE_TYPE.BANK_ACCOUNTS,
       resourceId: account._id,
       before: accountSnapshot(account),
       after: accountSnapshot(updated),
@@ -668,7 +584,7 @@ export const setPrimary = mutation({
     await logAccountEvent(ctx, {
       userId: user._id,
       accountId: account._id,
-      eventType: "set_primary",
+      eventType: EVENT_TYPE.SET_PRIMARY,
       previous: accountSnapshot(account),
       next: accountSnapshot(updated),
       actorUserId: user._id,
@@ -713,7 +629,7 @@ export const remove = mutation({
     await auditLog.log(ctx, {
       action: "bank_account.deleted",
       actorId: user._id,
-      resourceType: "user_bank_accounts",
+      resourceType: RESOURCE_TYPE.BANK_ACCOUNTS,
       resourceId: account._id,
       severity: "warning", // Higher severity for deletions
       metadata: snapshot,
@@ -726,7 +642,7 @@ export const remove = mutation({
     await logAccountEvent(ctx, {
       userId: user._id,
       accountId: account._id,
-      eventType: "deleted",
+      eventType: EVENT_TYPE.DELETED,
       previous: snapshot,
       actorUserId: user._id,
     });
@@ -743,7 +659,7 @@ export const remove = mutation({
         // BUSINESS LOGIC: Oldest account becomes new primary (most established)
         // Only promote verified accounts
         const verifiedRemaining = remaining.filter(
-          (a) => a.verification_status === "verified",
+          (a) => a.verification_status === VERFICATION_STATUS.VERIFIED,
         );
 
         if (verifiedRemaining.length > 0) {
@@ -760,7 +676,7 @@ export const remove = mutation({
           await logAccountEvent(ctx, {
             userId: user._id,
             accountId: nextPrimary._id,
-            eventType: "set_primary",
+            eventType: EVENT_TYPE.SET_PRIMARY,
             previous: accountSnapshot(nextPrimary),
             next: { ...accountSnapshot(nextPrimary), is_primary: true },
             actorUserId: user._id,
@@ -812,7 +728,7 @@ export const setVerificationStatus = internalMutation({
     };
 
     // Track when account was verified - important for compliance
-    if (args.status === "verified") {
+    if (args.status === VERFICATION_STATUS.VERIFIED) {
       patch.verified_at = now;
     }
 
@@ -830,7 +746,7 @@ export const setVerificationStatus = internalMutation({
     await auditLog.logChange(ctx, {
       action: "bank_account.verification_status_changed",
       actorId: admin._id,
-      resourceType: "user_bank_accounts",
+      resourceType: RESOURCE_TYPE.BANK_ACCOUNTS,
       resourceId: updated._id,
       before: previous,
       after: accountSnapshot(updated),
@@ -841,10 +757,116 @@ export const setVerificationStatus = internalMutation({
     await logAccountEvent(ctx, {
       userId: updated.user_id,
       accountId: updated._id,
-      eventType: "verification_status_changed",
+      eventType: EVENT_TYPE.VERIFICATION_STATUS_CHANGED,
       previous,
       next: accountSnapshot(updated),
       actorAdminId: admin._id,
+    });
+
+    return updated;
+  },
+});
+
+/**
+ * Submit a bank account for verification
+ * Validates that required documents are uploaded before submission
+ *
+ * BUSINESS LOGIC:
+ * - Requires at least the minimum required documents
+ * - Changes verification status to "pending"
+ * - Locks account from further document deletion during review
+ *
+ * @param ctx - Mutation context
+ * @param args - Mutation arguments
+ * @param args.account_id - ID of the account to submit
+ * @returns Updated bank account record
+ * @throws ConvexError if account not found, missing documents, or already submitted
+ */
+export const submitForVerification = mutation({
+  args: {
+    account_id: v.id("user_bank_accounts"),
+  },
+  returns: bankAccountValidator,
+  handler: async (ctx, args) => {
+    const user = await getUser(ctx);
+    const account = await ctx.db.get(args.account_id);
+
+    if (!account || account.user_id !== user._id) {
+      throw new ConvexError("Bank account not found");
+    }
+
+    // Prevent duplicate submissions
+    if (account.verification_status === VERFICATION_STATUS.VERIFIED) {
+      throw new ConvexError("Account is already verified");
+    }
+
+    if (
+      account.verification_submitted_at &&
+      account.verification_status === VERFICATION_STATUS.PENDING
+    ) {
+      throw new ConvexError("Account already submitted for verification");
+    }
+
+    // Check for required documents
+    const documents = await ctx.db
+      .query("bank_account_documents")
+      .withIndex("by_account_id", (q) => q.eq("account_id", args.account_id))
+      .filter((q) => q.eq(q.field("status"), VERFICATION_STATUS.PENDING))
+      .collect();
+
+    const uploadedDocTypes = documents.map((d) => d.document_type);
+    const requiredDocs = [DOCUMENT_TYPES.GOVERNMENT_ID] as const; // Minimum requirement
+
+    const missingDocs = requiredDocs.filter(
+      (req) => !uploadedDocTypes.includes(req),
+    );
+
+    if (missingDocs.length > 0) {
+      throw new ConvexError(
+        `Missing required documents: ${missingDocs.join(", ")}`,
+      );
+    }
+
+    const now = Date.now();
+    const previous = accountSnapshot(account);
+
+    // Update account status to pending verification
+    await ctx.db.patch(args.account_id, {
+      verification_status: VERFICATION_STATUS.PENDING,
+      verification_submitted_at: now,
+      updated_at: now,
+    });
+
+    const updated = await ctx.db.get(args.account_id);
+    if (!updated) {
+      throw new ConvexError("Failed to update account status");
+    }
+
+    // Log to audit system
+    await auditLog.log(ctx, {
+      action: "bank_account.verification_submitted",
+      actorId: user._id,
+      resourceType: RESOURCE_TYPE.BANK_ACCOUNTS,
+      resourceId: updated._id,
+      severity: "info",
+      metadata: {
+        ...accountSnapshot(updated),
+        documents_submitted: uploadedDocTypes,
+      },
+    });
+
+    // Log event for compliance trail
+    await logAccountEvent(ctx, {
+      userId: user._id,
+      accountId: updated._id,
+      eventType: EVENT_TYPE.VERIFICATION_SUBMITTED,
+      previous,
+      next: {
+        ...accountSnapshot(updated),
+        verification_status: VERFICATION_STATUS.PENDING,
+        documents_submitted: uploadedDocTypes,
+      },
+      actorUserId: user._id,
     });
 
     return updated;
