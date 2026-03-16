@@ -14,7 +14,7 @@
  * - user_bank_account_events: Immutable event log for all account changes
  */
 import type { MutationCtx, QueryCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 
 import { ConvexError, v } from "convex/values";
 
@@ -161,6 +161,21 @@ function toMaskedAccount(account: {
     verification_status: account.verification_status,
     verified_at: account.verified_at,
   };
+}
+
+/**
+ * Sorts bank accounts by primary status then by creation date (newest first)
+ *
+ * @param accounts - List of bank accounts to sort
+ * @returns Sorted list of accounts
+ */
+function sortAccounts(accounts: Doc<"user_bank_accounts">[]) {
+  return [...accounts].sort((a, b) => {
+    if (a.is_primary !== b.is_primary) {
+      return a.is_primary ? -1 : 1;
+    }
+    return b.created_at - a.created_at;
+  });
 }
 
 /**
@@ -332,13 +347,7 @@ export const listMine = internalQuery({
       .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
       .collect();
 
-    // Sort: primary account first, then by creation date (newest first)
-    return accounts.sort((a, b) => {
-      if (a.is_primary !== b.is_primary) {
-        return a.is_primary ? -1 : 1;
-      }
-      return b.created_at - a.created_at;
-    });
+    return sortAccounts(accounts);
   },
 });
 
@@ -362,12 +371,7 @@ export const listMineMasked = query({
       .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
       .collect();
 
-    const sorted = accounts.sort((a, b) => {
-      if (a.is_primary !== b.is_primary) {
-        return a.is_primary ? -1 : 1;
-      }
-      return b.created_at - a.created_at;
-    });
+    const sorted = sortAccounts(accounts);
 
     // Transform to masked format - safe for client display
     return sorted.map((account) => toMaskedAccount(account));
@@ -458,18 +462,16 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const user = await getUser(ctx);
 
-    // PERFORMANCE: Use filter after index to check across all users
-    // Check for duplicate account numbers for this user
+    // Check for duplicate account numbers across the entire system
     const duplicate = await ctx.db
       .query("user_bank_accounts")
       .withIndex("by_account_number", (q) =>
         q.eq("account_number", args.account_number),
       )
-      .filter((q) => q.eq(q.field("user_id"), user._id))
-      .take(1);
+      .unique();
 
-    if (duplicate.length > 0) {
-      throw new ConvexError("Bank account already exists for this user");
+    if (duplicate) {
+      throw new ConvexError("Bank account already exists");
     }
 
     // Check if user already has a primary account
@@ -627,6 +629,11 @@ export const setPrimary = mutation({
       throw new ConvexError("Bank account not found");
     }
 
+    // BUSINESS RULE: Only verified accounts can be set as primary
+    if (account.verification_status !== "verified") {
+      throw new ConvexError("Only verified accounts can be set as primary");
+    }
+
     // No-op if already primary - avoids unnecessary writes and events
     if (account.is_primary) {
       return account;
@@ -732,8 +739,9 @@ export const remove = mutation({
         .collect();
 
       if (remaining.length > 0) {
-        // Sort by creation date - oldest becomes new primary
-        remaining.sort((a, b) => b.created_at - a.created_at);
+        // BUSINESS LOGIC: Oldest account becomes new primary (most established)
+        // Sort by creation date ascending (oldest first)
+        remaining.sort((a, b) => a.created_at - b.created_at);
         const nextPrimary = remaining[0];
         const now = Date.now();
         await ctx.db.patch(nextPrimary._id, {
