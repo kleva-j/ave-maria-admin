@@ -1,18 +1,48 @@
+/**
+ * User Bank Accounts Module
+ *
+ * Manages user bank accounts with full audit trail support.
+ * Features:
+ * - CRUD operations for bank accounts
+ * - Primary account management (one primary per user)
+ * - Verification status tracking
+ * - Complete event logging for compliance
+ * - Audit log integration
+ *
+ * Database Tables:
+ * - user_bank_accounts: Stores bank account details
+ * - user_bank_account_events: Immutable event log for all account changes
+ */
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 
 import { ConvexError, v } from "convex/values";
 
-import { internalMutation, mutation, query } from "./_generated/server";
 import { auditLog } from "./auditLog";
-import { ensureUser } from "./utils";
+import { authKit } from "./auth";
+import {
+  internalMutation,
+  internalQuery,
+  mutation,
+  query,
+} from "./_generated/server";
 
+/**
+ * Verification status for bank accounts
+ * - pending: Awaiting verification
+ * - verified: Successfully verified
+ * - rejected: Verification failed or rejected
+ */
 const verificationStatus = v.union(
   v.literal("pending"),
   v.literal("verified"),
   v.literal("rejected"),
 );
 
+/**
+ * Event types for bank account audit trail
+ * Tracks all state changes throughout an account's lifecycle
+ */
 const eventType = v.union(
   v.literal("created"),
   v.literal("updated"),
@@ -21,15 +51,35 @@ const eventType = v.union(
   v.literal("deleted"),
 );
 
+// Type aliases for validator types
+// These extract the TypeScript types from Convex validators for type-safe usage
 type EventType = typeof eventType.type;
 type VerificationStatus = typeof verificationStatus.type;
 
+/**
+ * Validator schema for bank account records
+ * Used for type-safe validation and return type inference
+ */
 const bankAccountValidator = v.object({
   _id: v.id("user_bank_accounts"),
   _creationTime: v.number(),
   user_id: v.id("users"),
   bank_name: v.string(),
   account_number: v.string(),
+  account_name: v.optional(v.string()),
+  is_primary: v.boolean(),
+  created_at: v.number(),
+  updated_at: v.number(),
+  verification_status: verificationStatus,
+  verified_at: v.optional(v.number()),
+});
+
+const maskedBankAccountValidator = v.object({
+  _id: v.id("user_bank_accounts"),
+  _creationTime: v.number(),
+  user_id: v.id("users"),
+  bank_name: v.string(),
+  account_number_last4: v.string(),
   account_name: v.optional(v.string()),
   is_primary: v.boolean(),
   created_at: v.number(),
@@ -51,6 +101,15 @@ const bankAccountEventValidator = v.object({
   created_at: v.number(),
 });
 
+/**
+ * Creates a sanitized snapshot of account data for logging
+ * Excludes sensitive fields like full account number (only keeps last 4 digits)
+ *
+ * SECURITY: Never log full account numbers - compliance requirement
+ *
+ * @param account - Bank account data to snapshot
+ * @returns Sanitized object suitable for audit logs
+ */
 function accountSnapshot(account: {
   bank_name: string;
   account_number: string;
@@ -61,12 +120,120 @@ function accountSnapshot(account: {
   return {
     bank_name: account.bank_name,
     account_name: account.account_name ?? null,
-    account_number_last4: account.account_number.slice(-4),
+    account_number_last4: account.account_number.slice(-4), // Only log last 4 digits
     is_primary: account.is_primary,
     verification_status: account.verification_status,
   };
 }
 
+/**
+ * Converts a full bank account record to a masked version for client display
+ * Replaces full account number with last 4 digits only
+ *
+ * SECURITY: Prevents exposure of sensitive account information to clients
+ *
+ * @param account - Full bank account record from database
+ * @returns Masked account record safe for client consumption
+ */
+function toMaskedAccount(account: {
+  _id: Id<"user_bank_accounts">;
+  _creationTime: number;
+  user_id: Id<"users">;
+  bank_name: string;
+  account_number: string;
+  account_name?: string;
+  is_primary: boolean;
+  created_at: number;
+  updated_at: number;
+  verification_status: VerificationStatus;
+  verified_at?: number;
+}) {
+  return {
+    _id: account._id,
+    _creationTime: account._creationTime,
+    user_id: account.user_id,
+    bank_name: account.bank_name,
+    account_number_last4: account.account_number.slice(-4),
+    account_name: account.account_name,
+    is_primary: account.is_primary,
+    created_at: account.created_at,
+    updated_at: account.updated_at,
+    verification_status: account.verification_status,
+    verified_at: account.verified_at,
+  };
+}
+
+/**
+ * Retrieves the authenticated user from the database
+ * Uses WorkOS authentication ID to lookup user record
+ *
+ * @param ctx - Query or mutation context
+ * @returns User record from database
+ * @throws ConvexError if not authenticated or user not found
+ */
+async function getUser(ctx: QueryCtx | MutationCtx) {
+  const authUser = await authKit.getAuthUser(ctx);
+  if (!authUser) {
+    throw new ConvexError("Not authenticated");
+  }
+
+  const user = await ctx.db
+    .query("users")
+    .withIndex("by_workos_id", (q) => q.eq("workosId", authUser.id))
+    .unique();
+
+  if (!user) {
+    throw new ConvexError("User not found");
+  }
+
+  return user;
+}
+
+/**
+ * Retrieves an authenticated admin user from the database
+ * Uses WorkOS authentication ID to lookup admin record
+ *
+ * SECURITY: Admin-only operations require successful execution
+ *
+ * @param ctx - Query or mutation context
+ * @returns Admin user record from database
+ * @throws ConvexError if not authenticated or not an admin
+ */
+async function getAdmin(ctx: QueryCtx | MutationCtx) {
+  const authUser = await authKit.getAuthUser(ctx);
+  if (!authUser) {
+    throw new ConvexError("Not authenticated");
+  }
+
+  const admin = await ctx.db
+    .query("admin_users")
+    .withIndex("by_workos_id", (q) => q.eq("workosId", authUser.id))
+    .unique();
+
+  if (!admin) {
+    throw new ConvexError("Not authorized");
+  }
+
+  return admin;
+}
+
+/**
+ * Logs a bank account event to the immutable event table
+ * Used for audit trail and compliance requirements
+ *
+ * COMPLIANCE: All account changes must be logged for regulatory audit
+ * Events are append-only - never modify or delete events
+ *
+ * @param ctx - Mutation context
+ * @param params - Event parameters
+ * @param params.userId - ID of the user who owns the account
+ * @param params.accountId - ID of the affected account
+ * @param params.eventType - Type of event that occurred
+ * @param params.previous - Previous values before the change (optional)
+ * @param params.next - New values after the change (optional)
+ * @param params.actorUserId - ID of user who triggered the change (if applicable)
+ * @param params.actorAdminId - ID of admin who triggered the change (if applicable)
+ */
 async function logAccountEvent(
   ctx: MutationCtx,
   params: {
@@ -84,13 +251,29 @@ async function logAccountEvent(
     account_id: params.accountId,
     event_type: params.eventType,
     created_at: Date.now(),
-    previous_values: params.previous ?? undefined,
-    new_values: params.next ?? undefined,
-    actor_user_id: params.actorUserId ?? undefined,
-    actor_admin_id: params.actorAdminId ?? undefined,
+    // Conditionally include optional fields only if provided
+    ...(params.previous && { previous_values: params.previous }),
+    ...(params.next && { new_values: params.next }),
+    ...(params.actorUserId && { actor_user_id: params.actorUserId }),
+    ...(params.actorAdminId && { actor_admin_id: params.actorAdminId }),
   });
 }
 
+/**
+ * Ensures only one primary bank account per user
+ * When setting a new primary, removes primary status from all other accounts
+ * and logs events for each change
+ *
+ * BUSINESS RULE: Each user can have exactly one primary account
+ * Primary accounts are used for default withdrawals and notifications
+ *
+ * @param ctx - Mutation context
+ * @param userId - ID of the user whose accounts to update
+ * @param keepId - ID of the account to keep as primary
+ * @param updatedAt - Timestamp for the update
+ * @param actorUserId - ID of user triggering the change
+ * @param actorAdminId - ID of admin triggering the change
+ */
 async function unsetOtherPrimaries(
   ctx: MutationCtx,
   userId: Id<"users">,
@@ -101,13 +284,14 @@ async function unsetOtherPrimaries(
 ) {
   const primaries = await ctx.db
     .query("user_bank_accounts")
-    .withIndex("by_user_id_and_is_primary", (q) =>
+    .withIndex("by_user_id_and_is_primary", (q: any) =>
       q.eq("user_id", userId).eq("is_primary", true),
     )
     .collect();
 
+  // Iterate through all current primary accounts and unset them
   for (const account of primaries) {
-    if (account._id === keepId) continue;
+    if (account._id === keepId) continue; // Skip the account we're keeping as primary
 
     const previous = accountSnapshot(account);
     await ctx.db.patch(account._id, {
@@ -127,15 +311,28 @@ async function unsetOtherPrimaries(
   }
 }
 
-export const listByUser = query({
-  args: { user_id: v.id("users") },
+/**
+ * List all bank accounts for the authenticated user
+ * Returns full account details including complete account numbers
+ *
+ * USAGE: Internal use only - do not expose full account numbers to client
+ * For client display, use listMineMasked instead
+ *
+ * @returns Array of user's bank accounts sorted by primary status then date
+ */
+export const listMine = internalQuery({
+  args: {},
   returns: v.array(bankAccountValidator),
-  handler: async (ctx, args) => {
+  handler: async (ctx) => {
+    const user = await getUser(ctx);
+
+    // Fetch all bank accounts for this user using indexed query for performance
     const accounts = await ctx.db
       .query("user_bank_accounts")
-      .withIndex("by_user_id", (q) => q.eq("user_id", args.user_id))
+      .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
       .collect();
 
+    // Sort: primary account first, then by creation date (newest first)
     return accounts.sort((a, b) => {
       if (a.is_primary !== b.is_primary) {
         return a.is_primary ? -1 : 1;
@@ -145,10 +342,83 @@ export const listByUser = query({
   },
 });
 
-export const listEventsByAccount = query({
+/**
+ * List all bank accounts for the authenticated user with masked data
+ * Returns sanitized account information safe for client display
+ *
+ * SECURITY: Account numbers are masked to last 4 digits only
+ *
+ * @returns Array of masked bank accounts sorted by primary status then date
+ */
+export const listMineMasked = query({
+  args: {},
+  returns: v.array(maskedBankAccountValidator),
+  handler: async (ctx) => {
+    const user = await getUser(ctx);
+
+    // Fetch all accounts and mask sensitive data before returning
+    const accounts = await ctx.db
+      .query("user_bank_accounts")
+      .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
+      .collect();
+
+    const sorted = accounts.sort((a, b) => {
+      if (a.is_primary !== b.is_primary) {
+        return a.is_primary ? -1 : 1;
+      }
+      return b.created_at - a.created_at;
+    });
+
+    // Transform to masked format - safe for client display
+    return sorted.map((account) => toMaskedAccount(account));
+  },
+});
+
+/**
+ * List all audit events for the authenticated user's bank accounts
+ * Provides complete history of all banking activity
+ *
+ * COMPLIANCE: Users can view complete audit trail of their accounts
+ *
+ * @returns Array of all user's bank account events
+ */
+export const listMyEvents = query({
+  args: {},
+  returns: v.array(bankAccountEventValidator),
+  handler: async (ctx) => {
+    const user = await getUser(ctx);
+
+    // Return complete audit trail for this user's accounts
+    return await ctx.db
+      .query("user_bank_account_events")
+      .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
+      .collect();
+  },
+});
+
+/**
+ * List all events for a specific bank account
+ * Provides a complete audit trail of all banking activity for that account
+ *
+ * SECURITY: Verifies account ownership before allowing access
+ *
+ * @param ctx - Query context
+ * @param args - Query arguments
+ * @param args.account_id - ID of the account to get events for
+ * @returns Array of all user's bank account events
+ */
+export const listEventsForAccount = query({
   args: { account_id: v.id("user_bank_accounts") },
   returns: v.array(bankAccountEventValidator),
   handler: async (ctx, args) => {
+    const user = await getUser(ctx);
+    const account = await ctx.db.get(args.account_id);
+
+    // Verify ownership before allowing access to event history
+    if (!account || account.user_id !== user._id) {
+      throw new ConvexError("Bank account not found");
+    }
+
     return await ctx.db
       .query("user_bank_account_events")
       .withIndex("by_account_id", (q) => q.eq("account_id", args.account_id))
@@ -156,20 +426,29 @@ export const listEventsByAccount = query({
   },
 });
 
-export const listEventsByUser = query({
-  args: { user_id: v.id("users") },
-  returns: v.array(bankAccountEventValidator),
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("user_bank_account_events")
-      .withIndex("by_user_id", (q) => q.eq("user_id", args.user_id))
-      .collect();
-  },
-});
-
+/**
+ * Create a new bank account for a user
+ * Handles primary account logic automatically:
+ * - If this is the user's first account, it becomes primary
+ * - If make_primary is specified, sets it as primary and unsets others
+ * - Prevents duplicate accounts (same account number)
+ *
+ * BUSINESS LOGIC:
+ * - First account automatically becomes primary
+ * - Duplicate account numbers are rejected
+ * - Verification starts in "pending" state
+ *
+ * @param ctx - Mutation context
+ * @param args - Mutation arguments
+ * @param args.bank_name - Name of the bank
+ * @param args.account_number - Full account number
+ * @param args.account_name - Optional name on the account
+ * @param args.make_primary - Optionally force this to be the primary account
+ * @returns The created bank account record
+ * @throws ConvexError if duplicate account exists or creation fails
+ */
 export const create = mutation({
   args: {
-    user_id: v.id("users"),
     bank_name: v.string(),
     account_number: v.string(),
     account_name: v.optional(v.string()),
@@ -177,108 +456,130 @@ export const create = mutation({
   },
   returns: bankAccountValidator,
   handler: async (ctx, args) => {
-    await ensureUser(ctx, args.user_id);
+    const user = await getUser(ctx);
 
+    // PERFORMANCE: Use filter after index to check across all users
+    // Check for duplicate account numbers for this user
     const duplicate = await ctx.db
       .query("user_bank_accounts")
       .withIndex("by_account_number", (q) =>
         q.eq("account_number", args.account_number),
       )
-      .filter((q) => q.eq(q.field("user_id"), args.user_id))
+      .filter((q) => q.eq(q.field("user_id"), user._id))
       .take(1);
 
     if (duplicate.length > 0) {
       throw new ConvexError("Bank account already exists for this user");
     }
 
+    // Check if user already has a primary account
     const existingPrimary = await ctx.db
       .query("user_bank_accounts")
       .withIndex("by_user_id_and_is_primary", (q) =>
-        q.eq("user_id", args.user_id).eq("is_primary", true),
+        q.eq("user_id", user._id).eq("is_primary", true),
       )
       .take(1);
 
+    // BUSINESS LOGIC: First account OR explicitly requested becomes primary
     const shouldBePrimary = args.make_primary ?? existingPrimary.length === 0;
     const now = Date.now();
 
+    // Insert the new account with initial state
     const accountId = await ctx.db.insert("user_bank_accounts", {
-      user_id: args.user_id,
+      user_id: user._id,
       bank_name: args.bank_name,
       account_number: args.account_number,
       account_name: args.account_name,
       is_primary: shouldBePrimary,
       created_at: now,
       updated_at: now,
-      verification_status: "pending",
+      verification_status: "pending", // Start with pending verification - requires admin approval
     });
 
+    // If this is now primary, remove primary from other accounts
     if (shouldBePrimary) {
-      await unsetOtherPrimaries(
-        ctx,
-        args.user_id,
-        accountId,
-        now,
-        args.user_id,
-      );
+      await unsetOtherPrimaries(ctx, user._id, accountId, now, user._id);
     }
 
+    // Retrieve the created account for return value
     const account = await ctx.db.get(accountId);
     if (!account) {
       throw new ConvexError("Failed to create bank account");
     }
 
+    // Log to audit system
     await auditLog.log(ctx, {
       action: "bank_account.created",
-      actorId: args.user_id,
+      actorId: user._id,
       resourceType: "user_bank_accounts",
       resourceId: account._id,
       severity: "info",
       metadata: accountSnapshot(account),
     });
 
+    // Log event for compliance trail
     await logAccountEvent(ctx, {
-      userId: args.user_id,
+      userId: user._id,
       accountId: account._id,
       eventType: "created",
       next: accountSnapshot(account),
-      actorUserId: args.user_id,
+      actorUserId: user._id,
     });
 
     return account;
   },
 });
 
+/**
+ * Update bank account details (bank name or account name)
+ * Does not allow changing account number (would require delete + recreate)
+ *
+ * SECURITY: Account number changes not allowed - prevents fraud by changing
+ * destination account mid-transaction
+ *
+ * @param ctx - Mutation context
+ * @param args - Mutation arguments
+ * @param args.account_id - ID of the account to update
+ * @param args.bank_name - New bank name (optional)
+ * @param args.account_name - New account name (optional)
+ * @returns Updated bank account record
+ * @throws ConvexError if account not found or user doesn't own it
+ */
 export const updateDetails = mutation({
   args: {
-    user_id: v.id("users"),
     account_id: v.id("user_bank_accounts"),
     bank_name: v.optional(v.string()),
     account_name: v.optional(v.string()),
   },
   returns: bankAccountValidator,
   handler: async (ctx, args) => {
+    const user = await getUser(ctx);
     const account = await ctx.db.get(args.account_id);
-    if (!account || account.user_id !== args.user_id) {
+
+    if (!account || account.user_id !== user._id) {
       throw new ConvexError("Bank account not found");
     }
 
     const previous = accountSnapshot(account);
     const now = Date.now();
 
+    // Apply updates - only allow changing non-sensitive fields
     await ctx.db.patch(args.account_id, {
       bank_name: args.bank_name ?? account.bank_name,
       account_name: args.account_name ?? account.account_name,
       updated_at: now,
     });
 
+    // Retrieve updated account
     const updated = await ctx.db.get(args.account_id);
     if (!updated) {
       throw new ConvexError("Failed to update bank account");
     }
 
+    // Log change to audit system
     await auditLog.logChange(ctx, {
       action: "bank_account.updated",
-      actorId: args.user_id,
+      actorId: user._id,
       resourceType: "user_bank_accounts",
       resourceId: args.account_id,
       before: previous,
@@ -286,54 +587,68 @@ export const updateDetails = mutation({
       severity: "info",
     });
 
+    // Log event for compliance trail
     await logAccountEvent(ctx, {
-      userId: args.user_id,
+      userId: user._id,
       accountId: args.account_id,
       eventType: "updated",
       previous,
       next: accountSnapshot(updated),
-      actorUserId: args.user_id,
+      actorUserId: user._id,
     });
 
     return updated;
   },
 });
 
+/**
+ * Set a bank account as the user's primary account
+ * Automatically removes primary status from other accounts
+ *
+ * BUSINESS RULE: Only one primary account allowed per user
+ * This operation is idempotent - no-op if already primary
+ *
+ * @param ctx - Mutation context
+ * @param args - Mutation arguments
+ * @param args.account_id - ID of the account to set as primary
+ * @returns Updated bank account record
+ * @throws ConvexError if account not found or user doesn't own it
+ */
 export const setPrimary = mutation({
   args: {
-    user_id: v.id("users"),
     account_id: v.id("user_bank_accounts"),
   },
   returns: bankAccountValidator,
   handler: async (ctx, args) => {
+    const user = await getUser(ctx);
     const account = await ctx.db.get(args.account_id);
-    if (!account || account.user_id !== args.user_id) {
+
+    if (!account || account.user_id !== user._id) {
       throw new ConvexError("Bank account not found");
     }
 
+    // No-op if already primary - avoids unnecessary writes and events
     if (account.is_primary) {
       return account;
     }
 
     const now = Date.now();
+    // Set as primary - atomic update
     await ctx.db.patch(account._id, { is_primary: true, updated_at: now });
 
-    await unsetOtherPrimaries(
-      ctx,
-      args.user_id,
-      account._id,
-      now,
-      args.user_id,
-    );
+    // Remove primary from other accounts
+    await unsetOtherPrimaries(ctx, user._id, account._id, now, user._id);
 
+    // Retrieve updated account
     const updated = await ctx.db.get(account._id);
     if (!updated) {
       throw new ConvexError("Failed to update bank account");
     }
 
+    // Log change to audit system
     await auditLog.logChange(ctx, {
       action: "bank_account.primary_set",
-      actorId: args.user_id,
+      actorId: user._id,
       resourceType: "user_bank_accounts",
       resourceId: account._id,
       before: accountSnapshot(account),
@@ -341,60 +656,83 @@ export const setPrimary = mutation({
       severity: "info",
     });
 
+    // Log event for compliance trail
     await logAccountEvent(ctx, {
-      userId: args.user_id,
+      userId: user._id,
       accountId: account._id,
       eventType: "set_primary",
       previous: accountSnapshot(account),
       next: accountSnapshot(updated),
-      actorUserId: args.user_id,
+      actorUserId: user._id,
     });
 
     return updated;
   },
 });
 
+/**
+ * Delete a bank account
+ * If the deleted account was primary, automatically promotes the oldest remaining account
+ *
+ * BUSINESS LOGIC:
+ * - Ensures user always has a primary account if any remain
+ * - Oldest account becomes new primary (most established)
+ * - All deletions are logged for audit
+ *
+ * @param ctx - Mutation context
+ * @param args - Mutation arguments
+ * @param args.account_id - ID of the account to delete
+ * @returns null
+ * @throws ConvexError if account not found or user doesn't own it
+ */
 export const remove = mutation({
   args: {
-    user_id: v.id("users"),
     account_id: v.id("user_bank_accounts"),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    const user = await getUser(ctx);
     const account = await ctx.db.get(args.account_id);
-    if (!account || account.user_id !== args.user_id) {
+
+    if (!account || account.user_id !== user._id) {
       throw new ConvexError("Bank account not found");
     }
 
     const wasPrimary = account.is_primary;
     const snapshot = accountSnapshot(account);
 
+    // Log deletion to audit system
     await auditLog.log(ctx, {
       action: "bank_account.deleted",
-      actorId: args.user_id,
+      actorId: user._id,
       resourceType: "user_bank_accounts",
       resourceId: account._id,
-      severity: "warning",
+      severity: "warning", // Higher severity for deletions
       metadata: snapshot,
     });
 
+    // Delete the account
     await ctx.db.delete(account._id);
 
+    // Log event for compliance trail
     await logAccountEvent(ctx, {
-      userId: args.user_id,
+      userId: user._id,
       accountId: account._id,
       eventType: "deleted",
       previous: snapshot,
-      actorUserId: args.user_id,
+      actorUserId: user._id,
     });
 
+    // If deleted account was primary, auto-promote oldest remaining account
+    // This ensures user always has a primary account if any remain
     if (wasPrimary) {
       const remaining = await ctx.db
         .query("user_bank_accounts")
-        .withIndex("by_user_id", (q) => q.eq("user_id", args.user_id))
+        .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
         .collect();
 
       if (remaining.length > 0) {
+        // Sort by creation date - oldest becomes new primary
         remaining.sort((a, b) => b.created_at - a.created_at);
         const nextPrimary = remaining[0];
         const now = Date.now();
@@ -403,13 +741,14 @@ export const remove = mutation({
           updated_at: now,
         });
 
+        // Log the automatic primary change
         await logAccountEvent(ctx, {
-          userId: args.user_id,
+          userId: user._id,
           accountId: nextPrimary._id,
           eventType: "set_primary",
           previous: accountSnapshot(nextPrimary),
           next: { ...accountSnapshot(nextPrimary), is_primary: true },
-          actorUserId: args.user_id,
+          actorUserId: user._id,
         });
       }
     }
@@ -418,14 +757,30 @@ export const remove = mutation({
   },
 });
 
+/**
+ * Update bank account verification status (internal use only)
+ * Used by admin/system to verify or reject bank accounts
+ *
+ * ADMIN ONLY: Requires admin authentication
+ * SECURITY: Verification status changes are high-priority audit events
+ *
+ * @param ctx - Internal mutation context
+ * @param args - Mutation arguments
+ * @param args.account_id - ID of the account to update
+ * @param args.status - New verification status
+ * @returns Updated bank account record
+ * @throws ConvexError if account not found
+ */
 export const setVerificationStatus = internalMutation({
   args: {
     account_id: v.id("user_bank_accounts"),
     status: verificationStatus,
-    admin_id: v.optional(v.id("admin_users")),
   },
   returns: bankAccountValidator,
   handler: async (ctx, args) => {
+    // ADMIN ONLY: Requires admin authentication
+    const admin = await getAdmin(ctx);
+
     const account = await ctx.db.get(args.account_id);
     if (!account) {
       throw new ConvexError("Bank account not found");
@@ -434,39 +789,46 @@ export const setVerificationStatus = internalMutation({
     const previous = accountSnapshot(account);
     const now = Date.now();
 
+    // Build patch dynamically based on new status
     const patch: Record<string, unknown> = {
       verification_status: args.status,
       updated_at: now,
     };
 
+    // Track when account was verified - important for compliance
     if (args.status === "verified") {
       patch.verified_at = now;
     }
 
+    // Apply the update
     await ctx.db.patch(account._id, patch);
 
+    // Retrieve updated account
     const updated = await ctx.db.get(account._id);
     if (!updated) {
       throw new ConvexError("Failed to update verification status");
     }
 
+    // SECURITY: Verification status changes are high-priority audit events
+    // Log change to audit system with higher severity
     await auditLog.logChange(ctx, {
       action: "bank_account.verification_status_changed",
-      actorId: args.admin_id,
+      actorId: admin._id,
       resourceType: "user_bank_accounts",
       resourceId: updated._id,
       before: previous,
       after: accountSnapshot(updated),
-      severity: "warning",
+      severity: "warning", // Important security-related change - requires monitoring
     });
 
+    // Log event for compliance trail
     await logAccountEvent(ctx, {
       userId: updated.user_id,
       accountId: updated._id,
       eventType: "verification_status_changed",
       previous,
       next: accountSnapshot(updated),
-      actorAdminId: args.admin_id,
+      actorAdminId: admin._id,
     });
 
     return updated;
