@@ -7,6 +7,14 @@ import { v } from "convex/values";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { auditLog } from "./auditLog";
 import { authKit } from "./auth";
+import {
+  // Enums
+  KYC_VERIFICATION_STATUS,
+  RESOURCE_TYPE,
+  EVENT_TYPE,
+  // Utils
+  ensureUser,
+} from "./utils";
 
 /**
  * Helper to get the current authenticated regular user's profile.
@@ -169,6 +177,65 @@ export const upsertFromWorkOS = internalMutation({
 });
 
 /**
+ * Internal mutation to process the result of an automated KYC check.
+ */
+export const processKycResult = internalMutation({
+  args: {
+    userId: v.id("users"),
+    approved: v.boolean(),
+    reason: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const user = await ensureUser(ctx, args.userId);
+
+    const newStatus = args.approved ? "active" : "closed";
+    const docNewStatus = args.approved
+      ? KYC_VERIFICATION_STATUS.APPROVED
+      : KYC_VERIFICATION_STATUS.REJECTED;
+
+    const documents = await ctx.db
+      .query("kyc_documents")
+      .withIndex("by_user_id_and_status", (q) =>
+        q
+          .eq("user_id", args.userId)
+          .eq("status", KYC_VERIFICATION_STATUS.PENDING),
+      )
+      .collect();
+
+    const now = Date.now();
+
+    // Update the user's status
+    await ctx.db.patch(args.userId, { status: newStatus, updated_at: now });
+
+    // Update all pending documents concurrently
+    await Promise.all(
+      documents.map((doc) =>
+        ctx.db.patch(doc._id, {
+          status: docNewStatus,
+          reviewed_at: now,
+          rejection_reason: args.approved ? undefined : args.reason,
+        }),
+      ),
+    );
+
+    // Log the result using system event types
+    await auditLog.logChange(ctx, {
+      action: args.approved
+        ? EVENT_TYPE.KYC_VERIFICATION_COMPLETED
+        : EVENT_TYPE.KYC_VERIFICATION_FAILED,
+      actorId: args.userId, // System action, but attributing to user context
+      resourceType: RESOURCE_TYPE.USERS,
+      resourceId: args.userId,
+      before: { status: user.status },
+      after: { status: newStatus, reason: args.reason },
+      severity: args.approved ? "info" : "warning",
+    });
+
+    return { success: true };
+  },
+});
+
+/**
  * Internal mutation to delete a user record when they are removed from WorkOS.
  */
 export const deleteFromWorkOS = internalMutation({
@@ -183,7 +250,7 @@ export const deleteFromWorkOS = internalMutation({
       await auditLog.log(ctx, {
         action: AuditActions.USER_DELETED,
         actorId: existing._id,
-        resourceType: "users",
+        resourceType: RESOURCE_TYPE.USERS,
         resourceId: existing._id,
         severity: "warning",
       });

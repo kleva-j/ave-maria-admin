@@ -20,6 +20,7 @@ export async function ensureUser(
   if (!user) {
     throw new ConvexError("User not found");
   }
+  return user;
 }
 
 /**
@@ -135,6 +136,10 @@ export const EVENT_TYPE = {
   VERIFICATION_SUBMITTED: "verification_submitted",
   VERIFICATION_APPROVED: "verification_approved",
   VERIFICATION_REJECTED: "verification_rejected",
+  // KYC Automation
+  KYC_VERIFICATION_STARTED: "kyc_verification_started",
+  KYC_VERIFICATION_COMPLETED: "kyc_verification_completed",
+  KYC_VERIFICATION_FAILED: "kyc_verification_failed",
 } as const;
 
 export const eventType = v.union(
@@ -147,6 +152,9 @@ export const eventType = v.union(
   v.literal(EVENT_TYPE.VERIFICATION_SUBMITTED),
   v.literal(EVENT_TYPE.VERIFICATION_APPROVED),
   v.literal(EVENT_TYPE.VERIFICATION_REJECTED),
+  v.literal(EVENT_TYPE.KYC_VERIFICATION_STARTED),
+  v.literal(EVENT_TYPE.KYC_VERIFICATION_COMPLETED),
+  v.literal(EVENT_TYPE.KYC_VERIFICATION_FAILED),
 );
 
 // Type aliases for validator types
@@ -159,6 +167,7 @@ export type VerificationStatus = typeof verificationStatus.type;
  */
 export const RESOURCE_TYPE = {
   USER: "user",
+  USERS: "users",
   ADMIN_USER: "admin_user",
   BANK_ACCOUNT: "user_bank_account",
   BANK_ACCOUNTS: "user_bank_accounts",
@@ -172,6 +181,8 @@ export const RESOURCE_TYPE = {
   SAVINGS_PLANS: "user_savings_plans",
   SAVINGS_PLAN_TEMPLATE: "savings_plan_template",
   SAVINGS_PLAN_TEMPLATES: "savings_plan_templates",
+  KYC_DOCUMENT: "kyc_document",
+  KYC_DOCUMENTS: "kyc_documents",
 } as const;
 
 export const resourceType = v.union(
@@ -189,6 +200,8 @@ export const resourceType = v.union(
   v.literal(RESOURCE_TYPE.SAVINGS_PLANS),
   v.literal(RESOURCE_TYPE.SAVINGS_PLAN_TEMPLATE),
   v.literal(RESOURCE_TYPE.SAVINGS_PLAN_TEMPLATES),
+  v.literal(RESOURCE_TYPE.KYC_DOCUMENT),
+  v.literal(RESOURCE_TYPE.KYC_DOCUMENTS),
 );
 
 export type ResourceType = typeof resourceType.type;

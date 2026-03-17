@@ -1,11 +1,14 @@
-import type { UserStatus, PlanStatus } from "./schema";
-
-import { v } from "convex/values";
-
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
-import { internal } from "./_generated/api";
+import type { UserStatus, PlanStatus } from "./shared";
 
 import { isSameDay } from "date-fns";
+import { v } from "convex/values";
+
+import { internal } from "./_generated/api";
+import {
+  internalMutation,
+  internalAction,
+  internalQuery,
+} from "./_generated/server";
 
 const PAGE_SIZE = 500;
 
@@ -149,9 +152,12 @@ export const refreshDashboardKpis = internalAction({
     let userCursor: string | null = null;
 
     for (;;) {
-      const result: PageResult<UserKpiItem> = await ctx.runQuery(internal.kpis._getUsersPage, {
-        cursor: userCursor,
-      });
+      const result: PageResult<UserKpiItem> = await ctx.runQuery(
+        internal.kpis._getUsersPage,
+        {
+          cursor: userCursor,
+        },
+      );
 
       for (const user of result.page) {
         totalAumKobo += user.total_balance_kobo;
@@ -170,9 +176,12 @@ export const refreshDashboardKpis = internalAction({
     let planCursor: string | null = null;
 
     for (;;) {
-      const result: PageResult<PlanKpiItem> = await ctx.runQuery(internal.kpis._getPlansPage, {
-        cursor: planCursor,
-      });
+      const result: PageResult<PlanKpiItem> = await ctx.runQuery(
+        internal.kpis._getPlansPage,
+        {
+          cursor: planCursor,
+        },
+      );
 
       for (const plan of result.page) {
         totalSavingsKobo += plan.current_amount_kobo;

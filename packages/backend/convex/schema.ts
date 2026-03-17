@@ -1,76 +1,17 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
-import { bankAccountDocumentType } from "./shared";
-
-const userStatus = v.union(
-  v.literal("active"),
-  v.literal("pending_kyc"),
-  v.literal("suspended"),
-  v.literal("closed"),
-);
-
-const planStatus = v.union(
-  v.literal("active"),
-  v.literal("paused"),
-  v.literal("completed"),
-  v.literal("expired"),
-);
-
-const txnType = v.union(
-  v.literal("contribution"),
-  v.literal("interest_accrual"),
-  v.literal("withdrawal"),
-  v.literal("referral_bonus"),
-  v.literal("reversal"),
-  v.literal("investment_yield"),
-);
-
-const withdrawalStatus = v.union(
-  v.literal("pending"),
-  v.literal("approved"),
-  v.literal("rejected"),
-  v.literal("processed"),
-);
-
-const kycStatus = v.union(
-  v.literal("pending"),
-  v.literal("approved"),
-  v.literal("rejected"),
-);
-
-const adminRole = v.union(
-  v.literal("super_admin"),
-  v.literal("operations"),
-  v.literal("finance"),
-  v.literal("compliance"),
-  v.literal("support"),
-);
-
-const bankAccountVerificationStatus = v.union(
-  v.literal("pending"),
-  v.literal("verified"),
-  v.literal("rejected"),
-);
-
-const bankAccountEventType = v.union(
-  v.literal("created"),
-  v.literal("updated"),
-  v.literal("set_primary"),
-  v.literal("verification_status_changed"),
-  v.literal("deleted"),
-  v.literal("document_uploaded"),
-  v.literal("verification_submitted"),
-  v.literal("verification_approved"),
-  v.literal("verification_rejected"),
-);
-
-export type WithdrawalStatus = typeof withdrawalStatus.type;
-export type UserStatus = typeof userStatus.type;
-export type PlanStatus = typeof planStatus.type;
-export type KycStatus = typeof kycStatus.type;
-export type AdminRole = typeof adminRole.type;
-export type TxnType = typeof txnType.type;
+import {
+  bankAccountVerificationStatus,
+  bankAccountDocumentType,
+  bankAccountEventType,
+  withdrawalStatus,
+  planStatus,
+  userStatus,
+  kycStatus,
+  adminRole,
+  txnType,
+} from "./shared";
 
 const users = defineTable({
   workosId: v.string(),
@@ -249,6 +190,7 @@ const kyc_documents = defineTable({
   status: kycStatus,
   reviewed_by: v.optional(v.id("admin_users")),
   reviewed_at: v.optional(v.number()),
+  rejection_reason: v.optional(v.string()),
   created_at: v.number(),
 })
   .index("by_user_id", ["user_id"])
