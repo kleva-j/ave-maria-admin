@@ -117,7 +117,20 @@ export const withdrawalStatus = v.union(
   v.literal(WithdrawalStatus.PROCESSED),
 );
 
+export const WithdrawalAction = {
+  APPROVE: "approve",
+  REJECT: "reject",
+  PROCESS: "process",
+} as const;
+
+export const withdrawalAction = v.union(
+  v.literal(WithdrawalAction.APPROVE),
+  v.literal(WithdrawalAction.REJECT),
+  v.literal(WithdrawalAction.PROCESS),
+);
+
 export type WithdrawalStatus = typeof withdrawalStatus.type;
+export type WithdrawalAction = typeof withdrawalAction.type;
 
 /**
  * KYC status for bank accounts
