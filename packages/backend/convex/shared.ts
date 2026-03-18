@@ -86,6 +86,21 @@ export const txnType = v.union(
 export type TxnType = typeof txnType.type;
 
 /**
+ * Withdrawal payout method
+ */
+export const WithdrawalMethod = {
+  BANK_TRANSFER: "bank_transfer",
+  CASH: "cash",
+} as const;
+
+export const withdrawalMethod = v.union(
+  v.literal(WithdrawalMethod.BANK_TRANSFER),
+  v.literal(WithdrawalMethod.CASH),
+);
+
+export type WithdrawalMethod = typeof withdrawalMethod.type;
+
+/**
  * Withdrawal status for bank accounts
  */
 export const WithdrawalStatus = {

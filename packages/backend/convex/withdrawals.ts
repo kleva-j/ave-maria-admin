@@ -12,13 +12,22 @@ import { mutation, query } from "./_generated/server";
 import { getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
 import {
+  AdminRole,
   BankAccountVerificationStatus,
+  WithdrawalMethod,
+  withdrawalMethod,
   WithdrawalStatus,
   withdrawalStatus,
   RESOURCE_TYPE,
   UserStatus,
   TxnType,
 } from "./shared";
+
+const cashWithdrawalAdminRoles = new Set<string>([
+  AdminRole.SUPER_ADMIN,
+  AdminRole.OPERATIONS,
+  AdminRole.FINANCE,
+]);
 
 const bankAccountDetailsValidator = v.object({
   account_id: v.optional(v.id("user_bank_accounts")),
@@ -27,16 +36,24 @@ const bankAccountDetailsValidator = v.object({
   account_number_last4: v.string(),
 });
 
+const cashDetailsValidator = v.object({
+  recipient_name: v.string(),
+  recipient_phone: v.string(),
+  pickup_note: v.optional(v.string()),
+});
+
 const withdrawalSummaryValidator = v.object({
   _id: v.id("withdrawals"),
   transaction_id: v.id("transactions"),
   transaction_reference: v.string(),
   requested_amount_kobo: v.int64(),
+  method: withdrawalMethod,
   status: withdrawalStatus,
   requested_at: v.number(),
   approved_at: v.optional(v.number()),
   rejection_reason: v.optional(v.string()),
-  bank_account: bankAccountDetailsValidator,
+  bank_account: v.optional(bankAccountDetailsValidator),
+  cash_details: v.optional(cashDetailsValidator),
 });
 
 const adminWithdrawalSummaryValidator = v.object({
@@ -64,6 +81,23 @@ function maskBankAccount(account: UserBankAccount) {
   };
 }
 
+function buildCashDetails(user: User, pickupNote?: string) {
+  return {
+    recipient_name: [user.first_name, user.last_name]
+      .filter(Boolean)
+      .join(" ")
+      .trim(),
+    recipient_phone: user.phone,
+    pickup_note: pickupNote?.trim() || undefined,
+  };
+}
+
+function normalizeWithdrawalMethod(method: unknown) {
+  return method === WithdrawalMethod.CASH
+    ? WithdrawalMethod.CASH
+    : WithdrawalMethod.BANK_TRANSFER;
+}
+
 function normalizeBankAccountDetails(details: unknown) {
   const fallback = {
     bank_name: "Unknown bank",
@@ -89,6 +123,53 @@ function normalizeBankAccountDetails(details: unknown) {
     account_number_last4:
       candidate.account_number_last4 ?? fallback.account_number_last4,
   };
+}
+
+function normalizeCashDetails(details: unknown) {
+  if (!details || typeof details !== "object") {
+    return undefined;
+  }
+
+  const candidate = details as {
+    recipient_name?: string;
+    recipient_phone?: string;
+    pickup_note?: string;
+  };
+
+  if (!candidate.recipient_name || !candidate.recipient_phone) {
+    return undefined;
+  }
+
+  return {
+    recipient_name: candidate.recipient_name,
+    recipient_phone: candidate.recipient_phone,
+    pickup_note: candidate.pickup_note,
+  };
+}
+
+function assertCashWithdrawalRole(
+  adminRole: string,
+  action: "approve" | "process",
+) {
+  if (cashWithdrawalAdminRoles.has(adminRole)) {
+    return;
+  }
+
+  throw new ConvexError(
+    `Only finance, operations, or super admin roles can ${action} cash withdrawals`,
+  );
+}
+
+function assertAdminCanHandleCashWithdrawal(
+  adminRole: string,
+  withdrawal: Withdrawal,
+  action: "approve" | "process",
+) {
+  if (normalizeWithdrawalMethod(withdrawal.method) !== WithdrawalMethod.CASH) {
+    return;
+  }
+
+  assertCashWithdrawalRole(adminRole, action);
 }
 
 async function resolveWithdrawalBankAccount(
@@ -161,16 +242,30 @@ async function buildWithdrawalSummary(
     throw new ConvexError("Linked transaction not found");
   }
 
+  const method = normalizeWithdrawalMethod(
+    (withdrawal as Withdrawal & { method?: unknown }).method,
+  );
+
   return {
     _id: withdrawal._id,
     transaction_id: withdrawal.transaction_id,
     transaction_reference: transaction.reference,
     requested_amount_kobo: withdrawal.requested_amount_kobo,
+    method,
     status: withdrawal.status,
     requested_at: withdrawal.requested_at,
     approved_at: withdrawal.approved_at,
     rejection_reason: withdrawal.rejection_reason,
-    bank_account: normalizeBankAccountDetails(withdrawal.bank_account_details),
+    bank_account:
+      method === WithdrawalMethod.BANK_TRANSFER
+        ? normalizeBankAccountDetails(withdrawal.bank_account_details)
+        : undefined,
+    cash_details:
+      method === WithdrawalMethod.CASH
+        ? normalizeCashDetails(
+            (withdrawal as Withdrawal & { cash_details?: unknown }).cash_details,
+          )
+        : undefined,
   };
 }
 
@@ -200,19 +295,7 @@ export const listMine = query({
 
         if (!withdrawal) return null;
 
-        return {
-          _id: withdrawal._id,
-          transaction_id: withdrawal.transaction_id,
-          transaction_reference: transaction.reference,
-          requested_amount_kobo: withdrawal.requested_amount_kobo,
-          status: withdrawal.status,
-          requested_at: withdrawal.requested_at,
-          approved_at: withdrawal.approved_at,
-          rejection_reason: withdrawal.rejection_reason,
-          bank_account: normalizeBankAccountDetails(
-            withdrawal.bank_account_details,
-          ),
-        };
+        return buildWithdrawalSummary(ctx, withdrawal);
       }),
     );
 
@@ -271,11 +354,14 @@ export const listForReview = query({
 export const request = mutation({
   args: {
     amount_kobo: v.int64(),
+    method: v.optional(withdrawalMethod),
     bank_account_id: v.optional(v.id("user_bank_accounts")),
+    pickup_note: v.optional(v.string()),
   },
   returns: withdrawalSummaryValidator,
   handler: async (ctx, args) => {
     const user = await getUser(ctx);
+    const method = args.method ?? WithdrawalMethod.BANK_TRANSFER;
 
     if (user.status !== UserStatus.ACTIVE) {
       throw new ConvexError("Only active users can request withdrawals");
@@ -292,14 +378,30 @@ export const request = mutation({
       throw new ConvexError("Insufficient balance");
     }
 
-    const bankAccount = await resolveWithdrawalBankAccount(
-      ctx,
-      user,
-      args.bank_account_id,
-    );
     const now = Date.now();
-    const transactionReference = createReference("wdr");
-    const bankAccountDetails = maskBankAccount(bankAccount);
+    const transactionReference = createReference(
+      method === WithdrawalMethod.CASH ? "cwdr" : "wdr",
+    );
+    let bankAccountDetails:
+      | ReturnType<typeof maskBankAccount>
+      | undefined = undefined;
+    let cashDetails: ReturnType<typeof buildCashDetails> | undefined = undefined;
+
+    if (method === WithdrawalMethod.BANK_TRANSFER) {
+      const bankAccount = await resolveWithdrawalBankAccount(
+        ctx,
+        user,
+        args.bank_account_id,
+      );
+      bankAccountDetails = maskBankAccount(bankAccount);
+    } else {
+      if (args.bank_account_id) {
+        throw new ConvexError(
+          "Cash withdrawals do not require a bank account",
+        );
+      }
+      cashDetails = buildCashDetails(user, args.pickup_note);
+    }
 
     const transactionId = await ctx.db.insert("transactions", {
       user_id: user._id,
@@ -308,7 +410,9 @@ export const request = mutation({
       reference: transactionReference,
       metadata: {
         withdrawal_status: WithdrawalStatus.PENDING,
+        method,
         bank_account: bankAccountDetails,
+        cash_details: cashDetails,
       },
       created_at: now,
     });
@@ -323,9 +427,11 @@ export const request = mutation({
     const withdrawalId = await ctx.db.insert("withdrawals", {
       transaction_id: transactionId,
       requested_amount_kobo: args.amount_kobo,
+      method,
       status: WithdrawalStatus.PENDING,
       requested_at: now,
       bank_account_details: bankAccountDetails,
+      cash_details: cashDetails,
     });
 
     const withdrawal = await ctx.db.get(withdrawalId);
@@ -341,8 +447,10 @@ export const request = mutation({
       severity: "info",
       metadata: {
         amount_kobo: args.amount_kobo,
+        method,
         transaction_reference: transactionReference,
         bank_account: bankAccountDetails,
+        cash_details: cashDetails,
       },
     });
 
@@ -351,11 +459,13 @@ export const request = mutation({
       transaction_id: transactionId,
       transaction_reference: transactionReference,
       requested_amount_kobo: withdrawal.requested_amount_kobo,
+      method,
       status: withdrawal.status,
       requested_at: withdrawal.requested_at,
       approved_at: withdrawal.approved_at,
       rejection_reason: withdrawal.rejection_reason,
       bank_account: bankAccountDetails,
+      cash_details: cashDetails,
     };
   },
 });
@@ -376,6 +486,8 @@ export const approve = mutation({
     if (withdrawal.status !== WithdrawalStatus.PENDING) {
       throw new ConvexError("Only pending withdrawals can be approved");
     }
+
+    assertAdminCanHandleCashWithdrawal(admin.role, withdrawal, "approve");
 
     const summaryBefore = await buildWithdrawalSummary(ctx, withdrawal);
     const now = Date.now();
@@ -506,6 +618,8 @@ export const process = mutation({
     if (withdrawal.status !== WithdrawalStatus.APPROVED) {
       throw new ConvexError("Only approved withdrawals can be processed");
     }
+
+    assertAdminCanHandleCashWithdrawal(admin.role, withdrawal, "process");
 
     const summaryBefore = await buildWithdrawalSummary(ctx, withdrawal);
 
