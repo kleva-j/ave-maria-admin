@@ -1,8 +1,31 @@
 import { v } from "convex/values";
 
+// Database Table Names
+export const TABLE_NAMES = {
+  USERS: "users",
+  ADMIN_USERS: "admin_users",
+  WITHDRAWALS: "withdrawals",
+  TRANSACTIONS: "transactions",
+  TRANSACTION_RECONCILIATION_RUNS: "transaction_reconciliation_runs",
+  TRANSACTION_RECONCILIATION_ISSUES: "transaction_reconciliation_issues",
+  KYC_DOCUMENTS: "kyc_documents",
+  USER_SAVINGS_PLANS: "user_savings_plans",
+  USER_BANK_ACCOUNTS: "user_bank_accounts",
+  ADMIN_DASHBOARD_KPIS: "admin_dashboard_kpis",
+  BANK_ACCOUNT_DOCUMENTS: "bank_account_documents",
+  SAVINGS_PLAN_TEMPLATES: "savings_plan_templates",
+  USER_BANK_ACCOUNT_EVENTS: "user_bank_account_events",
+} as const;
+
+export type TableName = (typeof TABLE_NAMES)[keyof typeof TABLE_NAMES];
+
 // Constants for file validation
 export const MAX_FILE_SIZE = 5 * 1024 * 1024;
-export const ALLOWED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png"];
+export const ALLOWED_MIME_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+];
 export const ALLOWED_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png"];
 
 export const DOCUMENT_TYPES = {
@@ -84,6 +107,23 @@ export const txnType = v.union(
 );
 
 export type TxnType = typeof txnType.type;
+
+/**
+ * Transaction source
+ */
+export const TransactionSource = {
+  USER: "user",
+  ADMIN: "admin",
+  SYSTEM: "system",
+} as const;
+
+export const transactionSource = v.union(
+  v.literal(TransactionSource.USER),
+  v.literal(TransactionSource.ADMIN),
+  v.literal(TransactionSource.SYSTEM),
+);
+
+export type TransactionSource = typeof transactionSource.type;
 
 /**
  * Withdrawal payout method
@@ -189,6 +229,62 @@ export type BankAccountVerificationStatus =
   typeof bankAccountVerificationStatus.type;
 
 /**
+ * Transaction reconciliation run status
+ */
+export const TransactionReconciliationRunStatus = {
+  RUNNING: "running",
+  COMPLETED: "completed",
+  FAILED: "failed",
+} as const;
+
+export const transactionReconciliationRunStatus = v.union(
+  v.literal(TransactionReconciliationRunStatus.RUNNING),
+  v.literal(TransactionReconciliationRunStatus.COMPLETED),
+  v.literal(TransactionReconciliationRunStatus.FAILED),
+);
+
+export type TransactionReconciliationRunStatus =
+  typeof transactionReconciliationRunStatus.type;
+
+/**
+ * Transaction reconciliation issue type
+ */
+export const TransactionReconciliationIssueType = {
+  USER_TOTAL_BALANCE_MISMATCH: "user_total_balance_mismatch",
+  USER_SAVINGS_BALANCE_MISMATCH: "user_savings_balance_mismatch",
+  PLAN_CURRENT_AMOUNT_MISMATCH: "plan_current_amount_mismatch",
+  DOUBLE_REVERSAL: "double_reversal",
+  ORPHANED_REVERSAL: "orphaned_reversal",
+} as const;
+
+export const transactionReconciliationIssueType = v.union(
+  v.literal(TransactionReconciliationIssueType.USER_TOTAL_BALANCE_MISMATCH),
+  v.literal(TransactionReconciliationIssueType.USER_SAVINGS_BALANCE_MISMATCH),
+  v.literal(TransactionReconciliationIssueType.PLAN_CURRENT_AMOUNT_MISMATCH),
+  v.literal(TransactionReconciliationIssueType.DOUBLE_REVERSAL),
+  v.literal(TransactionReconciliationIssueType.ORPHANED_REVERSAL),
+);
+
+export type TransactionReconciliationIssueType =
+  typeof transactionReconciliationIssueType.type;
+
+/**
+ * Transaction reconciliation issue status
+ */
+export const TransactionReconciliationIssueStatus = {
+  OPEN: "open",
+  RESOLVED: "resolved",
+} as const;
+
+export const transactionReconciliationIssueStatus = v.union(
+  v.literal(TransactionReconciliationIssueStatus.OPEN),
+  v.literal(TransactionReconciliationIssueStatus.RESOLVED),
+);
+
+export type TransactionReconciliationIssueStatus =
+  typeof transactionReconciliationIssueStatus.type;
+
+/**
  * Bank account event types
  */
 export const BankAccountEventType = {
@@ -244,6 +340,10 @@ export const RESOURCE_TYPE = {
   SAVINGS_PLAN_TEMPLATES: "savings_plan_templates",
   KYC_DOCUMENT: "kyc_document",
   KYC_DOCUMENTS: "kyc_documents",
+  TRANSACTION_RECONCILIATION_RUN: "transaction_reconciliation_run",
+  TRANSACTION_RECONCILIATION_RUNS: "transaction_reconciliation_runs",
+  TRANSACTION_RECONCILIATION_ISSUE: "transaction_reconciliation_issue",
+  TRANSACTION_RECONCILIATION_ISSUES: "transaction_reconciliation_issues",
 } as const;
 
 export const resourceType = v.union(
@@ -263,6 +363,10 @@ export const resourceType = v.union(
   v.literal(RESOURCE_TYPE.SAVINGS_PLAN_TEMPLATES),
   v.literal(RESOURCE_TYPE.KYC_DOCUMENT),
   v.literal(RESOURCE_TYPE.KYC_DOCUMENTS),
+  v.literal(RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUN),
+  v.literal(RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS),
+  v.literal(RESOURCE_TYPE.TRANSACTION_RECONCILIATION_ISSUE),
+  v.literal(RESOURCE_TYPE.TRANSACTION_RECONCILIATION_ISSUES),
 );
 
 export type ResourceType = typeof resourceType.type;
