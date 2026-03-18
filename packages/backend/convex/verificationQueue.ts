@@ -185,6 +185,27 @@ export const getVerificationDetails = query({
         reviewed_by: v.optional(v.id("admin_users")),
         reviewed_at: v.optional(v.number()),
         rejection_reason: v.optional(v.string()),
+        // Comments on this document
+        comments: v.array(
+          v.object({
+            _id: v.id("bank_account_document_comments"),
+            admin_id: v.id("admin_users"),
+            comment_type: v.string(),
+            content: v.string(),
+            is_internal: v.boolean(),
+            status: v.string(),
+            resolved_at: v.optional(v.number()),
+            resolved_by: v.optional(v.id("admin_users")),
+            created_at: v.number(),
+            admin: v.object({
+              _id: v.id("admin_users"),
+              first_name: v.string(),
+              last_name: v.string(),
+              email: v.string(),
+              role: v.string(),
+            }),
+          }),
+        ),
       }),
     ),
     eventHistory: v.array(
@@ -220,6 +241,50 @@ export const getVerificationDetails = query({
       .query(TABLE_NAMES.BANK_ACCOUNT_DOCUMENTS)
       .withIndex("by_account_id", (q) => q.eq("account_id", args.accountId))
       .collect();
+
+    // Fetch comments for all documents
+    const commentsByDocId = new Map<string, Array<any>>();
+    for (const doc of documents) {
+      const comments = await ctx.db
+        .query(TABLE_NAMES.BANK_ACCOUNT_DOCUMENT_COMMENTS)
+        .withIndex("by_document_id_and_created_at", (q) =>
+          q.eq("document_id", doc._id),
+        )
+        .collect();
+
+      // Enrich with admin details
+      const enriched = await Promise.all(
+        comments.map(async (comment) => {
+          const adminUser = await ctx.db.get(comment.admin_id);
+          if (!adminUser) {
+            throw new ConvexError(
+              `Admin ${comment.admin_id} not found for comment ${comment._id}`,
+            );
+          }
+
+          return {
+            _id: comment._id,
+            admin_id: comment.admin_id,
+            comment_type: comment.comment_type,
+            content: comment.content,
+            is_internal: comment.is_internal,
+            status: comment.status,
+            resolved_at: comment.resolved_at,
+            resolved_by: comment.resolved_by,
+            created_at: comment.created_at,
+            admin: {
+              _id: adminUser._id,
+              first_name: adminUser.first_name,
+              last_name: adminUser.last_name,
+              email: adminUser.email,
+              role: adminUser.role,
+            },
+          };
+        }),
+      );
+
+      commentsByDocId.set(doc._id, enriched);
+    }
 
     const events = await ctx.db
       .query(TABLE_NAMES.USER_BANK_ACCOUNT_EVENTS)
@@ -259,6 +324,7 @@ export const getVerificationDetails = query({
         reviewed_by: doc.reviewed_by,
         reviewed_at: doc.reviewed_at,
         rejection_reason: doc.rejection_reason,
+        comments: commentsByDocId.get(doc._id) ?? [],
       })),
       eventHistory: events.map((event) => ({
         _id: event._id,

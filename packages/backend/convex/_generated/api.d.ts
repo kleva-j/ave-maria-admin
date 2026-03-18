@@ -11,6 +11,7 @@
 import type * as admin from "../admin.js";
 import type * as auditLog from "../auditLog.js";
 import type * as auth from "../auth.js";
+import type * as bankAccountDocumentComments from "../bankAccountDocumentComments.js";
 import type * as bankAccountDocuments from "../bankAccountDocuments.js";
 import type * as bankAccounts from "../bankAccounts.js";
 import type * as healthCheck from "../healthCheck.js";
@@ -20,7 +21,9 @@ import type * as kpis from "../kpis.js";
 import type * as kyc from "../kyc.js";
 import type * as kycDocuments from "../kycDocuments.js";
 import type * as schemas_adminDashboardKpis from "../schemas/adminDashboardKpis.js";
+import type * as schemas_bankAccountDocumentComments from "../schemas/bankAccountDocumentComments.js";
 import type * as schemas_bankAccountDocuments from "../schemas/bankAccountDocuments.js";
+import type * as schemas_documentReviewNotifications from "../schemas/documentReviewNotifications.js";
 import type * as schemas_kycDocuments from "../schemas/kycDocuments.js";
 import type * as schemas_savingsPlanTemplates from "../schemas/savingsPlanTemplates.js";
 import type * as schemas_transactionReconciliationIssues from "../schemas/transactionReconciliationIssues.js";
@@ -49,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   auditLog: typeof auditLog;
   auth: typeof auth;
+  bankAccountDocumentComments: typeof bankAccountDocumentComments;
   bankAccountDocuments: typeof bankAccountDocuments;
   bankAccounts: typeof bankAccounts;
   healthCheck: typeof healthCheck;
@@ -58,7 +62,9 @@ declare const fullApi: ApiFromModules<{
   kyc: typeof kyc;
   kycDocuments: typeof kycDocuments;
   "schemas/adminDashboardKpis": typeof schemas_adminDashboardKpis;
+  "schemas/bankAccountDocumentComments": typeof schemas_bankAccountDocumentComments;
   "schemas/bankAccountDocuments": typeof schemas_bankAccountDocuments;
+  "schemas/documentReviewNotifications": typeof schemas_documentReviewNotifications;
   "schemas/kycDocuments": typeof schemas_kycDocuments;
   "schemas/savingsPlanTemplates": typeof schemas_savingsPlanTemplates;
   "schemas/transactionReconciliationIssues": typeof schemas_transactionReconciliationIssues;

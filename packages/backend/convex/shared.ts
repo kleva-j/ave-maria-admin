@@ -13,6 +13,7 @@ export const TABLE_NAMES = {
   BANK_ACCOUNT_DOCUMENTS: "bank_account_documents",
   SAVINGS_PLAN_TEMPLATES: "savings_plan_templates",
   USER_BANK_ACCOUNT_EVENTS: "user_bank_account_events",
+  BANK_ACCOUNT_DOCUMENT_COMMENTS: "bank_account_document_comments",
   TRANSACTION_RECONCILIATION_RUNS: "transaction_reconciliation_runs",
   TRANSACTION_RECONCILIATION_ISSUES: "transaction_reconciliation_issues",
 } as const;
@@ -307,6 +308,8 @@ export const BankAccountEventType = {
   KYC_VERIFICATION_STARTED: "kyc_verification_started",
   KYC_VERIFICATION_COMPLETED: "kyc_verification_completed",
   KYC_VERIFICATION_FAILED: "kyc_verification_failed",
+  DOCUMENT_COMMENT_ADDED: "document_comment_added",
+  DOCUMENT_ISSUE_RESOLVED: "document_issue_resolved",
 } as const;
 
 export const bankAccountEventType = v.union(
@@ -322,6 +325,8 @@ export const bankAccountEventType = v.union(
   v.literal(BankAccountEventType.KYC_VERIFICATION_STARTED),
   v.literal(BankAccountEventType.KYC_VERIFICATION_COMPLETED),
   v.literal(BankAccountEventType.KYC_VERIFICATION_FAILED),
+  v.literal(BankAccountEventType.DOCUMENT_COMMENT_ADDED),
+  v.literal(BankAccountEventType.DOCUMENT_ISSUE_RESOLVED),
 );
 
 export type BankAccountEventType = typeof bankAccountEventType.type;
@@ -337,6 +342,8 @@ export const RESOURCE_TYPE = {
   BANK_ACCOUNTS: "user_bank_accounts",
   BANK_ACCOUNT_DOCUMENT: "bank_account_document",
   BANK_ACCOUNT_DOCUMENTS: "bank_account_documents",
+  BANK_ACCOUNT_DOCUMENT_COMMENT: "bank_account_document_comment",
+  BANK_ACCOUNT_DOCUMENT_COMMENTS: "bank_account_document_comments",
   TRANSACTION: "transaction",
   TRANSACTIONS: "transactions",
   WITHDRAWAL: "withdrawal",
@@ -360,6 +367,8 @@ export const resourceType = v.union(
   v.literal(RESOURCE_TYPE.BANK_ACCOUNTS),
   v.literal(RESOURCE_TYPE.BANK_ACCOUNT_DOCUMENT),
   v.literal(RESOURCE_TYPE.BANK_ACCOUNT_DOCUMENTS),
+  v.literal(RESOURCE_TYPE.BANK_ACCOUNT_DOCUMENT_COMMENT),
+  v.literal(RESOURCE_TYPE.BANK_ACCOUNT_DOCUMENT_COMMENTS),
   v.literal(RESOURCE_TYPE.TRANSACTION),
   v.literal(RESOURCE_TYPE.TRANSACTIONS),
   v.literal(RESOURCE_TYPE.WITHDRAWAL),
@@ -429,6 +438,9 @@ export const EVENT_TYPE = {
   KYC_VERIFICATION_STARTED: "kyc_verification_started",
   KYC_VERIFICATION_COMPLETED: "kyc_verification_completed",
   KYC_VERIFICATION_FAILED: "kyc_verification_failed",
+  // Document Review
+  DOCUMENT_COMMENT_ADDED: "document_comment_added",
+  DOCUMENT_ISSUE_RESOLVED: "document_issue_resolved",
 } as const;
 
 export const eventType = v.union(
@@ -444,9 +456,85 @@ export const eventType = v.union(
   v.literal(EVENT_TYPE.KYC_VERIFICATION_STARTED),
   v.literal(EVENT_TYPE.KYC_VERIFICATION_COMPLETED),
   v.literal(EVENT_TYPE.KYC_VERIFICATION_FAILED),
+  v.literal(EVENT_TYPE.DOCUMENT_COMMENT_ADDED),
+  v.literal(EVENT_TYPE.DOCUMENT_ISSUE_RESOLVED),
 );
 
 // Type aliases for validator types
 // These extract the TypeScript types from Convex validators for type-safe usage
 export type EventType = typeof eventType.type;
 export type VerificationStatus = typeof verificationStatus.type;
+
+/**
+ * Comment types for bank account document comments
+ */
+export const COMMENT_TYPE = {
+  GENERAL: "general",
+  ISSUE: "issue",
+  APPROVAL_NOTE: "approval_note",
+  REJECTION_REASON: "rejection_reason",
+} as const;
+
+export const commentType = v.union(
+  v.literal(COMMENT_TYPE.GENERAL), // General comments/note
+  v.literal(COMMENT_TYPE.ISSUE), // Issue with the document / Problem identified
+  v.literal(COMMENT_TYPE.APPROVAL_NOTE), // Approval note
+  v.literal(COMMENT_TYPE.REJECTION_REASON), // Specific rejection reason
+);
+
+export type CommentType = typeof commentType.type;
+
+/**
+ * Notification types for bank account document comments
+ */
+export const NotificationType = {
+  NEW_COMMENT: "new_comment",
+  ISSUE_RESOLVED: "issue_resolved",
+  DOCUMENT_APPROVED: "document_approved",
+  DOCUMENT_REJECTED: "document_rejected",
+} as const;
+
+export const notificationType = v.union(
+  v.literal(NotificationType.NEW_COMMENT),
+  v.literal(NotificationType.ISSUE_RESOLVED),
+  v.literal(NotificationType.DOCUMENT_APPROVED),
+  v.literal(NotificationType.DOCUMENT_REJECTED),
+);
+
+export type NotificationType = typeof notificationType.type;
+
+/**
+ * Delivery status for notifications
+ */
+export const DELIVERY_STATUS = {
+  PENDING: "pending",
+  SENT: "sent",
+  FAILED: "failed",
+} as const;
+
+export const deliveryStatus = v.union(
+  v.literal(DELIVERY_STATUS.PENDING),
+  v.literal(DELIVERY_STATUS.SENT),
+  v.literal(DELIVERY_STATUS.FAILED),
+);
+
+export type DeliveryStatus = typeof deliveryStatus.type;
+
+/**
+ * Delivery method for notifications
+ */
+export const DELIVERY_METHOD = {
+  IN_APP: "in_app",
+  EMAIL: "email",
+  PUSH: "push",
+  SMS: "sms",
+} as const;
+
+export const deliveryMethod = v.union(
+  v.literal(DELIVERY_METHOD.IN_APP),
+  v.literal(DELIVERY_METHOD.EMAIL),
+  v.literal(DELIVERY_METHOD.PUSH),
+  v.literal(DELIVERY_METHOD.SMS),
+);
+
+export type DeliveryMethod = typeof deliveryMethod.type;
