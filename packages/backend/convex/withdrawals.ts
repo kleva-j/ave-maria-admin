@@ -1,24 +1,28 @@
-import type { MutationCtx, QueryCtx } from "./_generated/server";
+import type { MutationCtx } from "./_generated/server";
 import type {
   UserBankAccountId,
   UserBankAccount,
   Withdrawal,
+  Context,
   User,
 } from "./types";
 
 import { ConvexError, v } from "convex/values";
 
+import { postTransactionEntry, reverseTransactionEntry } from "./transactions";
 import { mutation, query } from "./_generated/server";
 import { getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
 import {
   BankAccountVerificationStatus,
+  TransactionSource,
   WithdrawalMethod,
   withdrawalMethod,
   WithdrawalStatus,
   withdrawalStatus,
   WithdrawalAction,
   RESOURCE_TYPE,
+  TABLE_NAMES,
   UserStatus,
   AdminRole,
   TxnType,
@@ -184,7 +188,7 @@ function getCashWithdrawalForbiddenData(action: WithdrawalAction) {
 
 function getWithdrawalStatusBlockedReason(
   withdrawal: Withdrawal,
-  action: WithdrawalAction,
+  action: WithdrawalAction
 ) {
   switch (action) {
     case WithdrawalAction.APPROVE:
@@ -205,7 +209,7 @@ function getWithdrawalStatusBlockedReason(
 function getCashWithdrawalRoleBlockedReason(
   adminRole: AdminRole,
   withdrawal: Withdrawal,
-  action: WithdrawalAction,
+  action: WithdrawalAction
 ) {
   if (normalizeWithdrawalMethod(withdrawal.method) !== WithdrawalMethod.CASH) {
     return undefined;
@@ -221,7 +225,7 @@ function getCashWithdrawalRoleBlockedReason(
 function buildWithdrawalActionCapability(
   adminRole: AdminRole,
   withdrawal: Withdrawal,
-  action: WithdrawalAction,
+  action: WithdrawalAction
 ) {
   const statusReason = getWithdrawalStatusBlockedReason(withdrawal, action);
   if (statusReason) {
@@ -234,7 +238,7 @@ function buildWithdrawalActionCapability(
   const roleReason = getCashWithdrawalRoleBlockedReason(
     adminRole,
     withdrawal,
-    action,
+    action
   );
   if (roleReason) {
     return {
@@ -250,30 +254,30 @@ function buildWithdrawalActionCapability(
 
 function buildWithdrawalCapabilities(
   adminRole: AdminRole,
-  withdrawal: Withdrawal,
+  withdrawal: Withdrawal
 ) {
   return {
     approve: buildWithdrawalActionCapability(
       adminRole,
       withdrawal,
-      WithdrawalAction.APPROVE,
+      WithdrawalAction.APPROVE
     ),
     reject: buildWithdrawalActionCapability(
       adminRole,
       withdrawal,
-      WithdrawalAction.REJECT,
+      WithdrawalAction.REJECT
     ),
     process: buildWithdrawalActionCapability(
       adminRole,
       withdrawal,
-      WithdrawalAction.PROCESS,
+      WithdrawalAction.PROCESS
     ),
   };
 }
 
 function assertCashWithdrawalRole(
   adminRole: AdminRole,
-  action: WithdrawalAction,
+  action: WithdrawalAction
 ) {
   if (cashWithdrawalAdminRoles.has(adminRole)) {
     return;
@@ -285,7 +289,7 @@ function assertCashWithdrawalRole(
 function assertAdminCanHandleCashWithdrawal(
   adminRole: AdminRole,
   withdrawal: Withdrawal,
-  action: WithdrawalAction,
+  action: WithdrawalAction
 ) {
   if (normalizeWithdrawalMethod(withdrawal.method) !== WithdrawalMethod.CASH) {
     return;
@@ -297,7 +301,7 @@ function assertAdminCanHandleCashWithdrawal(
 async function resolveWithdrawalBankAccount(
   ctx: MutationCtx,
   user: User,
-  bankAccountId?: UserBankAccount["_id"],
+  bankAccountId?: UserBankAccountId
 ) {
   if (bankAccountId) {
     const account = await ctx.db.get(bankAccountId);
@@ -313,7 +317,7 @@ async function resolveWithdrawalBankAccount(
   }
 
   const accounts = await ctx.db
-    .query("user_bank_accounts")
+    .query(TABLE_NAMES.USER_BANK_ACCOUNTS)
     .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
     .collect();
 
@@ -321,11 +325,11 @@ async function resolveWithdrawalBankAccount(
     accounts.find(
       (account) =>
         account.is_primary &&
-        account.verification_status === BankAccountVerificationStatus.VERIFIED,
+        account.verification_status === BankAccountVerificationStatus.VERIFIED
     ) ??
     accounts.find(
       (account) =>
-        account.verification_status === BankAccountVerificationStatus.VERIFIED,
+        account.verification_status === BankAccountVerificationStatus.VERIFIED
     );
 
   if (!verifiedPrimary) {
@@ -335,37 +339,14 @@ async function resolveWithdrawalBankAccount(
   return verifiedPrimary;
 }
 
-async function applyUserBalanceDelta(
-  ctx: MutationCtx,
-  user: User,
-  totalDelta: bigint,
-  savingsDelta: bigint,
-) {
-  const nextTotal = user.total_balance_kobo + totalDelta;
-  const nextSavings = user.savings_balance_kobo + savingsDelta;
-
-  if (nextTotal < 0n || nextSavings < 0n) {
-    throw new ConvexError("Insufficient balance");
-  }
-
-  await ctx.db.patch(user._id, {
-    total_balance_kobo: nextTotal,
-    savings_balance_kobo: nextSavings,
-    updated_at: Date.now(),
-  });
-}
-
-async function buildWithdrawalSummary(
-  ctx: QueryCtx | MutationCtx,
-  withdrawal: Withdrawal,
-) {
+async function buildWithdrawalSummary(ctx: Context, withdrawal: Withdrawal) {
   const transaction = await ctx.db.get(withdrawal.transaction_id);
   if (!transaction) {
     throw new ConvexError("Linked transaction not found");
   }
 
   const method = normalizeWithdrawalMethod(
-    (withdrawal as Withdrawal & { method?: unknown }).method,
+    (withdrawal as Withdrawal & { method?: unknown }).method
   );
 
   return {
@@ -385,8 +366,7 @@ async function buildWithdrawalSummary(
     cash_details:
       method === WithdrawalMethod.CASH
         ? normalizeCashDetails(
-            (withdrawal as Withdrawal & { cash_details?: unknown })
-              .cash_details,
+            (withdrawal as Withdrawal & { cash_details?: unknown }).cash_details
           )
         : undefined,
   };
@@ -399,7 +379,7 @@ export const listMine = query({
     const user = await getUser(ctx);
 
     const transactions = await ctx.db
-      .query("transactions")
+      .query(TABLE_NAMES.TRANSACTIONS)
       .withIndex("by_user_id_and_created_at", (q) => q.eq("user_id", user._id))
       .collect();
 
@@ -410,16 +390,16 @@ export const listMine = query({
     const summaries = await Promise.all(
       withdrawalTransactions.map(async (transaction) => {
         const withdrawal = await ctx.db
-          .query("withdrawals")
+          .query(TABLE_NAMES.WITHDRAWALS)
           .withIndex("by_transaction_id", (q) =>
-            q.eq("transaction_id", transaction._id),
+            q.eq("transaction_id", transaction._id)
           )
           .unique();
 
         if (!withdrawal) return null;
 
         return buildWithdrawalSummary(ctx, withdrawal);
-      }),
+      })
     );
 
     return summaries.filter((withdrawal) => withdrawal !== null);
@@ -436,10 +416,10 @@ export const listForReview = query({
 
     const withdrawals = args.status
       ? await ctx.db
-          .query("withdrawals")
+          .query(TABLE_NAMES.WITHDRAWALS)
           .withIndex("by_status", (q) => q.eq("status", args.status!))
           .collect()
-      : await ctx.db.query("withdrawals").collect();
+      : await ctx.db.query(TABLE_NAMES.WITHDRAWALS).collect();
 
     const ordered = withdrawals.sort((a, b) => b.requested_at - a.requested_at);
 
@@ -468,7 +448,7 @@ export const listForReview = query({
           },
           capabilities: buildWithdrawalCapabilities(admin.role, withdrawal),
         };
-      }),
+      })
     );
 
     return rows;
@@ -504,7 +484,7 @@ export const request = mutation({
 
     const now = Date.now();
     const transactionReference = createReference(
-      method === WithdrawalMethod.CASH ? "cwdr" : "wdr",
+      method === WithdrawalMethod.CASH ? "cwdr" : "wdr"
     );
     let bankAccountDetails: ReturnType<typeof maskBankAccount> | undefined =
       undefined;
@@ -515,7 +495,7 @@ export const request = mutation({
       const bankAccount = await resolveWithdrawalBankAccount(
         ctx,
         user,
-        args.bank_account_id,
+        args.bank_account_id
       );
       bankAccountDetails = maskBankAccount(bankAccount);
     } else {
@@ -525,10 +505,10 @@ export const request = mutation({
       cashDetails = buildCashDetails(user, args.pickup_note);
     }
 
-    const transactionId = await ctx.db.insert("transactions", {
-      user_id: user._id,
+    const postedTransaction = await postTransactionEntry(ctx, {
+      userId: user._id,
       type: TxnType.WITHDRAWAL,
-      amount_kobo: -args.amount_kobo,
+      amountKobo: -args.amount_kobo,
       reference: transactionReference,
       metadata: {
         withdrawal_status: WithdrawalStatus.PENDING,
@@ -536,18 +516,13 @@ export const request = mutation({
         bank_account: bankAccountDetails,
         cash_details: cashDetails,
       },
-      created_at: now,
+      source: TransactionSource.USER,
+      actorId: user._id,
+      createdAt: now,
     });
 
-    await applyUserBalanceDelta(
-      ctx,
-      user,
-      -args.amount_kobo,
-      -args.amount_kobo,
-    );
-
-    const withdrawalId = await ctx.db.insert("withdrawals", {
-      transaction_id: transactionId,
+    const withdrawalId = await ctx.db.insert(TABLE_NAMES.WITHDRAWALS, {
+      transaction_id: postedTransaction.transaction._id,
       requested_amount_kobo: args.amount_kobo,
       method,
       status: WithdrawalStatus.PENDING,
@@ -578,7 +553,7 @@ export const request = mutation({
 
     return {
       _id: withdrawal._id,
-      transaction_id: transactionId,
+      transaction_id: postedTransaction.transaction._id,
       transaction_reference: transactionReference,
       requested_amount_kobo: withdrawal.requested_amount_kobo,
       method,
@@ -609,7 +584,11 @@ export const approve = mutation({
       throw new ConvexError("Only pending withdrawals can be approved");
     }
 
-    assertAdminCanHandleCashWithdrawal(admin.role, withdrawal, "approve");
+    assertAdminCanHandleCashWithdrawal(
+      admin.role,
+      withdrawal,
+      WithdrawalAction.APPROVE
+    );
 
     const summaryBefore = await buildWithdrawalSummary(ctx, withdrawal);
     const now = Date.now();
@@ -660,42 +639,32 @@ export const reject = mutation({
       throw new ConvexError("Only pending withdrawals can be rejected");
     }
 
-    assertAdminCanHandleCashWithdrawal(admin.role, withdrawal, "reject");
+    assertAdminCanHandleCashWithdrawal(
+      admin.role,
+      withdrawal,
+      WithdrawalAction.REJECT
+    );
 
     const transaction = await ctx.db.get(withdrawal.transaction_id);
     if (!transaction) {
       throw new ConvexError("Linked transaction not found");
     }
 
-    const user = await ctx.db.get(transaction.user_id);
-    if (!user) {
-      throw new ConvexError("User not found for withdrawal");
-    }
-
     const summaryBefore = await buildWithdrawalSummary(ctx, withdrawal);
     const now = Date.now();
     const reversalReference = createReference("rev");
 
-    await ctx.db.insert("transactions", {
-      user_id: user._id,
-      type: TxnType.REVERSAL,
-      amount_kobo: withdrawal.requested_amount_kobo,
+    await reverseTransactionEntry(ctx, {
+      originalTransactionId: transaction._id,
       reference: reversalReference,
+      reason: args.reason,
       metadata: {
-        original_transaction_id: transaction._id,
-        original_reference: transaction.reference,
-        withdrawal_id: withdrawal._id,
-        reason: args.reason,
+        withdrawal_id: String(withdrawal._id),
       },
-      created_at: now,
+      source: TransactionSource.ADMIN,
+      actorId: admin._id,
+      createdAt: now,
     });
-
-    await applyUserBalanceDelta(
-      ctx,
-      user,
-      withdrawal.requested_amount_kobo,
-      withdrawal.requested_amount_kobo,
-    );
 
     await ctx.db.patch(withdrawal._id, {
       status: WithdrawalStatus.REJECTED,
@@ -743,13 +712,15 @@ export const process = mutation({
       throw new ConvexError("Only approved withdrawals can be processed");
     }
 
-    assertAdminCanHandleCashWithdrawal(admin.role, withdrawal, "process");
+    assertAdminCanHandleCashWithdrawal(
+      admin.role,
+      withdrawal,
+      WithdrawalAction.PROCESS
+    );
 
     const summaryBefore = await buildWithdrawalSummary(ctx, withdrawal);
 
-    await ctx.db.patch(withdrawal._id, {
-      status: WithdrawalStatus.PROCESSED,
-    });
+    await ctx.db.patch(withdrawal._id, { status: WithdrawalStatus.PROCESSED });
 
     const updated = await ctx.db.get(withdrawal._id);
     if (!updated) {

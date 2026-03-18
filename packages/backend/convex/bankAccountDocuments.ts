@@ -22,12 +22,13 @@ import { auditLog } from "./auditLog";
 import {
   KYC_VERIFICATION_STATUS,
   bankAccountDocumentType,
+  VERIFICATION_STATUS,
   ALLOWED_EXTENSIONS,
   ALLOWED_MIME_TYPES,
-  VERFICATION_STATUS,
   DOCUMENT_TYPES,
   MAX_FILE_SIZE,
   RESOURCE_TYPE,
+  TABLE_NAMES,
   EVENT_TYPE,
 } from "./shared";
 
@@ -43,8 +44,6 @@ const VERIFICATION_REQUIREMENTS = {
     DOCUMENT_TYPES.SELFIE_WITH_ID,
   ] as const,
 };
-
-export type DocumentType = (typeof DOCUMENT_TYPES)[keyof typeof DOCUMENT_TYPES];
 
 /**
  * Validates file name extension against allowed types
@@ -130,7 +129,7 @@ export const listDocuments = query({
     }
 
     const documents = await ctx.db
-      .query("bank_account_documents")
+      .query(TABLE_NAMES.BANK_ACCOUNT_DOCUMENTS)
       .withIndex("by_account_id", (q) => q.eq("account_id", args.accountId))
       .collect();
 
@@ -238,7 +237,7 @@ export const uploadDocument = mutation({
 
     // Check if document already exists for this account and type
     const existing = await ctx.db
-      .query("bank_account_documents")
+      .query(TABLE_NAMES.BANK_ACCOUNT_DOCUMENTS)
       .withIndex("by_account_id_and_status", (q) =>
         q
           .eq("account_id", args.accountId)
@@ -255,7 +254,7 @@ export const uploadDocument = mutation({
 
     // Create document record
     const now = Date.now();
-    const docId = await ctx.db.insert("bank_account_documents", {
+    const docId = await ctx.db.insert(TABLE_NAMES.BANK_ACCOUNT_DOCUMENTS, {
       user_id: user._id,
       account_id: args.accountId,
       document_type: args.documentType,
@@ -263,7 +262,7 @@ export const uploadDocument = mutation({
       file_name: args.fileName,
       file_size: args.fileSize,
       mime_type: args.mimeType,
-      status: VERFICATION_STATUS.PENDING,
+      status: VERIFICATION_STATUS.PENDING,
       uploaded_at: now,
     });
 
@@ -288,7 +287,7 @@ export const uploadDocument = mutation({
     });
 
     // Log event for compliance trail
-    await ctx.db.insert("user_bank_account_events", {
+    await ctx.db.insert(TABLE_NAMES.USER_BANK_ACCOUNT_EVENTS, {
       user_id: user._id,
       account_id: args.accountId,
       event_type: EVENT_TYPE.DOCUMENT_UPLOADED,
@@ -296,7 +295,7 @@ export const uploadDocument = mutation({
       new_values: {
         document_type: args.documentType,
         file_name: args.fileName,
-        status: VERFICATION_STATUS.PENDING,
+        status: VERIFICATION_STATUS.PENDING,
       },
       actor_user_id: user._id,
     });
@@ -411,9 +410,9 @@ export const checkVerificationReadiness = query({
     }
 
     const documents = await ctx.db
-      .query("bank_account_documents")
+      .query(TABLE_NAMES.BANK_ACCOUNT_DOCUMENTS)
       .withIndex("by_account_id", (q) => q.eq("account_id", args.accountId))
-      .filter((q) => q.eq(q.field("status"), VERFICATION_STATUS.PENDING))
+      .filter((q) => q.eq(q.field("status"), VERIFICATION_STATUS.PENDING))
       .collect();
 
     const uploadedDocs = documents.map((d) => d.document_type);

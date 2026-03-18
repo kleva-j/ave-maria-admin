@@ -20,8 +20,9 @@ import { auditLog } from "./auditLog";
 import {
   KYC_VERIFICATION_STATUS,
   verificationStatus,
-  VERFICATION_STATUS,
+  VERIFICATION_STATUS,
   RESOURCE_TYPE,
+  TABLE_NAMES,
   EVENT_TYPE,
 } from "./shared";
 
@@ -73,11 +74,11 @@ export const listPendingVerifications = query({
   handler: async (ctx, args) => {
     await getAdminUser(ctx);
 
-    const filterStatus = args.status ?? VERFICATION_STATUS.PENDING;
+    const filterStatus = args.status ?? VERIFICATION_STATUS.PENDING;
 
     // Query accounts by verification status
     const result = await ctx.db
-      .query("user_bank_accounts")
+      .query(TABLE_NAMES.USER_BANK_ACCOUNTS)
       .withIndex("by_verification_status", (q) =>
         q.eq("verification_status", filterStatus),
       )
@@ -95,7 +96,7 @@ export const listPendingVerifications = query({
 
         // Count documents for this account
         const documents = await ctx.db
-          .query("bank_account_documents")
+          .query(TABLE_NAMES.BANK_ACCOUNT_DOCUMENTS)
           .withIndex("by_account_id", (q) => q.eq("account_id", account._id))
           .collect();
 
@@ -216,12 +217,12 @@ export const getVerificationDetails = query({
     }
 
     const documents = await ctx.db
-      .query("bank_account_documents")
+      .query(TABLE_NAMES.BANK_ACCOUNT_DOCUMENTS)
       .withIndex("by_account_id", (q) => q.eq("account_id", args.accountId))
       .collect();
 
     const events = await ctx.db
-      .query("user_bank_account_events")
+      .query(TABLE_NAMES.USER_BANK_ACCOUNT_EVENTS)
       .withIndex("by_account_id", (q) => q.eq("account_id", args.accountId))
       .collect();
 
@@ -290,40 +291,40 @@ export const getQueueStats = query({
 
     // Count by status
     const pending = await ctx.db
-      .query("user_bank_accounts")
+      .query(TABLE_NAMES.USER_BANK_ACCOUNTS)
       .withIndex("by_verification_status", (q) =>
-        q.eq("verification_status", VERFICATION_STATUS.PENDING),
+        q.eq("verification_status", VERIFICATION_STATUS.PENDING),
       )
       .collect()
       .then((r) => r.length);
 
     const verified = await ctx.db
-      .query("user_bank_accounts")
+      .query(TABLE_NAMES.USER_BANK_ACCOUNTS)
       .withIndex("by_verification_status", (q) =>
-        q.eq("verification_status", VERFICATION_STATUS.VERIFIED),
+        q.eq("verification_status", VERIFICATION_STATUS.VERIFIED),
       )
       .collect()
       .then((r) => r.length);
 
     const rejected = await ctx.db
-      .query("user_bank_accounts")
+      .query(TABLE_NAMES.USER_BANK_ACCOUNTS)
       .withIndex("by_verification_status", (q) =>
-        q.eq("verification_status", VERFICATION_STATUS.REJECTED),
+        q.eq("verification_status", VERIFICATION_STATUS.REJECTED),
       )
       .collect()
       .then((r) => r.length);
 
     // Total documents
     const totalDocuments = await ctx.db
-      .query("bank_account_documents")
+      .query(TABLE_NAMES.BANK_ACCOUNT_DOCUMENTS)
       .collect()
       .then((r) => r.length);
 
     // Find oldest pending submission
     const pendingAccounts = await ctx.db
-      .query("user_bank_accounts")
+      .query(TABLE_NAMES.USER_BANK_ACCOUNTS)
       .withIndex("by_verification_status", (q) =>
-        q.eq("verification_status", VERFICATION_STATUS.PENDING),
+        q.eq("verification_status", VERIFICATION_STATUS.PENDING),
       )
       .collect();
 
@@ -390,7 +391,7 @@ export const approveVerification = mutation({
 
     // Update account status
     await ctx.db.patch(args.accountId, {
-      verification_status: VERFICATION_STATUS.VERIFIED,
+      verification_status: VERIFICATION_STATUS.VERIFIED,
       verified_at: now,
       verified_by_admin_id: admin._id,
       updated_at: now,
@@ -399,7 +400,7 @@ export const approveVerification = mutation({
 
     // Approve all pending documents
     const documents = await ctx.db
-      .query("bank_account_documents")
+      .query(TABLE_NAMES.BANK_ACCOUNT_DOCUMENTS)
       .withIndex("by_account_id", (q) => q.eq("account_id", args.accountId))
       .filter((q) => q.eq(q.field("status"), KYC_VERIFICATION_STATUS.PENDING))
       .collect();
@@ -509,7 +510,7 @@ export const rejectVerification = mutation({
 
     // Reject all pending documents
     const documents = await ctx.db
-      .query("bank_account_documents")
+      .query(TABLE_NAMES.BANK_ACCOUNT_DOCUMENTS)
       .withIndex("by_account_id", (q) => q.eq("account_id", args.accountId))
       .filter((q) => q.eq(q.field("status"), KYC_VERIFICATION_STATUS.PENDING))
       .collect();
@@ -537,7 +538,7 @@ export const rejectVerification = mutation({
       severity: "warning",
       metadata: {
         previous_status: account.verification_status,
-        new_status: VERFICATION_STATUS.REJECTED,
+        new_status: VERIFICATION_STATUS.REJECTED,
         reason: args.reason,
         documents_rejected: documents.length,
       },
@@ -550,7 +551,7 @@ export const rejectVerification = mutation({
       event_type: EVENT_TYPE.VERIFICATION_REJECTED,
       created_at: now,
       new_values: {
-        verification_status: VERFICATION_STATUS.REJECTED,
+        verification_status: VERIFICATION_STATUS.REJECTED,
         rejection_reason: args.reason,
       },
       actor_admin_id: admin._id,

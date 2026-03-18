@@ -1,4 +1,5 @@
 import { query } from "./_generated/server";
+import { TABLE_NAMES } from "./shared";
 import { authKit } from "./auth";
 
 /**
@@ -11,7 +12,7 @@ export const list = query({
     if (!user) return null;
 
     const adminUser = await ctx.db
-      .query("admin_users")
+      .query(TABLE_NAMES.ADMIN_USERS)
       .withIndex("by_workos_id", (q) => q.eq("workosId", user.id))
       .unique();
 
@@ -19,6 +20,6 @@ export const list = query({
       throw new Error("Not authorized to view users");
     }
 
-    return await ctx.db.query("users").collect();
+    return await ctx.db.query(TABLE_NAMES.USERS).collect();
   },
 });

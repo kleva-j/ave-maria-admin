@@ -2,10 +2,15 @@ import { v } from "convex/values";
 
 import { AuditActions } from "convex-audit-log";
 
-import { EVENT_TYPE, KYC_VERIFICATION_STATUS, RESOURCE_TYPE } from "./shared";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { ensureUser, getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
+import {
+  KYC_VERIFICATION_STATUS,
+  RESOURCE_TYPE,
+  TABLE_NAMES,
+  EVENT_TYPE,
+} from "./shared";
 
 /**
  * Get a user profile by ID.
@@ -86,7 +91,7 @@ export const upsertFromWorkOS = internalMutation({
   },
   handler: async (ctx, args) => {
     const existing = await ctx.db
-      .query("users")
+      .query(TABLE_NAMES.USERS)
       .withIndex("by_workos_id", (q) => q.eq("workosId", args.workosId))
       .unique();
 
@@ -100,7 +105,7 @@ export const upsertFromWorkOS = internalMutation({
       });
       return existing._id;
     }
-    return await ctx.db.insert("users", {
+    return await ctx.db.insert(TABLE_NAMES.USERS, {
       workosId: args.workosId,
       email: args.email,
       first_name: args.firstName ?? "",
@@ -126,7 +131,7 @@ export const deleteFromWorkOS = internalMutation({
   args: { workosId: v.string() },
   handler: async (ctx, args) => {
     const existing = await ctx.db
-      .query("users")
+      .query(TABLE_NAMES.USERS)
       .withIndex("by_workos_id", (q) => q.eq("workosId", args.workosId))
       .unique();
 
@@ -162,7 +167,7 @@ export const processKycResult = internalMutation({
       : KYC_VERIFICATION_STATUS.REJECTED;
 
     const documents = await ctx.db
-      .query("kyc_documents")
+      .query(TABLE_NAMES.KYC_DOCUMENTS)
       .withIndex("by_user_id_and_status", (q) =>
         q
           .eq("user_id", args.userId)

@@ -6,8 +6,6 @@ export const TABLE_NAMES = {
   ADMIN_USERS: "admin_users",
   WITHDRAWALS: "withdrawals",
   TRANSACTIONS: "transactions",
-  TRANSACTION_RECONCILIATION_RUNS: "transaction_reconciliation_runs",
-  TRANSACTION_RECONCILIATION_ISSUES: "transaction_reconciliation_issues",
   KYC_DOCUMENTS: "kyc_documents",
   USER_SAVINGS_PLANS: "user_savings_plans",
   USER_BANK_ACCOUNTS: "user_bank_accounts",
@@ -15,6 +13,8 @@ export const TABLE_NAMES = {
   BANK_ACCOUNT_DOCUMENTS: "bank_account_documents",
   SAVINGS_PLAN_TEMPLATES: "savings_plan_templates",
   USER_BANK_ACCOUNT_EVENTS: "user_bank_account_events",
+  TRANSACTION_RECONCILIATION_RUNS: "transaction_reconciliation_runs",
+  TRANSACTION_RECONCILIATION_ISSUES: "transaction_reconciliation_issues",
 } as const;
 
 export type TableName = (typeof TABLE_NAMES)[keyof typeof TABLE_NAMES];
@@ -35,7 +35,14 @@ export const DOCUMENT_TYPES = {
   SELFIE_WITH_ID: "selfie_with_id",
 } as const;
 
-export type DocumentType = (typeof DOCUMENT_TYPES)[keyof typeof DOCUMENT_TYPES];
+export const KycDocumentType = v.union(
+  v.literal(DOCUMENT_TYPES.GOVERNMENT_ID),
+  v.literal(DOCUMENT_TYPES.PROOF_OF_ADDRESS),
+  v.literal(DOCUMENT_TYPES.BANK_STATEMENT),
+  v.literal(DOCUMENT_TYPES.SELFIE_WITH_ID),
+);
+
+export type KycDocumentType = typeof KycDocumentType.type;
 
 // Document types for bank account verification
 export const bankAccountDocumentType = v.union(
@@ -377,16 +384,16 @@ export type ResourceType = typeof resourceType.type;
  * - verified: Successfully verified
  * - rejected: Verification failed or rejected
  */
-export const VERFICATION_STATUS = {
+export const VERIFICATION_STATUS = {
   PENDING: "pending",
   VERIFIED: "verified",
   REJECTED: "rejected",
 } as const;
 
 export const verificationStatus = v.union(
-  v.literal(VERFICATION_STATUS.PENDING),
-  v.literal(VERFICATION_STATUS.VERIFIED),
-  v.literal(VERFICATION_STATUS.REJECTED),
+  v.literal(VERIFICATION_STATUS.PENDING),
+  v.literal(VERIFICATION_STATUS.VERIFIED),
+  v.literal(VERIFICATION_STATUS.REJECTED),
 );
 
 /**

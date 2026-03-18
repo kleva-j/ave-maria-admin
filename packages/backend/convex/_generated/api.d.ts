@@ -23,6 +23,8 @@ import type * as schemas_adminDashboardKpis from "../schemas/adminDashboardKpis.
 import type * as schemas_bankAccountDocuments from "../schemas/bankAccountDocuments.js";
 import type * as schemas_kycDocuments from "../schemas/kycDocuments.js";
 import type * as schemas_savingsPlanTemplates from "../schemas/savingsPlanTemplates.js";
+import type * as schemas_transactionReconciliationIssues from "../schemas/transactionReconciliationIssues.js";
+import type * as schemas_transactionReconciliationRuns from "../schemas/transactionReconciliationRuns.js";
 import type * as schemas_transactions from "../schemas/transactions.js";
 import type * as schemas_userBankAccountEvents from "../schemas/userBankAccountEvents.js";
 import type * as schemas_userBankAccounts from "../schemas/userBankAccounts.js";
@@ -30,6 +32,7 @@ import type * as schemas_userSavingsPlans from "../schemas/userSavingsPlans.js";
 import type * as schemas_users from "../schemas/users.js";
 import type * as schemas_withdrawals from "../schemas/withdrawals.js";
 import type * as shared from "../shared.js";
+import type * as transactions from "../transactions.js";
 import type * as types from "../types.js";
 import type * as users from "../users.js";
 import type * as utils from "../utils.js";
@@ -58,6 +61,8 @@ declare const fullApi: ApiFromModules<{
   "schemas/bankAccountDocuments": typeof schemas_bankAccountDocuments;
   "schemas/kycDocuments": typeof schemas_kycDocuments;
   "schemas/savingsPlanTemplates": typeof schemas_savingsPlanTemplates;
+  "schemas/transactionReconciliationIssues": typeof schemas_transactionReconciliationIssues;
+  "schemas/transactionReconciliationRuns": typeof schemas_transactionReconciliationRuns;
   "schemas/transactions": typeof schemas_transactions;
   "schemas/userBankAccountEvents": typeof schemas_userBankAccountEvents;
   "schemas/userBankAccounts": typeof schemas_userBankAccounts;
@@ -65,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   "schemas/users": typeof schemas_users;
   "schemas/withdrawals": typeof schemas_withdrawals;
   shared: typeof shared;
+  transactions: typeof transactions;
   types: typeof types;
   users: typeof users;
   utils: typeof utils;

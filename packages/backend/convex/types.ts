@@ -15,10 +15,9 @@ export type UserSavingsPlan = Doc<"user_savings_plans">;
 
 // KYC
 export type KycDocument = Doc<"kyc_documents">;
-export type KycData = {
-  user: User;
-  documents: KycDocument[];
-};
+export type KycDocumentId = Id<"kyc_documents">;
+
+export type KycData = { user: User; documents: KycDocument[] };
 
 // Bank Accounts
 export type UserBankAccount = Doc<"user_bank_accounts">;

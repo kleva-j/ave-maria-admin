@@ -1,7 +1,7 @@
 import { ConvexError, v } from "convex/values";
 
-import { mutation, query } from "./_generated/server";
 import { ensureAuthedUser, getAdminUser, getUser } from "./utils";
+import { mutation, query } from "./_generated/server";
 import { auditLog } from "./auditLog";
 import {
   bankAccountDocumentType,
@@ -10,6 +10,7 @@ import {
   DOCUMENT_TYPES,
   RESOURCE_TYPE,
   MAX_FILE_SIZE,
+  TABLE_NAMES,
   KYCStatus,
   kycStatus,
 } from "./shared";
@@ -93,7 +94,7 @@ export const uploadDocument = mutation({
     }
 
     const existingPending = await ctx.db
-      .query("kyc_documents")
+      .query(TABLE_NAMES.KYC_DOCUMENTS)
       .withIndex("by_user_id_and_status", (q) =>
         q.eq("user_id", user._id).eq("status", KYCStatus.PENDING),
       )
@@ -107,7 +108,7 @@ export const uploadDocument = mutation({
     }
 
     const now = Date.now();
-    const documentId = await ctx.db.insert("kyc_documents", {
+    const documentId = await ctx.db.insert(TABLE_NAMES.KYC_DOCUMENTS, {
       user_id: user._id,
       document_type: args.documentType,
       storage_id: args.storageId,
@@ -208,7 +209,7 @@ export const listMyDocuments = query({
     const user = await getUser(ctx);
 
     const docs = await ctx.db
-      .query("kyc_documents")
+      .query(TABLE_NAMES.KYC_DOCUMENTS)
       .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
       .collect();
 
@@ -231,7 +232,7 @@ export const listMyDocuments = query({
 });
 
 export const deleteDocument = mutation({
-  args: { documentId: v.id("kyc_documents") },
+  args: { documentId: v.id(TABLE_NAMES.KYC_DOCUMENTS) },
   returns: v.null(),
   handler: async (ctx, args) => {
     const user = await getUser(ctx);

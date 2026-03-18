@@ -1,15 +1,29 @@
 /**
  * Automated KYC verification pipeline with admin override support.
  */
-import type { KycData, KycDocument } from "./types";
+import type { KycData, KycDocument, KycDocumentId, UserId } from "./types";
 
 import { ConvexError, v } from "convex/values";
 
-import { action, internalAction, internalQuery, mutation, query } from "./_generated/server";
+import { getAdminUser, getUser } from "./utils";
 import { internal } from "./_generated/api";
 import { auditLog } from "./auditLog";
-import { DOCUMENT_TYPES, KYCStatus, RESOURCE_TYPE, UserStatus } from "./shared";
-import { getAdminUser, getUser } from "./utils";
+import {
+  KycDocumentType,
+  DOCUMENT_TYPES,
+  RESOURCE_TYPE,
+  TABLE_NAMES,
+  UserStatus,
+  KYCStatus,
+} from "./shared";
+
+import {
+  internalAction,
+  internalQuery,
+  mutation,
+  action,
+  query,
+} from "./_generated/server";
 
 const REQUIRED_KYC_DOCUMENTS = [
   DOCUMENT_TYPES.GOVERNMENT_ID,
@@ -68,10 +82,7 @@ export const verifyIdentity = action({
       reason: result.reason,
     });
 
-    return {
-      ...result,
-      userId: data.user._id,
-    };
+    return { ...result, userId: data.user._id };
   },
 });
 
@@ -121,7 +132,7 @@ export const getViewerKycData = internalQuery({
     const user = await getUser(ctx);
 
     const documents = await ctx.db
-      .query("kyc_documents")
+      .query(TABLE_NAMES.KYC_DOCUMENTS)
       .withIndex("by_user_id_and_status", (q) =>
         q.eq("user_id", user._id).eq("status", KYCStatus.PENDING),
       )
@@ -158,11 +169,11 @@ export const adminListPendingKyc = query({
     await getAdminUser(ctx);
 
     const pendingDocs = await ctx.db
-      .query("kyc_documents")
+      .query(TABLE_NAMES.KYC_DOCUMENTS)
       .withIndex("by_status", (q) => q.eq("status", KYCStatus.PENDING))
       .collect();
 
-    const grouped = new Map<string, (typeof pendingDocs)>();
+    const grouped = new Map<UserId, KycDocument[]>();
     for (const doc of pendingDocs) {
       const key = doc.user_id;
       const current = grouped.get(key);
@@ -174,15 +185,15 @@ export const adminListPendingKyc = query({
     }
 
     const rows: {
-      user_id: typeof pendingDocs[number]["user_id"];
+      user_id: UserId;
       first_name: string;
       last_name: string;
       email: string | undefined;
       phone: string;
       status: string;
       pending_documents: {
-        document_id: typeof pendingDocs[number]["_id"];
-        document_type: string;
+        document_id: KycDocumentId;
+        document_type: KycDocumentType;
         created_at: number;
         uploaded_at: number | undefined;
         file_name: string | undefined;
@@ -192,7 +203,7 @@ export const adminListPendingKyc = query({
     }[] = [];
 
     for (const [userId, docs] of grouped) {
-      const user = await ctx.db.get(userId as typeof docs[number]["user_id"]);
+      const user = await ctx.db.get(userId);
       if (!user) continue;
 
       docs.sort((a, b) => a.created_at - b.created_at);
@@ -217,8 +228,10 @@ export const adminListPendingKyc = query({
     }
 
     rows.sort((a, b) => {
-      const aOldest = a.pending_documents[0]?.created_at ?? Number.MAX_SAFE_INTEGER;
-      const bOldest = b.pending_documents[0]?.created_at ?? Number.MAX_SAFE_INTEGER;
+      const aOldest =
+        a.pending_documents[0]?.created_at ?? Number.MAX_SAFE_INTEGER;
+      const bOldest =
+        b.pending_documents[0]?.created_at ?? Number.MAX_SAFE_INTEGER;
       return aOldest - bOldest;
     });
 
@@ -254,7 +267,7 @@ export const adminReviewKyc = mutation({
     }
 
     const pendingDocs = await ctx.db
-      .query("kyc_documents")
+      .query(TABLE_NAMES.KYC_DOCUMENTS)
       .withIndex("by_user_id_and_status", (q) =>
         q.eq("user_id", args.userId).eq("status", KYCStatus.PENDING),
       )
@@ -264,7 +277,9 @@ export const adminReviewKyc = mutation({
       throw new ConvexError("No pending KYC documents to review");
     }
 
-    const nextUserStatus = args.approved ? UserStatus.ACTIVE : UserStatus.CLOSED;
+    const nextUserStatus = args.approved
+      ? UserStatus.ACTIVE
+      : UserStatus.CLOSED;
     await ctx.runMutation(internal.users.processKycResult, {
       userId: args.userId,
       approved: args.approved,

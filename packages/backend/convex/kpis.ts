@@ -1,9 +1,9 @@
-import type { UserStatus, PlanStatus } from "./shared";
+import { UserStatus, PlanStatus } from "./shared";
 
 import { isSameDay } from "date-fns";
 import { v } from "convex/values";
 
-import { planStatus, userStatus } from "./shared";
+import { planStatus, TABLE_NAMES, userStatus } from "./shared";
 import { internal } from "./_generated/api";
 import {
   internalMutation,
@@ -53,7 +53,7 @@ export const _getUsersPage = internalQuery({
   }),
   handler: async (ctx, args) => {
     const result = await ctx.db
-      .query("users")
+      .query(TABLE_NAMES.USERS)
       .paginate({ numItems: PAGE_SIZE, cursor: args.cursor });
 
     return {
@@ -83,7 +83,7 @@ export const _getPlansPage = internalQuery({
   }),
   handler: async (ctx, args) => {
     const result = await ctx.db
-      .query("user_savings_plans")
+      .query(TABLE_NAMES.USER_SAVINGS_PLANS)
       .paginate({ numItems: PAGE_SIZE, cursor: args.cursor });
 
     return {
@@ -113,14 +113,14 @@ export const _setDashboardKpis = internalMutation({
   handler: async (ctx, args) => {
     // Query the most recent KPI row by computed_at descending.
     const existing = await ctx.db
-      .query("admin_dashboard_kpis")
+      .query(TABLE_NAMES.ADMIN_DASHBOARD_KPIS)
       .withIndex("by_computed_at")
       .order("desc")
       .first();
 
     if (!existing || !isSameDay(existing.computed_at, args.computed_at)) {
       // New day (or first run) — insert a fresh snapshot.
-      await ctx.db.insert("admin_dashboard_kpis", args);
+      await ctx.db.insert(TABLE_NAMES.ADMIN_DASHBOARD_KPIS, args);
     } else {
       // Same day — update in place.
       await ctx.db.patch(existing._id, args);
@@ -150,7 +150,7 @@ export const refreshDashboardKpis = internalAction({
 
       for (const user of result.page) {
         totalAumKobo += user.total_balance_kobo;
-        if (user.status === "active") {
+        if (user.status === UserStatus.ACTIVE) {
           activeUsers += 1;
         }
       }
@@ -172,7 +172,7 @@ export const refreshDashboardKpis = internalAction({
 
       for (const plan of result.page) {
         totalSavingsKobo += plan.current_amount_kobo;
-        if (plan.status === "active") {
+        if (plan.status === PlanStatus.ACTIVE) {
           activePlans += 1;
         }
       }

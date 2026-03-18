@@ -9,7 +9,7 @@ import type {
 
 import { ConvexError } from "convex/values";
 
-import { UserStatus } from "./shared";
+import { TABLE_NAMES, UserStatus } from "./shared";
 import { authKit } from "./auth";
 
 export function withUser(
@@ -62,7 +62,7 @@ export async function ensureAuthedUser(ctx: Context) {
   if (!authUser) throw new ConvexError("Not authenticated");
 
   const user = await ctx.db
-    .query("users")
+    .query(TABLE_NAMES.USERS)
     .withIndex("by_workos_id", (q) => q.eq("workosId", authUser.id))
     .unique();
 
@@ -84,7 +84,7 @@ export async function getUser(ctx: Context) {
   }
 
   const user = await ctx.db
-    .query("users")
+    .query(TABLE_NAMES.USERS)
     .withIndex("by_workos_id", (q) => q.eq("workosId", authUser.id))
     .unique();
 
@@ -110,7 +110,7 @@ export async function getUserWithStatus(ctx: Context, status: UserStatus) {
   }
 
   const user = await ctx.db
-    .query("users")
+    .query(TABLE_NAMES.USERS)
     .withIndex("by_workos_id_and_status", (q) =>
       q.eq("workosId", authUser.id).eq("status", status),
     )
@@ -148,7 +148,7 @@ export async function getAdminUser(ctx: Context) {
   }
 
   const admin = await ctx.db
-    .query("admin_users")
+    .query(TABLE_NAMES.ADMIN_USERS)
     .withIndex("by_workos_id", (q) => q.eq("workosId", authUser.id))
     .unique();
 

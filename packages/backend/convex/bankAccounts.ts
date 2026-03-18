@@ -23,10 +23,11 @@ import { ConvexError, v } from "convex/values";
 import { sortAccounts, getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
 import {
-  VERFICATION_STATUS,
+  VERIFICATION_STATUS,
   verificationStatus,
   DOCUMENT_TYPES,
   RESOURCE_TYPE,
+  TABLE_NAMES,
   EVENT_TYPE,
   eventType,
 } from "./shared";
@@ -174,7 +175,7 @@ async function logAccountEvent(
     actorAdminId?: AdminUserId;
   },
 ) {
-  await ctx.db.insert("user_bank_account_events", {
+  await ctx.db.insert(TABLE_NAMES.USER_BANK_ACCOUNT_EVENTS, {
     user_id: params.userId,
     account_id: params.accountId,
     event_type: params.eventType,
@@ -211,7 +212,7 @@ async function unsetOtherPrimaries(
   actorAdminId?: AdminUserId,
 ) {
   const primaries = await ctx.db
-    .query("user_bank_accounts")
+    .query(TABLE_NAMES.USER_BANK_ACCOUNTS)
     .withIndex("by_user_id_and_is_primary", (q) =>
       q.eq("user_id", userId).eq("is_primary", true),
     )
@@ -258,7 +259,7 @@ export const listMine = internalQuery({
 
     // Fetch all bank accounts for this user using indexed query for performance
     const accounts = await ctx.db
-      .query("user_bank_accounts")
+      .query(TABLE_NAMES.USER_BANK_ACCOUNTS)
       .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
       .collect();
 
@@ -282,7 +283,7 @@ export const listMineMasked = query({
 
     // Fetch all accounts and mask sensitive data before returning
     const accounts = await ctx.db
-      .query("user_bank_accounts")
+      .query(TABLE_NAMES.USER_BANK_ACCOUNTS)
       .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
       .collect();
 
@@ -309,7 +310,7 @@ export const listMyEvents = query({
 
     // Return complete audit trail for this user's accounts
     return await ctx.db
-      .query("user_bank_account_events")
+      .query(TABLE_NAMES.USER_BANK_ACCOUNT_EVENTS)
       .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
       .collect();
   },
@@ -339,7 +340,7 @@ export const listEventsForAccount = query({
     }
 
     return await ctx.db
-      .query("user_bank_account_events")
+      .query(TABLE_NAMES.USER_BANK_ACCOUNT_EVENTS)
       .withIndex("by_account_id", (q) => q.eq("account_id", args.account_id))
       .collect();
   },
@@ -378,7 +379,7 @@ export const create = mutation({
 
     // Check for duplicate account numbers across the entire system
     const duplicate = await ctx.db
-      .query("user_bank_accounts")
+      .query(TABLE_NAMES.USER_BANK_ACCOUNTS)
       .withIndex("by_account_number", (q) =>
         q.eq("account_number", args.account_number),
       )
@@ -390,7 +391,7 @@ export const create = mutation({
 
     // Check if user already has a primary account
     const existingPrimary = await ctx.db
-      .query("user_bank_accounts")
+      .query(TABLE_NAMES.USER_BANK_ACCOUNTS)
       .withIndex("by_user_id_and_is_primary", (q) =>
         q.eq("user_id", user._id).eq("is_primary", true),
       )
@@ -401,7 +402,7 @@ export const create = mutation({
     const now = Date.now();
 
     // Insert the new account with initial state
-    const accountId = await ctx.db.insert("user_bank_accounts", {
+    const accountId = await ctx.db.insert(TABLE_NAMES.USER_BANK_ACCOUNTS, {
       user_id: user._id,
       bank_name: args.bank_name,
       account_number: args.account_number,
@@ -409,7 +410,7 @@ export const create = mutation({
       is_primary: shouldBePrimary,
       created_at: now,
       updated_at: now,
-      verification_status: VERFICATION_STATUS.PENDING, // Start with pending verification - requires admin approval
+      verification_status: VERIFICATION_STATUS.PENDING, // Start with pending verification - requires admin approval
     });
 
     // If this is now primary, remove primary from other accounts
@@ -544,7 +545,7 @@ export const setPrimary = mutation({
     }
 
     // BUSINESS RULE: Only verified accounts can be set as primary
-    if (account.verification_status !== "verified") {
+    if (account.verification_status !== VERIFICATION_STATUS.VERIFIED) {
       throw new ConvexError("Only verified accounts can be set as primary");
     }
 
@@ -648,7 +649,7 @@ export const remove = mutation({
     // This ensures user always has a primary account if any remain
     if (wasPrimary) {
       const remaining = await ctx.db
-        .query("user_bank_accounts")
+        .query(TABLE_NAMES.USER_BANK_ACCOUNTS)
         .withIndex("by_user_id", (q) => q.eq("user_id", user._id))
         .collect();
 
@@ -656,7 +657,7 @@ export const remove = mutation({
         // BUSINESS LOGIC: Oldest account becomes new primary (most established)
         // Only promote verified accounts
         const verifiedRemaining = remaining.filter(
-          (a) => a.verification_status === VERFICATION_STATUS.VERIFIED,
+          (a) => a.verification_status === VERIFICATION_STATUS.VERIFIED,
         );
 
         if (verifiedRemaining.length > 0) {
@@ -725,7 +726,7 @@ export const setVerificationStatus = internalMutation({
     };
 
     // Track when account was verified - important for compliance
-    if (args.status === VERFICATION_STATUS.VERIFIED) {
+    if (args.status === VERIFICATION_STATUS.VERIFIED) {
       patch.verified_at = now;
     }
 
@@ -793,22 +794,22 @@ export const submitForVerification = mutation({
     }
 
     // Prevent duplicate submissions
-    if (account.verification_status === VERFICATION_STATUS.VERIFIED) {
+    if (account.verification_status === VERIFICATION_STATUS.VERIFIED) {
       throw new ConvexError("Account is already verified");
     }
 
     if (
       account.verification_submitted_at &&
-      account.verification_status === VERFICATION_STATUS.PENDING
+      account.verification_status === VERIFICATION_STATUS.PENDING
     ) {
       throw new ConvexError("Account already submitted for verification");
     }
 
     // Check for required documents
     const documents = await ctx.db
-      .query("bank_account_documents")
+      .query(TABLE_NAMES.BANK_ACCOUNT_DOCUMENTS)
       .withIndex("by_account_id", (q) => q.eq("account_id", args.account_id))
-      .filter((q) => q.eq(q.field("status"), VERFICATION_STATUS.PENDING))
+      .filter((q) => q.eq(q.field("status"), VERIFICATION_STATUS.PENDING))
       .collect();
 
     const uploadedDocTypes = documents.map((d) => d.document_type);
@@ -829,7 +830,7 @@ export const submitForVerification = mutation({
 
     // Update account status to pending verification
     await ctx.db.patch(args.account_id, {
-      verification_status: VERFICATION_STATUS.PENDING,
+      verification_status: VERIFICATION_STATUS.PENDING,
       verification_submitted_at: now,
       updated_at: now,
     });
@@ -860,7 +861,7 @@ export const submitForVerification = mutation({
       previous,
       next: {
         ...accountSnapshot(updated),
-        verification_status: VERFICATION_STATUS.PENDING,
+        verification_status: VERIFICATION_STATUS.PENDING,
         documents_submitted: uploadedDocTypes,
       },
       actorUserId: user._id,
