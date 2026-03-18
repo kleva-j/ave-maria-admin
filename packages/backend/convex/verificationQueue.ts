@@ -211,6 +211,10 @@ export const getVerificationDetails = query({
       throw new ConvexError("User not found");
     }
 
+    if (user.status === "suspended" || user.status === "closed") {
+      throw new ConvexError(`User is ${user.status}`);
+    }
+
     const documents = await ctx.db
       .query("bank_account_documents")
       .withIndex("by_account_id", (q) => q.eq("account_id", args.accountId))
@@ -371,6 +375,13 @@ export const approveVerification = mutation({
       throw new ConvexError("Account not found");
     }
 
+    const user = await ctx.db.get(account.user_id);
+    if (!user || user.status === "suspended" || user.status === "closed") {
+      throw new ConvexError(
+        `Cannot approve: User is ${user?.status ?? "not found"}`,
+      );
+    }
+
     if (account.verification_status === "verified") {
       throw new ConvexError("Account is already verified");
     }
@@ -472,6 +483,13 @@ export const rejectVerification = mutation({
     const account = await ctx.db.get(args.accountId);
     if (!account) {
       throw new ConvexError("Account not found");
+    }
+
+    const user = await ctx.db.get(account.user_id);
+    if (!user || user.status === "suspended" || user.status === "closed") {
+      throw new ConvexError(
+        `Cannot reject: User is ${user?.status ?? "not found"}`,
+      );
     }
 
     if (account.verification_status === KYC_VERIFICATION_STATUS.REJECTED) {

@@ -17,6 +17,7 @@ import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
 import { getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
+import { StorageId } from "./types";
 import {
   KYC_VERIFICATION_STATUS,
   bankAccountDocumentType,
@@ -183,7 +184,7 @@ export const getUploadUrl = mutation({
     // Generate upload URL - client will upload directly to storage
     const uploadUrl = await ctx.storage.generateUploadUrl();
 
-    return { uploadUrl, storageId: uploadUrl as any }; // Storage ID is embedded in URL
+    return { uploadUrl, storageId: uploadUrl as StorageId }; // Storage ID is embedded in URL
   },
 });
 

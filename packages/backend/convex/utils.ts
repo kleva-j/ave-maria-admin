@@ -1,8 +1,46 @@
+import type {
+  UserBankAccount,
+  AdminUserId,
+  AdminUser,
+  Context,
+  UserId,
+  User,
+} from "./types";
+
 import { ConvexError } from "convex/values";
 
-import { MutationCtx, QueryCtx } from "./_generated/server";
-import { Doc, Id } from "./_generated/dataModel";
+import { UserStatus } from "./shared";
 import { authKit } from "./auth";
+
+export function withUser(
+  func: (ctx: Context & { user: User }, ...args: any[]) => Promise<any>,
+) {
+  return async (ctx: Context, ...args: any[]) => {
+    const user = await getUser(ctx);
+    return await func({ ...ctx, user }, ...args);
+  };
+}
+
+export function withActiveUser(
+  func: (ctx: Context & { user: User }, ...args: any[]) => Promise<any>,
+) {
+  return async (ctx: Context, ...args: any[]) => {
+    const user = await getUserWithStatus(ctx, "active");
+    return await func({ ...ctx, user }, ...args);
+  };
+}
+
+export function withAdminUser(
+  func: (
+    ctx: Context & { adminUser: AdminUser },
+    ...args: any[]
+  ) => Promise<any>,
+) {
+  return async (ctx: Context, ...args: any[]) => {
+    const adminUser = await getAdminUser(ctx);
+    return await func({ ...ctx, adminUser }, ...args);
+  };
+}
 
 /**
  * Ensures that a user exists in the database
@@ -11,10 +49,7 @@ import { authKit } from "./auth";
  * @param userId - ID of the user to ensure
  * @throws ConvexError if the user does not exist
  */
-export async function ensureUser(
-  ctx: MutationCtx | QueryCtx,
-  userId: Id<"users">,
-) {
+export async function ensureUser(ctx: Context, userId: UserId) {
   const user = await ctx.db.get(userId);
   if (!user) {
     throw new ConvexError("User not found");
@@ -29,7 +64,7 @@ export async function ensureUser(
  * @returns User record from database
  * @throws ConvexError if not authenticated or user not found
  */
-export async function getUser(ctx: QueryCtx | MutationCtx) {
+export async function getUser(ctx: Context) {
   const authUser = await authKit.getAuthUser(ctx);
   if (!authUser) {
     throw new ConvexError("Not authenticated");
@@ -47,10 +82,35 @@ export async function getUser(ctx: QueryCtx | MutationCtx) {
   return user;
 }
 
-export async function ensureAdminUser(
-  ctx: QueryCtx | MutationCtx,
-  userId: Id<"admin_users">,
-) {
+/**
+ * Retrieves the authenticated user from the database
+ * Uses WorkOS authentication ID to lookup user record
+ *
+ * @param ctx - Query or mutation context
+ * @returns User record from database
+ * @throws ConvexError if not authenticated or user not found
+ */
+export async function getUserWithStatus(ctx: Context, status: UserStatus) {
+  const authUser = await authKit.getAuthUser(ctx);
+  if (!authUser) {
+    throw new ConvexError("Not authenticated");
+  }
+
+  const user = await ctx.db
+    .query("users")
+    .withIndex("by_workos_id_and_status", (q) =>
+      q.eq("workosId", authUser.id).eq("status", status),
+    )
+    .unique();
+
+  if (!user) {
+    throw new ConvexError("User not found");
+  }
+
+  return user;
+}
+
+export async function ensureAdminUser(ctx: Context, userId: AdminUserId) {
   const adminUser = await ctx.db.get(userId);
 
   if (!adminUser) throw new ConvexError("Not authorized");
@@ -68,7 +128,7 @@ export async function ensureAdminUser(
  * @returns Admin user record from database
  * @throws ConvexError if not authenticated or not an admin
  */
-export async function getAdminUser(ctx: QueryCtx | MutationCtx) {
+export async function getAdminUser(ctx: Context) {
   const authUser = await authKit.getAuthUser(ctx);
   if (!authUser) {
     throw new ConvexError("Not authenticated");
@@ -92,7 +152,7 @@ export async function getAdminUser(ctx: QueryCtx | MutationCtx) {
  * @param accounts - List of bank accounts to sort
  * @returns Sorted list of accounts
  */
-export function sortAccounts(accounts: Doc<"user_bank_accounts">[]) {
+export function sortAccounts(accounts: UserBankAccount[]) {
   return [...accounts].sort((a, b) => {
     if (a.is_primary !== b.is_primary) {
       return a.is_primary ? -1 : 1;

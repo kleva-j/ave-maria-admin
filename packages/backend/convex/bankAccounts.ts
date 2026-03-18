@@ -14,9 +14,9 @@
  * - user_bank_account_events: Immutable event log for all account changes
  */
 
+import type { AdminUserId, UserBankAccountId, UserId } from "./types";
 import type { VerificationStatus, EventType } from "./shared";
 import type { MutationCtx } from "./_generated/server";
-import type { Id } from "./_generated/dataModel";
 
 import { ConvexError, v } from "convex/values";
 
@@ -118,9 +118,9 @@ function accountSnapshot(account: {
  * @returns Masked account record safe for client consumption
  */
 function toMaskedAccount(account: {
-  _id: Id<"user_bank_accounts">;
+  _id: UserBankAccountId;
   _creationTime: number;
-  user_id: Id<"users">;
+  user_id: UserId;
   bank_name: string;
   account_number: string;
   account_name?: string;
@@ -165,13 +165,13 @@ function toMaskedAccount(account: {
 async function logAccountEvent(
   ctx: MutationCtx,
   params: {
-    userId: Id<"users">;
-    accountId: Id<"user_bank_accounts">;
+    userId: UserId;
+    accountId: UserBankAccountId;
     eventType: EventType;
     previous?: Record<string, unknown> | null;
     next?: Record<string, unknown> | null;
-    actorUserId?: Id<"users">;
-    actorAdminId?: Id<"admin_users">;
+    actorUserId?: UserId;
+    actorAdminId?: AdminUserId;
   },
 ) {
   await ctx.db.insert("user_bank_account_events", {
@@ -204,11 +204,11 @@ async function logAccountEvent(
  */
 async function unsetOtherPrimaries(
   ctx: MutationCtx,
-  userId: Id<"users">,
-  keepId: Id<"user_bank_accounts">,
+  userId: UserId,
+  keepId: UserBankAccountId,
   updatedAt: number,
-  actorUserId?: Id<"users">,
-  actorAdminId?: Id<"admin_users">,
+  actorUserId?: UserId,
+  actorAdminId?: AdminUserId,
 ) {
   const primaries = await ctx.db
     .query("user_bank_accounts")

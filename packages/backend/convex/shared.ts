@@ -19,84 +19,173 @@ export const bankAccountDocumentType = v.union(
 
 export type BankAccountDocumentType = typeof bankAccountDocumentType.type;
 
+/**
+ * User status
+ */
+export const UserStatus = {
+  ACTIVE: "active",
+  PENDING_KYC: "pending_kyc",
+  SUSPENDED: "suspended",
+  CLOSED: "closed",
+} as const;
+
 export const userStatus = v.union(
-  v.literal("active"),
-  v.literal("pending_kyc"),
-  v.literal("suspended"),
-  v.literal("closed"),
+  v.literal(UserStatus.ACTIVE),
+  v.literal(UserStatus.PENDING_KYC),
+  v.literal(UserStatus.SUSPENDED),
+  v.literal(UserStatus.CLOSED),
 );
 
 export type UserStatus = typeof userStatus.type;
 
+/**
+ * Plan status
+ */
+export const PlanStatus = {
+  ACTIVE: "active",
+  PAUSED: "paused",
+  COMPLETED: "completed",
+  EXPIRED: "expired",
+} as const;
+
 export const planStatus = v.union(
-  v.literal("active"),
-  v.literal("paused"),
-  v.literal("completed"),
-  v.literal("expired"),
+  v.literal(PlanStatus.ACTIVE),
+  v.literal(PlanStatus.PAUSED),
+  v.literal(PlanStatus.COMPLETED),
+  v.literal(PlanStatus.EXPIRED),
 );
 
 export type PlanStatus = typeof planStatus.type;
 
+/**
+ * Transaction types
+ */
+export const TxnType = {
+  CONTRIBUTION: "contribution",
+  INTEREST_ACCRUAL: "interest_accrual",
+  WITHDRAWAL: "withdrawal",
+  REFERRAL_BONUS: "referral_bonus",
+  REVERSAL: "reversal",
+  INVESTMENT_YIELD: "investment_yield",
+} as const;
+
 export const txnType = v.union(
-  v.literal("contribution"),
-  v.literal("interest_accrual"),
-  v.literal("withdrawal"),
-  v.literal("referral_bonus"),
-  v.literal("reversal"),
-  v.literal("investment_yield"),
+  v.literal(TxnType.CONTRIBUTION),
+  v.literal(TxnType.INTEREST_ACCRUAL),
+  v.literal(TxnType.WITHDRAWAL),
+  v.literal(TxnType.REFERRAL_BONUS),
+  v.literal(TxnType.REVERSAL),
+  v.literal(TxnType.INVESTMENT_YIELD),
 );
 
 export type TxnType = typeof txnType.type;
 
+/**
+ * Withdrawal status for bank accounts
+ */
+export const WithdrawalStatus = {
+  PENDING: "pending",
+  APPROVED: "approved",
+  REJECTED: "rejected",
+  PROCESSED: "processed",
+} as const;
+
 export const withdrawalStatus = v.union(
-  v.literal("pending"),
-  v.literal("approved"),
-  v.literal("rejected"),
-  v.literal("processed"),
+  v.literal(WithdrawalStatus.PENDING),
+  v.literal(WithdrawalStatus.APPROVED),
+  v.literal(WithdrawalStatus.REJECTED),
+  v.literal(WithdrawalStatus.PROCESSED),
 );
 
 export type WithdrawalStatus = typeof withdrawalStatus.type;
 
+/**
+ * KYC status for bank accounts
+ */
+export const KYCStatus = {
+  PENDING: "pending",
+  APPROVED: "approved",
+  REJECTED: "rejected",
+} as const;
+
 export const kycStatus = v.union(
-  v.literal("pending"),
-  v.literal("approved"),
-  v.literal("rejected"),
+  v.literal(KYCStatus.PENDING),
+  v.literal(KYCStatus.APPROVED),
+  v.literal(KYCStatus.REJECTED),
 );
 
 export type KycStatus = typeof kycStatus.type;
 
+/**
+ * Admin roles
+ */
+export const AdminRole = {
+  SUPER_ADMIN: "super_admin",
+  OPERATIONS: "operations",
+  FINANCE: "finance",
+  COMPLIANCE: "compliance",
+  SUPPORT: "support",
+} as const;
+
 export const adminRole = v.union(
-  v.literal("super_admin"),
-  v.literal("operations"),
-  v.literal("finance"),
-  v.literal("compliance"),
-  v.literal("support"),
+  v.literal(AdminRole.SUPER_ADMIN),
+  v.literal(AdminRole.OPERATIONS),
+  v.literal(AdminRole.FINANCE),
+  v.literal(AdminRole.COMPLIANCE),
+  v.literal(AdminRole.SUPPORT),
 );
 
 export type AdminRole = typeof adminRole.type;
 
+/**
+ * Bank account verification status
+ */
+export const BankAccountVerificationStatus = {
+  PENDING: "pending",
+  VERIFIED: "verified",
+  REJECTED: "rejected",
+} as const;
+
 export const bankAccountVerificationStatus = v.union(
-  v.literal("pending"),
-  v.literal("verified"),
-  v.literal("rejected"),
+  v.literal(BankAccountVerificationStatus.PENDING),
+  v.literal(BankAccountVerificationStatus.VERIFIED),
+  v.literal(BankAccountVerificationStatus.REJECTED),
 );
 
 export type BankAccountVerificationStatus =
   typeof bankAccountVerificationStatus.type;
 
+/**
+ * Bank account event types
+ */
+export const BankAccountEventType = {
+  CREATED: "created",
+  UPDATED: "updated",
+  SET_PRIMARY: "set_primary",
+  VERIFICATION_STATUS_CHANGED: "verification_status_changed",
+  DELETED: "deleted",
+  DOCUMENT_UPLOADED: "document_uploaded",
+  VERIFICATION_SUBMITTED: "verification_submitted",
+  VERIFICATION_APPROVED: "verification_approved",
+  VERIFICATION_REJECTED: "verification_rejected",
+  KYC_VERIFICATION_STARTED: "kyc_verification_started",
+  KYC_VERIFICATION_COMPLETED: "kyc_verification_completed",
+  KYC_VERIFICATION_FAILED: "kyc_verification_failed",
+} as const;
+
 export const bankAccountEventType = v.union(
-  v.literal("created"),
-  v.literal("updated"),
-  v.literal("set_primary"),
-  v.literal("verification_status_changed"),
-  v.literal("deleted"),
-  v.literal("document_uploaded"),
-  v.literal("verification_submitted"),
-  v.literal("verification_approved"),
-  v.literal("verification_rejected"),
-  v.literal("kyc_verification_started"),
-  v.literal("kyc_verification_completed"),
-  v.literal("kyc_verification_failed"),
+  v.literal(BankAccountEventType.CREATED),
+  v.literal(BankAccountEventType.UPDATED),
+  v.literal(BankAccountEventType.SET_PRIMARY),
+  v.literal(BankAccountEventType.VERIFICATION_STATUS_CHANGED),
+  v.literal(BankAccountEventType.DELETED),
+  v.literal(BankAccountEventType.DOCUMENT_UPLOADED),
+  v.literal(BankAccountEventType.VERIFICATION_SUBMITTED),
+  v.literal(BankAccountEventType.VERIFICATION_APPROVED),
+  v.literal(BankAccountEventType.VERIFICATION_REJECTED),
+  v.literal(BankAccountEventType.KYC_VERIFICATION_STARTED),
+  v.literal(BankAccountEventType.KYC_VERIFICATION_COMPLETED),
+  v.literal(BankAccountEventType.KYC_VERIFICATION_FAILED),
 );
 
 export type BankAccountEventType = typeof bankAccountEventType.type;
@@ -163,6 +252,9 @@ export const verificationStatus = v.union(
   v.literal(VERFICATION_STATUS.REJECTED),
 );
 
+/**
+ * KYC verification status for bank accounts
+ */
 export const KYC_VERIFICATION_STATUS = {
   PENDING: "pending",
   APPROVED: "approved",

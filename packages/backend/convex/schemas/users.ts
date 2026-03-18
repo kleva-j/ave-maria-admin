@@ -31,7 +31,8 @@ export const users = defineTable({
   .index("by_email", ["email"])
   .index("by_referral_code", ["referral_code"])
   .index("by_referred_by", ["referred_by"])
-  .index("by_status", ["status"]);
+  .index("by_status", ["status"])
+  .index("by_workos_id_and_status", ["workosId", "status"]);
 
 export const admin_users = defineTable({
   workosId: v.string(),

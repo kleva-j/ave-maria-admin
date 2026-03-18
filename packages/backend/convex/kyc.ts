@@ -1,14 +1,13 @@
 /**
  * Automated KYC verification pipeline
  */
+import type { KycData, KycDocument } from "./types";
+
 import { ConvexError, v } from "convex/values";
 
 import { action, internalAction, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { getUser } from "./utils";
-
-// We need to use `any` cast temporarily for `internal.kyc` since the types haven't
-// generated yet (the file is new), but we know it will exist once Convex syncs.
 
 /**
  * Main action to trigger the identity verification process.
@@ -23,7 +22,7 @@ export const verifyIdentity = action({
   }),
   handler: async (ctx) => {
     // 1. Fetch user data and pending documents for the currently authenticated user
-    const data = await ctx.runQuery(internal.kyc.getViewerKycData);
+    const data: KycData = await ctx.runQuery(internal.kyc.getViewerKycData);
 
     if (data.documents.length === 0) {
       throw new ConvexError("No pending KYC documents found to verify");
@@ -34,10 +33,13 @@ export const verifyIdentity = action({
     }
 
     // 2. Call the provider (Simulation)
-    const result: any = await ctx.runAction(internal.kyc.simulateKycProvider, {
-      userId: data.user._id,
-      documentTypes: data.documents.map((d: any) => d.document_type),
-    });
+    const result: { approved: boolean; reason: string } = await ctx.runAction(
+      internal.kyc.simulateKycProvider,
+      {
+        userId: data.user._id,
+        documentTypes: data.documents.map((d: KycDocument) => d.document_type),
+      },
+    );
 
     // 3. Process the KYC result via internal mutation
     await ctx.runMutation(internal.users.processKycResult, {
@@ -46,7 +48,10 @@ export const verifyIdentity = action({
       reason: result.reason,
     });
 
-    return result;
+    return {
+      ...result,
+      userId: data.user._id,
+    };
   },
 });
 
@@ -62,7 +67,7 @@ export const simulateKycProvider = internalAction({
     approved: v.boolean(),
     reason: v.string(),
   }),
-  handler: async (ctx, args) => {
+  handler: async () => {
     // Simulate network latency (2 seconds)
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
