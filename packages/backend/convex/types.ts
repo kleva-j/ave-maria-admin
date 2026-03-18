@@ -1,5 +1,5 @@
+import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
-import { QueryCtx, MutationCtx } from "./_generated/server";
 
 export type Context = QueryCtx | MutationCtx;
 
@@ -25,6 +25,12 @@ export type UserBankAccountEventId = Id<"user_bank_account_events">;
 
 export type BankAccountDocument = Doc<"bank_account_documents">;
 export type BankAccountDocumentId = Id<"bank_account_documents">;
+
+// Transactions and withdrawals
+export type Transaction = Doc<"transactions">;
+export type TransactionId = Id<"transactions">;
+export type Withdrawal = Doc<"withdrawals">;
+export type WithdrawalId = Id<"withdrawals">;
 
 // Storage
 export type StorageId = Id<"_storage">;

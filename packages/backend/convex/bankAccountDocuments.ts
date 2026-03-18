@@ -12,12 +12,13 @@
  * Database Tables:
  * - bank_account_documents: Stores document metadata and references
  */
+import type { StorageId } from "./types";
+
 import { ConvexError, v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
 import { getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
-import { StorageId } from "./types";
 import {
   KYC_VERIFICATION_STATUS,
   bankAccountDocumentType,

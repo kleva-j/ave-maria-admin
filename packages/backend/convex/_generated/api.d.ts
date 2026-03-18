@@ -34,6 +34,7 @@ import type * as types from "../types.js";
 import type * as users from "../users.js";
 import type * as utils from "../utils.js";
 import type * as verificationQueue from "../verificationQueue.js";
+import type * as withdrawals from "../withdrawals.js";
 
 import type {
   ApiFromModules,
@@ -68,6 +69,7 @@ declare const fullApi: ApiFromModules<{
   users: typeof users;
   utils: typeof utils;
   verificationQueue: typeof verificationQueue;
+  withdrawals: typeof withdrawals;
 }>;
 
 /**
