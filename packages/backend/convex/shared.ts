@@ -1,5 +1,10 @@
 import { v } from "convex/values";
 
+// Constants for file validation
+export const MAX_FILE_SIZE = 5 * 1024 * 1024;
+export const ALLOWED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png"];
+export const ALLOWED_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png"];
+
 export const DOCUMENT_TYPES = {
   GOVERNMENT_ID: "government_id",
   PROOF_OF_ADDRESS: "proof_of_address",

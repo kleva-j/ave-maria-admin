@@ -56,6 +56,19 @@ export async function ensureUser(ctx: Context, userId: UserId) {
   }
   return user;
 }
+
+export async function ensureAuthedUser(ctx: Context) {
+  const authUser = await authKit.getAuthUser(ctx);
+  if (!authUser) throw new ConvexError("Not authenticated");
+
+  const user = await ctx.db
+    .query("users")
+    .withIndex("by_workos_id", (q) => q.eq("workosId", authUser.id))
+    .unique();
+
+  if (!user) throw new ConvexError("User not found");
+}
+
 /**
  * Retrieves the authenticated user from the database
  * Uses WorkOS authentication ID to lookup user record

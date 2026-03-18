@@ -21,16 +21,14 @@ import { StorageId } from "./types";
 import {
   KYC_VERIFICATION_STATUS,
   bankAccountDocumentType,
+  ALLOWED_EXTENSIONS,
+  ALLOWED_MIME_TYPES,
   VERFICATION_STATUS,
   DOCUMENT_TYPES,
+  MAX_FILE_SIZE,
   RESOURCE_TYPE,
   EVENT_TYPE,
 } from "./shared";
-
-// Constants for file validation
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-const ALLOWED_MIME_TYPES = ["application/pdf", "image/jpeg", "image/png"];
-const ALLOWED_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png"];
 
 /**
  * Verification requirements for bank accounts

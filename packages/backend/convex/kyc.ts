@@ -1,13 +1,20 @@
 /**
- * Automated KYC verification pipeline
+ * Automated KYC verification pipeline with admin override support.
  */
 import type { KycData, KycDocument } from "./types";
 
 import { ConvexError, v } from "convex/values";
 
-import { action, internalAction, internalQuery } from "./_generated/server";
+import { action, internalAction, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { getUser } from "./utils";
+import { auditLog } from "./auditLog";
+import { DOCUMENT_TYPES, KYCStatus, RESOURCE_TYPE, UserStatus } from "./shared";
+import { getAdminUser, getUser } from "./utils";
+
+const REQUIRED_KYC_DOCUMENTS = [
+  DOCUMENT_TYPES.GOVERNMENT_ID,
+  DOCUMENT_TYPES.SELFIE_WITH_ID,
+] as const;
 
 /**
  * Main action to trigger the identity verification process.
@@ -28,8 +35,21 @@ export const verifyIdentity = action({
       throw new ConvexError("No pending KYC documents found to verify");
     }
 
-    if (data.user.status !== "pending_kyc") {
+    if (data.user.status !== UserStatus.PENDING_KYC) {
       throw new ConvexError("User is not in pending_kyc status");
+    }
+
+    const submittedTypes = new Set(
+      data.documents.map((d: KycDocument) => d.document_type),
+    );
+    const missingRequired = REQUIRED_KYC_DOCUMENTS.filter(
+      (docType) => !submittedTypes.has(docType),
+    );
+
+    if (missingRequired.length > 0) {
+      throw new ConvexError(
+        `Missing required KYC documents: ${missingRequired.join(", ")}`,
+      );
     }
 
     // 2. Call the provider (Simulation)
@@ -76,40 +96,201 @@ export const simulateKycProvider = internalAction({
 
     if (isApproved) {
       return { approved: true, reason: "Automatically verified by provider" };
-    } else {
-      const reasons = [
-        "Document illegible or blurry",
-        "Face mismatch with government ID",
-        "ID expired or invalid",
-        "Suspected fraudulent document",
-      ];
-      return {
-        approved: false,
-        reason: reasons[Math.floor(Math.random() * reasons.length)],
-      };
     }
+
+    const reasons = [
+      "Document illegible or blurry",
+      "Face mismatch with government ID",
+      "ID expired or invalid",
+      "Suspected fraudulent document",
+    ];
+    return {
+      approved: false,
+      reason: reasons[Math.floor(Math.random() * reasons.length)],
+    };
   },
 });
 
 /**
  * Internal query to fetch the authenticated user and their pending documents
- * safely for the action
+ * safely for the action.
  */
 export const getViewerKycData = internalQuery({
   args: {},
   handler: async (ctx) => {
     const user = await getUser(ctx);
-    if (!user) {
-      throw new ConvexError("User not found");
-    }
 
     const documents = await ctx.db
       .query("kyc_documents")
       .withIndex("by_user_id_and_status", (q) =>
-        q.eq("user_id", user._id).eq("status", "pending"),
+        q.eq("user_id", user._id).eq("status", KYCStatus.PENDING),
       )
       .collect();
 
     return { user, documents };
+  },
+});
+
+export const adminListPendingKyc = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      user_id: v.id("users"),
+      first_name: v.string(),
+      last_name: v.string(),
+      email: v.optional(v.string()),
+      phone: v.string(),
+      status: v.string(),
+      pending_documents: v.array(
+        v.object({
+          document_id: v.id("kyc_documents"),
+          document_type: v.string(),
+          created_at: v.number(),
+          uploaded_at: v.optional(v.number()),
+          file_name: v.optional(v.string()),
+          file_size: v.optional(v.number()),
+          mime_type: v.optional(v.string()),
+        }),
+      ),
+    }),
+  ),
+  handler: async (ctx) => {
+    await getAdminUser(ctx);
+
+    const pendingDocs = await ctx.db
+      .query("kyc_documents")
+      .withIndex("by_status", (q) => q.eq("status", KYCStatus.PENDING))
+      .collect();
+
+    const grouped = new Map<string, (typeof pendingDocs)>();
+    for (const doc of pendingDocs) {
+      const key = doc.user_id;
+      const current = grouped.get(key);
+      if (current) {
+        current.push(doc);
+      } else {
+        grouped.set(key, [doc]);
+      }
+    }
+
+    const rows: {
+      user_id: typeof pendingDocs[number]["user_id"];
+      first_name: string;
+      last_name: string;
+      email: string | undefined;
+      phone: string;
+      status: string;
+      pending_documents: {
+        document_id: typeof pendingDocs[number]["_id"];
+        document_type: string;
+        created_at: number;
+        uploaded_at: number | undefined;
+        file_name: string | undefined;
+        file_size: number | undefined;
+        mime_type: string | undefined;
+      }[];
+    }[] = [];
+
+    for (const [userId, docs] of grouped) {
+      const user = await ctx.db.get(userId as typeof docs[number]["user_id"]);
+      if (!user) continue;
+
+      docs.sort((a, b) => a.created_at - b.created_at);
+
+      rows.push({
+        user_id: user._id,
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email ?? undefined,
+        phone: user.phone,
+        status: user.status,
+        pending_documents: docs.map((doc) => ({
+          document_id: doc._id,
+          document_type: doc.document_type,
+          created_at: doc.created_at,
+          uploaded_at: doc.uploaded_at,
+          file_name: doc.file_name,
+          file_size: doc.file_size,
+          mime_type: doc.mime_type,
+        })),
+      });
+    }
+
+    rows.sort((a, b) => {
+      const aOldest = a.pending_documents[0]?.created_at ?? Number.MAX_SAFE_INTEGER;
+      const bOldest = b.pending_documents[0]?.created_at ?? Number.MAX_SAFE_INTEGER;
+      return aOldest - bOldest;
+    });
+
+    return rows;
+  },
+});
+
+export const adminReviewKyc = mutation({
+  args: {
+    userId: v.id("users"),
+    approved: v.boolean(),
+    reason: v.optional(v.string()),
+  },
+  returns: v.object({
+    userId: v.id("users"),
+    newStatus: v.string(),
+    documentsReviewed: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const admin = await getAdminUser(ctx);
+
+    const user = await ctx.db.get(args.userId);
+    if (!user) {
+      throw new ConvexError("User not found");
+    }
+
+    if (user.status !== UserStatus.PENDING_KYC) {
+      throw new ConvexError("User is not in pending_kyc status");
+    }
+
+    if (!args.approved && (!args.reason || args.reason.trim().length === 0)) {
+      throw new ConvexError("Rejection reason is required");
+    }
+
+    const pendingDocs = await ctx.db
+      .query("kyc_documents")
+      .withIndex("by_user_id_and_status", (q) =>
+        q.eq("user_id", args.userId).eq("status", KYCStatus.PENDING),
+      )
+      .collect();
+
+    if (pendingDocs.length === 0) {
+      throw new ConvexError("No pending KYC documents to review");
+    }
+
+    const nextUserStatus = args.approved ? UserStatus.ACTIVE : UserStatus.CLOSED;
+    await ctx.runMutation(internal.users.processKycResult, {
+      userId: args.userId,
+      approved: args.approved,
+      reason: args.reason,
+      reviewedBy: admin._id,
+    });
+
+    await auditLog.logChange(ctx, {
+      action: "kyc.reviewed",
+      actorId: admin._id,
+      resourceType: RESOURCE_TYPE.USERS,
+      resourceId: user._id,
+      before: { status: user.status },
+      after: {
+        status: nextUserStatus,
+        approved: args.approved,
+        reason: args.reason,
+        documents_reviewed: pendingDocs.length,
+      },
+      severity: args.approved ? "info" : "warning",
+    });
+
+    return {
+      userId: user._id,
+      newStatus: nextUserStatus,
+      documentsReviewed: pendingDocs.length,
+    };
   },
 });

@@ -1,12 +1,17 @@
 import { defineTable } from "convex/server";
-
-import { kycStatus } from "../shared";
 import { v } from "convex/values";
+
+import { bankAccountDocumentType, kycStatus } from "../shared";
 
 export const kyc_documents = defineTable({
   user_id: v.id("users"),
-  document_type: v.string(),
+  document_type: bankAccountDocumentType,
   file_url: v.optional(v.string()),
+  storage_id: v.optional(v.id("_storage")),
+  file_name: v.optional(v.string()),
+  file_size: v.optional(v.number()),
+  mime_type: v.optional(v.string()),
+  uploaded_at: v.optional(v.number()),
   status: kycStatus,
   reviewed_by: v.optional(v.id("admin_users")),
   reviewed_at: v.optional(v.number()),

@@ -151,6 +151,7 @@ export const processKycResult = internalMutation({
     userId: v.id("users"),
     approved: v.boolean(),
     reason: v.optional(v.string()),
+    reviewedBy: v.optional(v.id("admin_users")),
   },
   handler: async (ctx, args) => {
     const user = await ensureUser(ctx, args.userId);
@@ -179,6 +180,7 @@ export const processKycResult = internalMutation({
       documents.map((doc) =>
         ctx.db.patch(doc._id, {
           status: docNewStatus,
+          reviewed_by: args.reviewedBy,
           reviewed_at: now,
           rejection_reason: args.approved ? undefined : args.reason,
         }),

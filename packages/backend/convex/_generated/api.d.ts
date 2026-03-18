@@ -18,6 +18,7 @@ import type * as http from "../http.js";
 import type * as init from "../init.js";
 import type * as kpis from "../kpis.js";
 import type * as kyc from "../kyc.js";
+import type * as kycDocuments from "../kycDocuments.js";
 import type * as schemas_adminDashboardKpis from "../schemas/adminDashboardKpis.js";
 import type * as schemas_bankAccountDocuments from "../schemas/bankAccountDocuments.js";
 import type * as schemas_kycDocuments from "../schemas/kycDocuments.js";
@@ -51,6 +52,7 @@ declare const fullApi: ApiFromModules<{
   init: typeof init;
   kpis: typeof kpis;
   kyc: typeof kyc;
+  kycDocuments: typeof kycDocuments;
   "schemas/adminDashboardKpis": typeof schemas_adminDashboardKpis;
   "schemas/bankAccountDocuments": typeof schemas_bankAccountDocuments;
   "schemas/kycDocuments": typeof schemas_kycDocuments;
