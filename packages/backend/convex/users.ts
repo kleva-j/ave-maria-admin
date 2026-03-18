@@ -1,46 +1,34 @@
-import type { QueryCtx } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
-
-import { AuditActions } from "convex-audit-log";
 import { v } from "convex/values";
 
+import { AuditActions } from "convex-audit-log";
+
+import { EVENT_TYPE, KYC_VERIFICATION_STATUS, RESOURCE_TYPE } from "./shared";
 import { internalMutation, mutation, query } from "./_generated/server";
+import { ensureUser, getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
-import { authKit } from "./auth";
-import {
-  // Enums
-  KYC_VERIFICATION_STATUS,
-  RESOURCE_TYPE,
-  EVENT_TYPE,
-  // Utils
-  ensureUser,
-} from "./utils";
 
 /**
- * Helper to get the current authenticated regular user's profile.
+ * Get a user profile by ID.
+ * Access is restricted to the user themselves or an admin.
  */
-async function getUser(ctx: QueryCtx): Promise<Doc<"users"> | null> {
-  const authUser = await authKit.getAuthUser(ctx);
-  if (!authUser) return null;
+export const get = query({
+  args: { id: v.id("users"), role: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const regularUser = await getUser(ctx);
+    const adminUser = regularUser ? null : await getAdminUser(ctx);
 
-  return await ctx.db
-    .query("users")
-    .withIndex("by_workos_id", (q) => q.eq("workosId", authUser.id))
-    .unique();
-}
+    if (!regularUser && !adminUser) {
+      throw new Error("Not authenticated");
+    }
 
-/**
- * Helper to get the current authenticated admin user's profile.
- */
-async function getAdminUser(ctx: QueryCtx): Promise<Doc<"admin_users"> | null> {
-  const authUser = await authKit.getAuthUser(ctx);
-  if (!authUser) return null;
+    // Regular users can only fetch their own profile; admins can fetch any
+    if (regularUser && regularUser._id !== args.id) {
+      throw new Error("Unauthorized");
+    }
 
-  return await ctx.db
-    .query("admin_users")
-    .withIndex("by_workos_id", (q) => q.eq("workosId", authUser.id))
-    .unique();
-}
+    return await ctx.db.get(args.id);
+  },
+});
 
 /**
  * Get the current authenticated user's profile.
@@ -81,51 +69,6 @@ export const updateUserProfile = mutation({
     });
 
     return user._id;
-  },
-});
-
-/**
- * List all users (admin only).
- */
-export const list = query({
-  args: {},
-  handler: async (ctx) => {
-    const user = await authKit.getAuthUser(ctx);
-    if (!user) return null;
-
-    const adminUser = await ctx.db
-      .query("admin_users")
-      .withIndex("by_workos_id", (q) => q.eq("workosId", user.id))
-      .unique();
-
-    if (!adminUser) {
-      throw new Error("Not authorized to view users");
-    }
-
-    return await ctx.db.query("users").collect();
-  },
-});
-
-/**
- * Get a user profile by ID.
- * Access is restricted to the user themselves or an admin.
- */
-export const get = query({
-  args: { id: v.id("users"), role: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    const regularUser = await getUser(ctx);
-    const adminUser = regularUser ? null : await getAdminUser(ctx);
-
-    if (!regularUser && !adminUser) {
-      throw new Error("Not authenticated");
-    }
-
-    // Regular users can only fetch their own profile; admins can fetch any
-    if (regularUser && regularUser._id !== args.id) {
-      throw new Error("Unauthorized");
-    }
-
-    return await ctx.db.get(args.id);
   },
 });
 
@@ -173,6 +116,30 @@ export const upsertFromWorkOS = internalMutation({
       updated_at: Date.now(),
       last_login_at: args.lastLoginAt,
     });
+  },
+});
+
+/**
+ * Internal mutation to delete a user record when they are removed from WorkOS.
+ */
+export const deleteFromWorkOS = internalMutation({
+  args: { workosId: v.string() },
+  handler: async (ctx, args) => {
+    const existing = await ctx.db
+      .query("users")
+      .withIndex("by_workos_id", (q) => q.eq("workosId", args.workosId))
+      .unique();
+
+    if (existing) {
+      await auditLog.log(ctx, {
+        action: AuditActions.USER_DELETED,
+        actorId: existing._id,
+        resourceType: RESOURCE_TYPE.USERS,
+        resourceId: existing._id,
+        severity: "warning",
+      });
+      await ctx.db.delete(existing._id);
+    }
   },
 });
 
@@ -232,29 +199,5 @@ export const processKycResult = internalMutation({
     });
 
     return { success: true };
-  },
-});
-
-/**
- * Internal mutation to delete a user record when they are removed from WorkOS.
- */
-export const deleteFromWorkOS = internalMutation({
-  args: { workosId: v.string() },
-  handler: async (ctx, args) => {
-    const existing = await ctx.db
-      .query("users")
-      .withIndex("by_workos_id", (q) => q.eq("workosId", args.workosId))
-      .unique();
-
-    if (existing) {
-      await auditLog.log(ctx, {
-        action: AuditActions.USER_DELETED,
-        actorId: existing._id,
-        resourceType: RESOURCE_TYPE.USERS,
-        resourceId: existing._id,
-        severity: "warning",
-      });
-      await ctx.db.delete(existing._id);
-    }
   },
 });

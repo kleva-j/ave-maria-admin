@@ -8,14 +8,27 @@
  * @module
  */
 
+import type * as admin from "../admin.js";
 import type * as auditLog from "../auditLog.js";
 import type * as auth from "../auth.js";
 import type * as bankAccountDocuments from "../bankAccountDocuments.js";
+import type * as bankAccounts from "../bankAccounts.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as init from "../init.js";
 import type * as kpis from "../kpis.js";
-import type * as userBankAccounts from "../userBankAccounts.js";
+import type * as kyc from "../kyc.js";
+import type * as schemas_adminDashboardKpis from "../schemas/adminDashboardKpis.js";
+import type * as schemas_bankAccountDocuments from "../schemas/bankAccountDocuments.js";
+import type * as schemas_kycDocuments from "../schemas/kycDocuments.js";
+import type * as schemas_savingsPlanTemplates from "../schemas/savingsPlanTemplates.js";
+import type * as schemas_transactions from "../schemas/transactions.js";
+import type * as schemas_userBankAccountEvents from "../schemas/userBankAccountEvents.js";
+import type * as schemas_userBankAccounts from "../schemas/userBankAccounts.js";
+import type * as schemas_userSavingsPlans from "../schemas/userSavingsPlans.js";
+import type * as schemas_users from "../schemas/users.js";
+import type * as schemas_withdrawals from "../schemas/withdrawals.js";
+import type * as shared from "../shared.js";
 import type * as users from "../users.js";
 import type * as utils from "../utils.js";
 import type * as verificationQueue from "../verificationQueue.js";
@@ -27,14 +40,27 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  admin: typeof admin;
   auditLog: typeof auditLog;
   auth: typeof auth;
   bankAccountDocuments: typeof bankAccountDocuments;
+  bankAccounts: typeof bankAccounts;
   healthCheck: typeof healthCheck;
   http: typeof http;
   init: typeof init;
   kpis: typeof kpis;
-  userBankAccounts: typeof userBankAccounts;
+  kyc: typeof kyc;
+  "schemas/adminDashboardKpis": typeof schemas_adminDashboardKpis;
+  "schemas/bankAccountDocuments": typeof schemas_bankAccountDocuments;
+  "schemas/kycDocuments": typeof schemas_kycDocuments;
+  "schemas/savingsPlanTemplates": typeof schemas_savingsPlanTemplates;
+  "schemas/transactions": typeof schemas_transactions;
+  "schemas/userBankAccountEvents": typeof schemas_userBankAccountEvents;
+  "schemas/userBankAccounts": typeof schemas_userBankAccounts;
+  "schemas/userSavingsPlans": typeof schemas_userSavingsPlans;
+  "schemas/users": typeof schemas_users;
+  "schemas/withdrawals": typeof schemas_withdrawals;
+  shared: typeof shared;
   users: typeof users;
   utils: typeof utils;
   verificationQueue: typeof verificationQueue;

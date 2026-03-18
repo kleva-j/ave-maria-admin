@@ -15,18 +15,15 @@
 import { ConvexError, v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
+import { getAdminUser } from "./utils";
 import { auditLog } from "./auditLog";
 import {
-  // Statuses
   KYC_VERIFICATION_STATUS,
+  verificationStatus,
   VERFICATION_STATUS,
   RESOURCE_TYPE,
   EVENT_TYPE,
-  // Validators
-  verificationStatus,
-  // Utils
-  getAdmin,
-} from "./utils";
+} from "./shared";
 
 const PAGE_SIZE = 50;
 
@@ -74,7 +71,7 @@ export const listPendingVerifications = query({
     isDone: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    await getAdmin(ctx);
+    await getAdminUser(ctx);
 
     const filterStatus = args.status ?? VERFICATION_STATUS.PENDING;
 
@@ -202,7 +199,7 @@ export const getVerificationDetails = query({
     ),
   }),
   handler: async (ctx, args) => {
-    await getAdmin(ctx);
+    await getAdminUser(ctx);
 
     const account = await ctx.db.get(args.accountId);
     if (!account) {
@@ -285,7 +282,7 @@ export const getQueueStats = query({
     oldestSubmission: v.optional(v.number()),
   }),
   handler: async (ctx) => {
-    await getAdmin(ctx);
+    await getAdminUser(ctx);
 
     // Count by status
     const pending = await ctx.db
@@ -367,7 +364,7 @@ export const approveVerification = mutation({
     updated_at: v.number(),
   }),
   handler: async (ctx, args) => {
-    const admin = await getAdmin(ctx);
+    const admin = await getAdminUser(ctx);
 
     const account = await ctx.db.get(args.accountId);
     if (!account) {
@@ -470,7 +467,7 @@ export const rejectVerification = mutation({
     updated_at: v.number(),
   }),
   handler: async (ctx, args) => {
-    const admin = await getAdmin(ctx);
+    const admin = await getAdminUser(ctx);
 
     const account = await ctx.db.get(args.accountId);
     if (!account) {

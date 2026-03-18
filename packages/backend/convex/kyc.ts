@@ -16,6 +16,11 @@ import { getUser } from "./utils";
  */
 export const verifyIdentity = action({
   args: {},
+  returns: v.object({
+    approved: v.boolean(),
+    reason: v.string(),
+    userId: v.id("users"),
+  }),
   handler: async (ctx) => {
     // 1. Fetch user data and pending documents for the currently authenticated user
     const data = await ctx.runQuery(internal.kyc.getViewerKycData);
@@ -29,7 +34,7 @@ export const verifyIdentity = action({
     }
 
     // 2. Call the provider (Simulation)
-    const result = await ctx.runAction(internal.kyc.simulateKycProvider, {
+    const result: any = await ctx.runAction(internal.kyc.simulateKycProvider, {
       userId: data.user._id,
       documentTypes: data.documents.map((d: any) => d.document_type),
     });
@@ -53,6 +58,10 @@ export const simulateKycProvider = internalAction({
     userId: v.id("users"),
     documentTypes: v.array(v.string()),
   },
+  returns: v.object({
+    approved: v.boolean(),
+    reason: v.string(),
+  }),
   handler: async (ctx, args) => {
     // Simulate network latency (2 seconds)
     await new Promise((resolve) => setTimeout(resolve, 2000));
@@ -92,7 +101,7 @@ export const getViewerKycData = internalQuery({
     const documents = await ctx.db
       .query("kyc_documents")
       .withIndex("by_user_id_and_status", (q) =>
-        q.eq("user_id", user._id).eq("status", "pending")
+        q.eq("user_id", user._id).eq("status", "pending"),
       )
       .collect();
 

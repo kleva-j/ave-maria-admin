@@ -15,19 +15,16 @@
 import { ConvexError, v } from "convex/values";
 
 import { mutation, query } from "./_generated/server";
+import { getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
 import {
-  // Enums & Types
   KYC_VERIFICATION_STATUS,
+  bankAccountDocumentType,
   VERFICATION_STATUS,
   DOCUMENT_TYPES,
   RESOURCE_TYPE,
   EVENT_TYPE,
-  // Utils
-  getAdmin,
-  getUser,
-} from "./utils";
-import { bankAccountDocumentType } from "./shared";
+} from "./shared";
 
 // Constants for file validation
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -85,7 +82,7 @@ export const getDocumentUrl = query({
     // SECURITY: Users can only access their own documents
     if (document.user_id !== user._id) {
       // Check if admin
-      const admin = await getAdmin(ctx).catch(() => null);
+      const admin = await getAdminUser(ctx).catch(() => null);
       if (!admin) {
         throw new ConvexError("Not authorized to access this document");
       }

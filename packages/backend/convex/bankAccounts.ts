@@ -13,26 +13,23 @@
  * - user_bank_accounts: Stores bank account details
  * - user_bank_account_events: Immutable event log for all account changes
  */
-import type { VerificationStatus, EventType } from "./utils";
+
+import type { VerificationStatus, EventType } from "./shared";
 import type { MutationCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
 
 import { ConvexError, v } from "convex/values";
 
+import { sortAccounts, getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
 import {
-  // Enums
   VERFICATION_STATUS,
   verificationStatus,
   DOCUMENT_TYPES,
   RESOURCE_TYPE,
   EVENT_TYPE,
-  // Functions
-  sortAccounts,
   eventType,
-  getAdmin,
-  getUser,
-} from "./utils";
+} from "./shared";
 
 import {
   internalMutation,
@@ -711,7 +708,7 @@ export const setVerificationStatus = internalMutation({
   returns: bankAccountValidator,
   handler: async (ctx, args) => {
     // ADMIN ONLY: Requires admin authentication
-    const admin = await getAdmin(ctx);
+    const admin = await getAdminUser(ctx);
 
     const account = await ctx.db.get(args.account_id);
     if (!account) {

@@ -48,6 +48,7 @@ export const { authKitEvent } = authKit.events({
         : null,
     });
   },
+
   "user.deleted": async (ctx, event) => {
     await auditLog.log(ctx, {
       action: "workos.user_deleted",

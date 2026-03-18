@@ -3,6 +3,7 @@ import type { UserStatus, PlanStatus } from "./shared";
 import { isSameDay } from "date-fns";
 import { v } from "convex/values";
 
+import { planStatus, userStatus } from "./shared";
 import { internal } from "./_generated/api";
 import {
   internalMutation,
@@ -44,12 +45,7 @@ export const _getUsersPage = internalQuery({
     page: v.array(
       v.object({
         total_balance_kobo: v.int64(),
-        status: v.union(
-          v.literal("active"),
-          v.literal("pending_kyc"),
-          v.literal("suspended"),
-          v.literal("closed"),
-        ),
+        status: userStatus,
       }),
     ),
     continueCursor: v.string(),
@@ -61,9 +57,9 @@ export const _getUsersPage = internalQuery({
       .paginate({ numItems: PAGE_SIZE, cursor: args.cursor });
 
     return {
-      page: result.page.map((u) => ({
-        total_balance_kobo: u.total_balance_kobo,
-        status: u.status,
+      page: result.page.map(({ total_balance_kobo, status }) => ({
+        total_balance_kobo,
+        status,
       })),
       continueCursor: result.continueCursor,
       isDone: result.isDone,
@@ -79,12 +75,7 @@ export const _getPlansPage = internalQuery({
     page: v.array(
       v.object({
         current_amount_kobo: v.int64(),
-        status: v.union(
-          v.literal("active"),
-          v.literal("paused"),
-          v.literal("completed"),
-          v.literal("expired"),
-        ),
+        status: planStatus,
       }),
     ),
     continueCursor: v.string(),
@@ -122,14 +113,14 @@ export const _setDashboardKpis = internalMutation({
   handler: async (ctx, args) => {
     // Query the most recent KPI row by computed_at descending.
     const existing = await ctx.db
-      .query("mv_dashboard_kpis")
+      .query("admin_dashboard_kpis")
       .withIndex("by_computed_at")
       .order("desc")
       .first();
 
     if (!existing || !isSameDay(existing.computed_at, args.computed_at)) {
       // New day (or first run) — insert a fresh snapshot.
-      await ctx.db.insert("mv_dashboard_kpis", args);
+      await ctx.db.insert("admin_dashboard_kpis", args);
     } else {
       // Same day — update in place.
       await ctx.db.patch(existing._id, args);
@@ -154,9 +145,7 @@ export const refreshDashboardKpis = internalAction({
     for (;;) {
       const result: PageResult<UserKpiItem> = await ctx.runQuery(
         internal.kpis._getUsersPage,
-        {
-          cursor: userCursor,
-        },
+        { cursor: userCursor },
       );
 
       for (const user of result.page) {
@@ -178,9 +167,7 @@ export const refreshDashboardKpis = internalAction({
     for (;;) {
       const result: PageResult<PlanKpiItem> = await ctx.runQuery(
         internal.kpis._getPlansPage,
-        {
-          cursor: planCursor,
-        },
+        { cursor: planCursor },
       );
 
       for (const plan of result.page) {
