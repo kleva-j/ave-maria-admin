@@ -9,10 +9,12 @@ import { savings_plan_templates } from "./schemas/savingsPlanTemplates";
 import { admin_dashboard_kpis } from "./schemas/adminDashboardKpis";
 import { user_bank_accounts } from "./schemas/userBankAccounts";
 import { user_savings_plans } from "./schemas/userSavingsPlans";
+import { user_risk_holds } from "./schemas/userRiskHolds";
 import { kyc_documents } from "./schemas/kycDocuments";
 import { transactions } from "./schemas/transactions";
 import { admin_users, users } from "./schemas/users";
 import { withdrawals } from "./schemas/withdrawals";
+import { risk_events } from "./schemas/riskEvents";
 import { TABLE_NAMES } from "./shared";
 
 export default defineSchema({
@@ -24,6 +26,8 @@ export default defineSchema({
     transaction_reconciliation_runs,
   [TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES]:
     transaction_reconciliation_issues,
+  [TABLE_NAMES.USER_RISK_HOLDS]: user_risk_holds,
+  [TABLE_NAMES.RISK_EVENTS]: risk_events,
   [TABLE_NAMES.KYC_DOCUMENTS]: kyc_documents,
   [TABLE_NAMES.USER_SAVINGS_PLANS]: user_savings_plans,
   [TABLE_NAMES.USER_BANK_ACCOUNTS]: user_bank_accounts,

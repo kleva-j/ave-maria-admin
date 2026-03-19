@@ -45,6 +45,10 @@ export type TransactionReconciliationIssue =
   Doc<"transaction_reconciliation_issues">;
 export type TransactionReconciliationIssueId =
   Id<"transaction_reconciliation_issues">;
+export type UserRiskHold = Doc<"user_risk_holds">;
+export type UserRiskHoldId = Id<"user_risk_holds">;
+export type RiskEvent = Doc<"risk_events">;
+export type RiskEventId = Id<"risk_events">;
 
 // Storage
 export type StorageId = Id<"_storage">;

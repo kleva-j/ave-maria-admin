@@ -5,8 +5,10 @@ export const TABLE_NAMES = {
   USERS: "users",
   ADMIN_USERS: "admin_users",
   WITHDRAWALS: "withdrawals",
+  RISK_EVENTS: "risk_events",
   TRANSACTIONS: "transactions",
   KYC_DOCUMENTS: "kyc_documents",
+  USER_RISK_HOLDS: "user_risk_holds",
   USER_SAVINGS_PLANS: "user_savings_plans",
   USER_BANK_ACCOUNTS: "user_bank_accounts",
   ADMIN_DASHBOARD_KPIS: "admin_dashboard_kpis",
@@ -293,6 +295,70 @@ export type TransactionReconciliationIssueStatus =
   typeof transactionReconciliationIssueStatus.type;
 
 /**
+ * Risk hold scope and status
+ */
+export const RiskHoldScope = {
+  WITHDRAWALS: "withdrawals",
+} as const;
+
+export const riskHoldScope = v.union(
+  v.literal(RiskHoldScope.WITHDRAWALS),
+);
+
+export type RiskHoldScope = typeof riskHoldScope.type;
+
+export const RiskHoldStatus = {
+  ACTIVE: "active",
+  RELEASED: "released",
+} as const;
+
+export const riskHoldStatus = v.union(
+  v.literal(RiskHoldStatus.ACTIVE),
+  v.literal(RiskHoldStatus.RELEASED),
+);
+
+export type RiskHoldStatus = typeof riskHoldStatus.type;
+
+/**
+ * Risk events
+ */
+export const RiskEventType = {
+  WITHDRAWAL_BLOCKED_HOLD: "withdrawal_blocked_hold",
+  WITHDRAWAL_BLOCKED_DAILY_AMOUNT: "withdrawal_blocked_daily_amount",
+  WITHDRAWAL_BLOCKED_DAILY_COUNT: "withdrawal_blocked_daily_count",
+  WITHDRAWAL_BLOCKED_VELOCITY: "withdrawal_blocked_velocity",
+  WITHDRAWAL_BLOCKED_BANK_COOLDOWN: "withdrawal_blocked_bank_cooldown",
+  HOLD_PLACED: "hold_placed",
+  HOLD_RELEASED: "hold_released",
+} as const;
+
+export const riskEventType = v.union(
+  v.literal(RiskEventType.WITHDRAWAL_BLOCKED_HOLD),
+  v.literal(RiskEventType.WITHDRAWAL_BLOCKED_DAILY_AMOUNT),
+  v.literal(RiskEventType.WITHDRAWAL_BLOCKED_DAILY_COUNT),
+  v.literal(RiskEventType.WITHDRAWAL_BLOCKED_VELOCITY),
+  v.literal(RiskEventType.WITHDRAWAL_BLOCKED_BANK_COOLDOWN),
+  v.literal(RiskEventType.HOLD_PLACED),
+  v.literal(RiskEventType.HOLD_RELEASED),
+);
+
+export type RiskEventType = typeof riskEventType.type;
+
+export const RiskSeverity = {
+  INFO: "info",
+  WARNING: "warning",
+  CRITICAL: "critical",
+} as const;
+
+export const riskSeverity = v.union(
+  v.literal(RiskSeverity.INFO),
+  v.literal(RiskSeverity.WARNING),
+  v.literal(RiskSeverity.CRITICAL),
+);
+
+export type RiskSeverity = typeof riskSeverity.type;
+
+/**
  * Bank account event types
  */
 export const BankAccountEventType = {
@@ -358,6 +424,10 @@ export const RESOURCE_TYPE = {
   TRANSACTION_RECONCILIATION_RUNS: "transaction_reconciliation_runs",
   TRANSACTION_RECONCILIATION_ISSUE: "transaction_reconciliation_issue",
   TRANSACTION_RECONCILIATION_ISSUES: "transaction_reconciliation_issues",
+  USER_RISK_HOLD: "user_risk_hold",
+  USER_RISK_HOLDS: "user_risk_holds",
+  RISK_EVENT: "risk_event",
+  RISK_EVENTS: "risk_events",
 } as const;
 
 export const resourceType = v.union(
@@ -383,6 +453,10 @@ export const resourceType = v.union(
   v.literal(RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS),
   v.literal(RESOURCE_TYPE.TRANSACTION_RECONCILIATION_ISSUE),
   v.literal(RESOURCE_TYPE.TRANSACTION_RECONCILIATION_ISSUES),
+  v.literal(RESOURCE_TYPE.USER_RISK_HOLD),
+  v.literal(RESOURCE_TYPE.USER_RISK_HOLDS),
+  v.literal(RESOURCE_TYPE.RISK_EVENT),
+  v.literal(RESOURCE_TYPE.RISK_EVENTS),
 );
 
 export type ResourceType = typeof resourceType.type;

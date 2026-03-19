@@ -16,7 +16,7 @@ import { TableAggregate } from "@convex-dev/aggregate";
 
 import { components } from "./_generated/api";
 
-import {
+import type {
   TransactionReconciliationRunId,
   SavingsPlanTemplateId,
   UserSavingsPlanId,
