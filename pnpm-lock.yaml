@@ -314,6 +314,9 @@ importers:
 
   packages/backend:
     dependencies:
+      '@convex-dev/aggregate':
+        specifier: ^0.2.1
+        version: 0.2.1(convex@1.33.1(react@19.2.4))
       '@convex-dev/crons':
         specifier: ^0.2.0
         version: 0.2.0(convex@1.33.1(react@19.2.4))

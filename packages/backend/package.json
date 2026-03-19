@@ -10,6 +10,7 @@
     "setup:crons": "convex run init:setup"
   },
   "dependencies": {
+    "@convex-dev/aggregate": "^0.2.1",
     "@convex-dev/crons": "^0.2.0",
     "@convex-dev/workos-authkit": "^0.1.6",
     "convex": "catalog:",
