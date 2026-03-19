@@ -71,7 +71,13 @@ export const getDocumentUrl = query({
   },
   returns: v.string(),
   handler: async (ctx, args) => {
-    const user = await getUser(ctx);
+    const user = await getUser(ctx).catch(() => null);
+    const admin = await getAdminUser(ctx).catch(() => null);
+
+    if (!user && !admin) {
+      throw new ConvexError("Not authorized to access this document");
+    }
+
     const document = await ctx.db.get(args.documentId);
 
     if (!document) {
@@ -79,12 +85,8 @@ export const getDocumentUrl = query({
     }
 
     // SECURITY: Users can only access their own documents
-    if (document.user_id !== user._id) {
-      // Check if admin
-      const admin = await getAdminUser(ctx).catch(() => null);
-      if (!admin) {
-        throw new ConvexError("Not authorized to access this document");
-      }
+    if (!admin && user && document.user_id !== user._id) {
+      throw new ConvexError("Not authorized to access this document");
     }
 
     // Generate signed URL with 1 hour expiration

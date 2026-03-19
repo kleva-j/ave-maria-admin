@@ -22,17 +22,20 @@ import type * as init from "../init.js";
 import type * as kpis from "../kpis.js";
 import type * as kyc from "../kyc.js";
 import type * as kycDocuments from "../kycDocuments.js";
+import type * as risk from "../risk.js";
 import type * as schemas_adminDashboardKpis from "../schemas/adminDashboardKpis.js";
 import type * as schemas_bankAccountDocumentComments from "../schemas/bankAccountDocumentComments.js";
 import type * as schemas_bankAccountDocuments from "../schemas/bankAccountDocuments.js";
 import type * as schemas_documentReviewNotifications from "../schemas/documentReviewNotifications.js";
 import type * as schemas_kycDocuments from "../schemas/kycDocuments.js";
+import type * as schemas_riskEvents from "../schemas/riskEvents.js";
 import type * as schemas_savingsPlanTemplates from "../schemas/savingsPlanTemplates.js";
 import type * as schemas_transactionReconciliationIssues from "../schemas/transactionReconciliationIssues.js";
 import type * as schemas_transactionReconciliationRuns from "../schemas/transactionReconciliationRuns.js";
 import type * as schemas_transactions from "../schemas/transactions.js";
 import type * as schemas_userBankAccountEvents from "../schemas/userBankAccountEvents.js";
 import type * as schemas_userBankAccounts from "../schemas/userBankAccounts.js";
+import type * as schemas_userRiskHolds from "../schemas/userRiskHolds.js";
 import type * as schemas_userSavingsPlans from "../schemas/userSavingsPlans.js";
 import type * as schemas_users from "../schemas/users.js";
 import type * as schemas_withdrawals from "../schemas/withdrawals.js";
@@ -42,6 +45,7 @@ import type * as types from "../types.js";
 import type * as users from "../users.js";
 import type * as utils from "../utils.js";
 import type * as verificationQueue from "../verificationQueue.js";
+import type * as withdrawalPolicy from "../withdrawalPolicy.js";
 import type * as withdrawals from "../withdrawals.js";
 
 import type {
@@ -65,17 +69,20 @@ declare const fullApi: ApiFromModules<{
   kpis: typeof kpis;
   kyc: typeof kyc;
   kycDocuments: typeof kycDocuments;
+  risk: typeof risk;
   "schemas/adminDashboardKpis": typeof schemas_adminDashboardKpis;
   "schemas/bankAccountDocumentComments": typeof schemas_bankAccountDocumentComments;
   "schemas/bankAccountDocuments": typeof schemas_bankAccountDocuments;
   "schemas/documentReviewNotifications": typeof schemas_documentReviewNotifications;
   "schemas/kycDocuments": typeof schemas_kycDocuments;
+  "schemas/riskEvents": typeof schemas_riskEvents;
   "schemas/savingsPlanTemplates": typeof schemas_savingsPlanTemplates;
   "schemas/transactionReconciliationIssues": typeof schemas_transactionReconciliationIssues;
   "schemas/transactionReconciliationRuns": typeof schemas_transactionReconciliationRuns;
   "schemas/transactions": typeof schemas_transactions;
   "schemas/userBankAccountEvents": typeof schemas_userBankAccountEvents;
   "schemas/userBankAccounts": typeof schemas_userBankAccounts;
+  "schemas/userRiskHolds": typeof schemas_userRiskHolds;
   "schemas/userSavingsPlans": typeof schemas_userSavingsPlans;
   "schemas/users": typeof schemas_users;
   "schemas/withdrawals": typeof schemas_withdrawals;
@@ -85,6 +92,7 @@ declare const fullApi: ApiFromModules<{
   users: typeof users;
   utils: typeof utils;
   verificationQueue: typeof verificationQueue;
+  withdrawalPolicy: typeof withdrawalPolicy;
   withdrawals: typeof withdrawals;
 }>;
 
