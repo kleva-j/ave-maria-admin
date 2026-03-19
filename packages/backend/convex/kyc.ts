@@ -1,5 +1,11 @@
 /**
- * Automated KYC verification pipeline with admin override support.
+ * KYC Identity Verification Pipeline
+ * 
+ * Implements automated identity verification through simulated third-party providers
+ * and manual admin review workflows. Handles user status transitions based on
+ * KYC results with comprehensive audit logging and aggregate synchronization.
+ * 
+ * @module kyc
  */
 import type { KycData, KycDocument, KycDocumentId, UserId } from "./types";
 
@@ -26,14 +32,26 @@ import {
   query,
 } from "./_generated/server";
 
+// Document types required for KYC verification (must all be submitted)
 const REQUIRED_KYC_DOCUMENTS = [
   DOCUMENT_TYPES.GOVERNMENT_ID,
   DOCUMENT_TYPES.SELFIE_WITH_ID,
 ] as const;
 
 /**
- * Main action to trigger the identity verification process.
- * Calls out to the simulated external provider and then updates the database.
+ * Main action to trigger the complete KYC identity verification process
+ * 
+ * Workflow:
+ * 1. Fetch user data and pending documents
+ * 2. Validate document requirements (government ID + selfie with ID)
+ * 3. Call external KYC provider (simulated)
+ * 4. Process verification result
+ * 5. Update user status and sync aggregates
+ * 
+ * @action
+ * @requires User authentication
+ * @returns Verification result with approval status and reason
+ * @throws If no documents, missing required docs, or user not in PENDING_KYC
  */
 export const verifyIdentity = action({
   args: {},
@@ -43,17 +61,20 @@ export const verifyIdentity = action({
     userId: v.id("users"),
   }),
   handler: async (ctx) => {
-    // 1. Fetch user data and pending documents for the currently authenticated user
+    // Step 1: Fetch user data and pending documents for authenticated user
     const data: KycData = await ctx.runQuery(internal.kyc.getViewerKycData);
 
+    // Validate documents exist
     if (data.documents.length === 0) {
       throw new ConvexError("No pending KYC documents found to verify");
     }
 
+    // Validate user is in correct status
     if (data.user.status !== UserStatus.PENDING_KYC) {
       throw new ConvexError("User is not in pending_kyc status");
     }
 
+    // Step 2: Validate required documents are present
     const submittedTypes = new Set(
       data.documents.map((d: KycDocument) => d.document_type),
     );
@@ -67,7 +88,7 @@ export const verifyIdentity = action({
       );
     }
 
-    // 2. Call the provider (Simulation)
+    // Step 3: Call external provider (simulated with 80% approval rate)
     const result: { approved: boolean; reason: string } = await ctx.runAction(
       internal.kyc.simulateKycProvider,
       {
@@ -76,19 +97,30 @@ export const verifyIdentity = action({
       },
     );
 
-    // 3. Process the KYC result via internal mutation
+    // Step 4: Process KYC result via internal mutation (updates user status)
     await ctx.runMutation(internal.users.processKycResult, {
       userId: data.user._id,
       approved: result.approved,
       reason: result.reason,
     });
 
+    // Step 5: Return verification outcome to caller
     return { ...result, userId: data.user._id };
   },
 });
 
 /**
- * Simulates a request to a 3rd party KYC provider (e.g., Smile Identity or Dojah)
+ * Simulates a third-party KYC provider API call (e.g., Smile Identity, Dojah)
+ * 
+ * Simulation characteristics:
+ * - 2 second network latency simulation
+ * - 80% automatic approval rate
+ * - Random rejection reasons for denials
+ * 
+ * @internalAction
+ * @param userId - User being verified
+ * @param documentTypes - Array of document types submitted
+ * @returns Verification result with approval status and reason
  */
 export const simulateKycProvider = internalAction({
   args: {
@@ -103,7 +135,7 @@ export const simulateKycProvider = internalAction({
     // Simulate network latency (2 seconds)
     await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    // Simulate an 80% approval rate
+    // Simulate 80% approval rate
     const isApproved = Math.random() < 0.8;
 
     if (isApproved) {
@@ -124,12 +156,15 @@ export const simulateKycProvider = internalAction({
 });
 
 /**
- * Internal query to fetch the authenticated user and their pending documents
- * safely for the action.
+ * Internal query to fetch authenticated user's KYC data safely for actions
+ * 
+ * @internalQuery
+ * @returns User record and pending KYC documents
  */
 export const getViewerKycData = internalQuery({
   args: {},
   handler: async (ctx) => {
+    // Get authenticated user
     const user = await getUser(ctx);
 
     const documents = await ctx.db
@@ -143,6 +178,16 @@ export const getViewerKycData = internalQuery({
   },
 });
 
+/**
+ * Admin query to list all users awaiting KYC review
+ * 
+ * Returns users grouped by their pending documents, sorted by
+ * oldest submission first (first-come-first-serve queue).
+ * 
+ * @query
+ * @requires Admin authentication
+ * @returns Array of users with their pending document details
+ */
 export const adminListPendingKyc = query({
   args: {},
   returns: v.array(
@@ -167,6 +212,7 @@ export const adminListPendingKyc = query({
     }),
   ),
   handler: async (ctx) => {
+    // Validate admin authentication
     await getAdminUser(ctx);
 
     const pendingDocs = await ctx.db
@@ -240,6 +286,25 @@ export const adminListPendingKyc = query({
   },
 });
 
+/**
+ * Admin mutation to manually review and approve/reject KYC submissions
+ * 
+ * Workflow:
+ * 1. Validate admin authentication
+ * 2. Verify user is in PENDING_KYC status
+ * 3. Require rejection reason if denying
+ * 4. Process KYC result (updates user status)
+ * 5. Sync user aggregates for analytics
+ * 6. Log comprehensive audit trail
+ * 
+ * @mutation
+ * @requires Admin authentication
+ * @param userId - User being reviewed
+ * @param approved - Approval decision
+ * @param reason - Optional reason (required if rejected)
+ * @returns Result with new user status and documents reviewed count
+ * @throws If user not found, wrong status, or missing rejection reason
+ */
 export const adminReviewKyc = mutation({
   args: {
     userId: v.id("users"),
@@ -252,6 +317,7 @@ export const adminReviewKyc = mutation({
     documentsReviewed: v.number(),
   }),
   handler: async (ctx, args) => {
+    // Validate admin authentication
     const admin = await getAdminUser(ctx);
 
     const user = await ctx.db.get(args.userId);

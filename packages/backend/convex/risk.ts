@@ -1,3 +1,13 @@
+/**
+ * Risk Assessment & Fraud Prevention System
+ * 
+ * Provides real-time risk evaluation for withdrawal requests,
+ * automated fraud detection, manual administrative controls,
+ * and comprehensive risk event logging.
+ * 
+ * @module risk
+ */
+
 import type { MutationCtx } from "./_generated/server";
 import type {
   UserRiskHold,
@@ -28,14 +38,25 @@ import {
   EVENT_TYPE,
 } from "./shared";
 
+/** Time window for daily limit calculations (24 hours in milliseconds) */
 const DAY_MS = 24 * 60 * 60 * 1000; // 24 hours
+
+/** Time window for velocity checks (15 minutes in milliseconds) */
 const VELOCITY_WINDOW_MS = 15 * 60 * 1000; // 15 minutes
+
+/** Cooldown period after bank account changes (24 hours in milliseconds) */
 const BANK_ACCOUNT_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+/** Maximum daily withdrawal amount in kobo (₦500,000) */
 export const WITHDRAWAL_DAILY_LIMIT_KOBO = 50_000_000n;
+
+/** Maximum number of withdrawals allowed per day */
 export const WITHDRAWAL_DAILY_COUNT_LIMIT = 3;
+
+/** Maximum withdrawals within velocity window (15 minutes) */
 export const WITHDRAWAL_VELOCITY_COUNT_LIMIT = 2;
 
+/** Validator for risk hold summary objects returned to clients */
 const riskHoldSummaryValidator = v.object({
   _id: v.id("user_risk_holds"),
   user_id: v.id("users"),
@@ -48,6 +69,7 @@ const riskHoldSummaryValidator = v.object({
   released_at: v.optional(v.number()),
 });
 
+/** Validator for risk event summary objects returned to clients */
 const riskEventSummaryValidator = v.object({
   _id: v.id("risk_events"),
   user_id: v.id("users"),
@@ -60,6 +82,10 @@ const riskEventSummaryValidator = v.object({
   created_at: v.number(),
 });
 
+/**
+ * Validator for withdrawal risk summary
+ * Used by admin dashboards to display risk status
+ */
 export const withdrawalRiskSummaryValidator = v.object({
   has_active_hold: v.boolean(),
   blocked: v.boolean(),
@@ -68,6 +94,9 @@ export const withdrawalRiskSummaryValidator = v.object({
   latest_event: v.optional(riskEventSummaryValidator),
 });
 
+/**
+ * Union type representing which risk rule triggered a block
+ */
 type WithdrawalRiskRule =
   | "manual_hold"
   | "daily_amount_limit"
@@ -75,6 +104,11 @@ type WithdrawalRiskRule =
   | "velocity_limit"
   | "bank_account_cooldown";
 
+/**
+ * Result of evaluating withdrawal risk
+ * - blocked: false = withdrawal allowed
+ * - blocked: true = withdrawal denied with reason and metadata
+ */
 type WithdrawalRiskDecision =
   | {
       blocked: false;
@@ -93,6 +127,9 @@ type WithdrawalRiskDecision =
       details?: Record<string, string | number | boolean | undefined>;
     };
 
+/**
+ * Input parameters for withdrawal risk evaluation
+ */
 type WithdrawalRiskEvaluationInput = {
   amountKobo: bigint;
   method: WithdrawalMethod;
@@ -104,9 +141,23 @@ type WithdrawalRiskEvaluationInput = {
   recentVelocityCount: number;
 };
 
+/**
+ * Evaluates all risk rules for a withdrawal request and returns a decision
+ * 
+ * This is a pure function (no side effects) that checks:
+ * 1. Manual holds (highest priority)
+ * 2. Bank account cooldown period
+ * 3. Daily amount limits
+ * 4. Daily count limits
+ * 5. Velocity limits
+ * 
+ * @param input - Risk evaluation input parameters
+ * @returns WithdrawalRiskDecision - blocked=true with reason, or allowed
+ */
 export function evaluateWithdrawalRiskDecision(
   input: WithdrawalRiskEvaluationInput,
 ): WithdrawalRiskDecision {
+  // Rule 1: Check for manual administrative hold (CRITICAL severity)
   if (input.activeHold) {
     return {
       blocked: true,
@@ -122,6 +173,7 @@ export function evaluateWithdrawalRiskDecision(
     };
   }
 
+  // Rule 2: Bank account cooldown (24 hours after change)
   if (
     input.method === WithdrawalMethod.BANK_TRANSFER &&
     input.lastBankAccountChangeAt !== undefined &&
@@ -141,6 +193,7 @@ export function evaluateWithdrawalRiskDecision(
     };
   }
 
+  // Rule 3: Daily amount limit check
   if (
     input.recentDailyAmountKobo + input.amountKobo >
     WITHDRAWAL_DAILY_LIMIT_KOBO
@@ -159,6 +212,7 @@ export function evaluateWithdrawalRiskDecision(
     };
   }
 
+  // Rule 4: Daily count limit check
   if (input.recentDailyCount + 1 > WITHDRAWAL_DAILY_COUNT_LIMIT) {
     return {
       blocked: true,
@@ -173,6 +227,7 @@ export function evaluateWithdrawalRiskDecision(
     };
   }
 
+  // Rule 5: Velocity limit check (15-minute window)
   if (input.recentVelocityCount + 1 > WITHDRAWAL_VELOCITY_COUNT_LIMIT) {
     return {
       blocked: true,
@@ -188,9 +243,16 @@ export function evaluateWithdrawalRiskDecision(
     };
   }
 
+  // All checks passed - withdrawal allowed
   return { blocked: false };
 }
 
+/**
+ * Builds structured error data for blocked withdrawals
+ * 
+ * @param decision - The blocked risk decision
+ * @returns Error data object for ConvexError
+ */
 function buildWithdrawalRiskErrorData(decision: Extract<
   WithdrawalRiskDecision,
   { blocked: true }
@@ -204,6 +266,12 @@ function buildWithdrawalRiskErrorData(decision: Extract<
   };
 }
 
+/**
+ * Converts a UserRiskHold to a summary object for client response
+ * 
+ * @param hold - Full risk hold record from database
+ * @returns Summarized hold data safe for client exposure
+ */
 function summarizeRiskHold(hold: UserRiskHold) {
   return {
     _id: hold._id,
@@ -218,6 +286,12 @@ function summarizeRiskHold(hold: UserRiskHold) {
   };
 }
 
+/**
+ * Converts a RiskEvent to a summary object for client response
+ * 
+ * @param event - Full risk event record from database
+ * @returns Summarized event data safe for client exposure
+ */
 function summarizeRiskEvent(event: RiskEvent) {
   return {
     _id: event._id,
@@ -232,6 +306,14 @@ function summarizeRiskEvent(event: RiskEvent) {
   };
 }
 
+/**
+ * Inserts a risk event into the database for audit trail
+ * 
+ * @param ctx - Mutation context
+ * @param args - Event details including type, severity, and metadata
+ * @returns The created risk event record
+ * @throws ConvexError if event creation fails
+ */
 async function insertRiskEvent(
   ctx: MutationCtx,
   args: {
@@ -254,6 +336,7 @@ async function insertRiskEvent(
     created_at: Date.now(),
   });
 
+  // Verify event was created successfully
   const event = await ctx.db.get(eventId);
   if (!event) {
     throw new ConvexError("Failed to record risk event");
@@ -262,6 +345,13 @@ async function insertRiskEvent(
   return event;
 }
 
+/**
+ * Fetches the active withdrawal hold for a user, if any
+ * 
+ * @param ctx - Database context
+ * @param userId - User ID to check for holds
+ * @returns Active withdrawal hold or null
+ */
 async function getActiveWithdrawalHold(
   ctx: Context,
   userId: UserId,
@@ -273,11 +363,19 @@ async function getActiveWithdrawalHold(
     )
     .collect();
 
+  // Return only withdrawal-scope holds
   return (
     activeHolds.find((hold) => hold.scope === RiskHoldScope.WITHDRAWALS) ?? null
   );
 }
 
+/**
+ * Fetches the most recent risk event for a user
+ * 
+ * @param ctx - Database context
+ * @param userId - User ID to fetch events for
+ * @returns Latest risk event or null
+ */
 async function getLatestRiskEvent(ctx: Context, userId: UserId) {
   const events = await ctx.db
     .query(TABLE_NAMES.RISK_EVENTS)
@@ -288,6 +386,13 @@ async function getLatestRiskEvent(ctx: Context, userId: UserId) {
   return events[0] ?? null;
 }
 
+/**
+ * Fetches the timestamp of the last bank account change for a user
+ * 
+ * @param ctx - Database context
+ * @param userId - User ID to check
+ * @returns Timestamp of last bank account change or undefined
+ */
 async function getLastBankAccountChangeAt(ctx: Context, userId: UserId) {
   const events = await ctx.db
     .query(TABLE_NAMES.USER_BANK_ACCOUNT_EVENTS)
@@ -303,6 +408,14 @@ async function getLastBankAccountChangeAt(ctx: Context, userId: UserId) {
     .sort((a, b) => b.created_at - a.created_at)[0]?.created_at;
 }
 
+/**
+ * Calculates recent withdrawal statistics for risk evaluation
+ * 
+ * @param ctx - Database context
+ * @param userId - User ID to calculate stats for
+ * @param now - Current timestamp for window calculations
+ * @returns Object with daily and velocity statistics
+ */
 async function getRecentWithdrawalStats(ctx: Context, userId: UserId, now: number) {
   const sinceDay = now - DAY_MS;
   const sinceVelocity = now - VELOCITY_WINDOW_MS;
@@ -329,6 +442,13 @@ async function getRecentWithdrawalStats(ctx: Context, userId: UserId, now: numbe
   };
 }
 
+/**
+ * Evaluates withdrawal risk from database context by fetching all required data
+ * 
+ * @param ctx - Database context
+ * @param args - Withdrawal request parameters
+ * @returns Risk decision from evaluateWithdrawalRiskDecision
+ */
 async function evaluateWithdrawalRiskFromContext(
   ctx: Context,
   args: {
@@ -338,6 +458,7 @@ async function evaluateWithdrawalRiskFromContext(
     now: number;
   },
 ) {
+  // Fetch all risk-related data in parallel for performance
   const [activeHold, latestBankAccountChangeAt, recentStats] = await Promise.all([
     getActiveWithdrawalHold(ctx, args.userId),
     getLastBankAccountChangeAt(ctx, args.userId),
@@ -363,6 +484,13 @@ async function evaluateWithdrawalRiskFromContext(
   });
 }
 
+/**
+ * Builds a comprehensive risk summary for UI display
+ * 
+ * @param ctx - Database context
+ * @param userId - User ID to build summary for
+ * @returns Risk summary with active holds and latest events
+ */
 export async function buildWithdrawalRiskSummary(ctx: Context, userId: UserId) {
   const [activeHold, latestEvent] = await Promise.all([
     getActiveWithdrawalHold(ctx, userId),
@@ -378,6 +506,19 @@ export async function buildWithdrawalRiskSummary(ctx: Context, userId: UserId) {
   };
 }
 
+/**
+ * Asserts that a withdrawal request is allowed by evaluating all risk rules
+ * 
+ * This is the main entry point for withdrawal risk checks. It:
+ * 1. Fetches all risk data (holds, bank changes, withdrawal history)
+ * 2. Evaluates all risk rules
+ * 3. If blocked: logs risk event and throws error
+ * 4. If allowed: returns void
+ * 
+ * @param ctx - Mutation context
+ * @param args - Withdrawal request details including user, amount, method
+ * @throws ConvexError with withdrawal_risk_blocked code if blocked
+ */
 export async function assertWithdrawalRequestAllowed(
   ctx: MutationCtx,
   args: {
@@ -394,10 +535,12 @@ export async function assertWithdrawalRequestAllowed(
     now: args.now,
   });
 
+  // If not blocked, allow withdrawal to proceed
   if (!decision.blocked) {
     return;
   }
 
+  // Log risk event before throwing error
   await insertRiskEvent(ctx, {
     userId: args.user._id,
     eventType: decision.eventType,
@@ -409,6 +552,16 @@ export async function assertWithdrawalRequestAllowed(
   throw new ConvexError(buildWithdrawalRiskErrorData(decision));
 }
 
+/**
+ * Asserts that an admin action (approve/reject/process) is allowed even with active hold
+ * 
+ * Prevents admins from accidentally processing withdrawals for held users.
+ * Logs admin override attempt as risk event.
+ * 
+ * @param ctx - Mutation context
+ * @param args - User ID and admin ID for validation
+ * @throws ConvexError if user has active hold
+ */
 export async function assertWithdrawalAdminActionAllowed(
   ctx: MutationCtx,
   args: {
@@ -417,6 +570,7 @@ export async function assertWithdrawalAdminActionAllowed(
   },
 ) {
   const activeHold = await getActiveWithdrawalHold(ctx, args.userId);
+  // If no active hold, admin action is allowed
   if (!activeHold) {
     return;
   }
@@ -446,6 +600,16 @@ export async function assertWithdrawalAdminActionAllowed(
   throw new ConvexError(buildWithdrawalRiskErrorData(decision));
 }
 
+/**
+ * Places a manual withdrawal hold on a user
+ * 
+ * @mutation
+ * @requires Admin authentication
+ * @param userId - User to place hold on
+ * @param reason - Reason for placing hold (will be shown to user)
+ * @returns Summarized risk hold object
+ * @throws If user already has active hold or validation fails
+ */
 export const placeUserHold = mutation({
   args: {
     userId: v.id("users"),
@@ -453,12 +617,14 @@ export const placeUserHold = mutation({
   },
   returns: riskHoldSummaryValidator,
   handler: async (ctx, args) => {
+    // Validate admin authentication
     const admin = await getAdminUser(ctx);
     const user = await ctx.db.get(args.userId);
     if (!user) {
       throw new ConvexError("User not found");
     }
 
+    // Check for existing active hold
     const activeHold = await getActiveWithdrawalHold(ctx, args.userId);
     if (activeHold) {
       throw new ConvexError("User already has an active withdrawal hold");
@@ -474,6 +640,7 @@ export const placeUserHold = mutation({
       placed_at: placedAt,
     });
 
+    // Verify hold was created successfully
     const hold = await ctx.db.get(holdId);
     if (!hold) {
       throw new ConvexError("Failed to create risk hold");
@@ -507,12 +674,22 @@ export const placeUserHold = mutation({
   },
 });
 
+/**
+ * Releases a manual withdrawal hold from a user
+ * 
+ * @mutation
+ * @requires Admin authentication
+ * @param userId - User to release hold from
+ * @returns Updated risk hold object
+ * @throws If user doesn't have active hold
+ */
 export const releaseUserHold = mutation({
   args: {
     userId: v.id("users"),
   },
   returns: riskHoldSummaryValidator,
   handler: async (ctx, args) => {
+    // Validate admin authentication
     const admin = await getAdminUser(ctx);
     const activeHold = await getActiveWithdrawalHold(ctx, args.userId);
 
@@ -520,6 +697,7 @@ export const releaseUserHold = mutation({
       throw new ConvexError("User does not have an active withdrawal hold");
     }
 
+    // Update hold status to released
     const releasedAt = Date.now();
     await ctx.db.patch(activeHold._id, {
       status: RiskHoldStatus.RELEASED,
@@ -527,6 +705,7 @@ export const releaseUserHold = mutation({
       released_at: releasedAt,
     });
 
+    // Verify update succeeded
     const updated = await ctx.db.get(activeHold._id);
     if (!updated) {
       throw new ConvexError("Failed to release risk hold");
@@ -557,6 +736,15 @@ export const releaseUserHold = mutation({
   },
 });
 
+/**
+ * Lists risk events for admin review
+ * 
+ * @query
+ * @requires Admin authentication
+ * @param userId - Optional filter by specific user
+ * @param limit - Number of events to return (default: 20, max: 100)
+ * @returns Array of risk event summaries, most recent first
+ */
 export const listEventsForAdmin = query({
   args: {
     userId: v.optional(v.id("users")),
