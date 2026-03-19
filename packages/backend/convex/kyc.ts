@@ -5,6 +5,7 @@ import type { KycData, KycDocument, KycDocumentId, UserId } from "./types";
 
 import { ConvexError, v } from "convex/values";
 
+import { syncUserUpdate } from "./aggregateHelpers";
 import { getAdminUser, getUser } from "./utils";
 import { internal } from "./_generated/api";
 import { auditLog } from "./auditLog";
@@ -280,12 +281,22 @@ export const adminReviewKyc = mutation({
     const nextUserStatus = args.approved
       ? UserStatus.ACTIVE
       : UserStatus.CLOSED;
+
+    // Get old user state before updating
+    const oldUser = user;
+
     await ctx.runMutation(internal.users.processKycResult, {
       userId: args.userId,
       approved: args.approved,
       reason: args.reason,
       reviewedBy: admin._id,
     });
+
+    // Get updated user and sync aggregates
+    const updatedUser = await ctx.db.get(args.userId);
+    if (updatedUser) {
+      await syncUserUpdate(ctx, oldUser, updatedUser);
+    }
 
     await auditLog.logChange(ctx, {
       action: "kyc.reviewed",

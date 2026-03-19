@@ -5,12 +5,20 @@ import { AuditActions } from "convex-audit-log";
 import { internalMutation, mutation, query } from "./_generated/server";
 import { ensureUser, getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
+
 import {
   KYC_VERIFICATION_STATUS,
   RESOURCE_TYPE,
   TABLE_NAMES,
   EVENT_TYPE,
+  UserStatus,
 } from "./shared";
+
+import {
+  syncUserInsert,
+  syncUserUpdate,
+  syncUserDelete,
+} from "./aggregateHelpers";
 
 /**
  * Get a user profile by ID.
@@ -62,7 +70,7 @@ export const updateUserProfile = mutation({
     await auditLog.logChange(ctx, {
       action: AuditActions.USER_UPDATED,
       actorId: user._id,
-      resourceType: "users",
+      resourceType: RESOURCE_TYPE.USERS,
       resourceId: user._id,
       before: { onboarding_complete: user.onboarding_complete },
       after: { onboarding_complete: args.onboardingComplete },
@@ -96,6 +104,7 @@ export const upsertFromWorkOS = internalMutation({
       .unique();
 
     if (existing) {
+      const oldUser = existing;
       await ctx.db.patch(existing._id, {
         email: args.email,
         first_name: args.firstName,
@@ -103,9 +112,16 @@ export const upsertFromWorkOS = internalMutation({
         profile_picture_url: args.profilePictureUrl,
         last_login_at: args.lastLoginAt,
       });
+
+      // Sync aggregates for user updates
+      const updatedUser = await ctx.db.get(existing._id);
+      if (updatedUser) {
+        await syncUserUpdate(ctx, oldUser, updatedUser);
+      }
+
       return existing._id;
     }
-    return await ctx.db.insert(TABLE_NAMES.USERS, {
+    const userId = await ctx.db.insert(TABLE_NAMES.USERS, {
       workosId: args.workosId,
       email: args.email,
       first_name: args.firstName ?? "",
@@ -116,11 +132,19 @@ export const upsertFromWorkOS = internalMutation({
       referral_code: "",
       total_balance_kobo: BigInt(0),
       savings_balance_kobo: BigInt(0),
-      status: "pending_kyc",
+      status: UserStatus.PENDING_KYC,
       created_at: Date.now(),
       updated_at: Date.now(),
       last_login_at: args.lastLoginAt,
     });
+
+    // Sync aggregates for new user
+    const newUser = await ctx.db.get(userId);
+    if (newUser) {
+      await syncUserInsert(ctx, newUser);
+    }
+
+    return userId;
   },
 });
 
@@ -136,6 +160,9 @@ export const deleteFromWorkOS = internalMutation({
       .unique();
 
     if (existing) {
+      // Sync aggregates before deletion
+      await syncUserDelete(ctx, existing);
+
       await auditLog.log(ctx, {
         action: AuditActions.USER_DELETED,
         actorId: existing._id,

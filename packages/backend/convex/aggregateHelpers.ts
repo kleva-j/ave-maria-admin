@@ -10,6 +10,7 @@ import type {
   TransactionReconciliationIssue,
   UserSavingsPlan,
   Transaction,
+  Withdrawal,
   User,
 } from "./types";
 
@@ -215,11 +216,11 @@ export async function syncReconciliationIssueUpdate(
  */
 export async function syncWithdrawalInsert(
   ctx: MutationCtx,
-  withdrawal: { _id: string; status: string },
+  withdrawal: Withdrawal,
 ) {
   await Promise.all([
-    totalWithdrawals.insert(ctx, withdrawal as any),
-    withdrawalsByStatus.insert(ctx, withdrawal as any),
+    totalWithdrawals.insert(ctx, withdrawal),
+    withdrawalsByStatus.insert(ctx, withdrawal),
   ]);
 }
 
@@ -229,11 +230,11 @@ export async function syncWithdrawalInsert(
  */
 export async function syncWithdrawalUpdate(
   ctx: MutationCtx,
-  oldWithdrawal: { _id: string; status: string },
-  newWithdrawal: { _id: string; status: string },
+  oldWithdrawal: Withdrawal,
+  newWithdrawal: Withdrawal,
 ) {
   await Promise.all([
-    totalWithdrawals.replace(ctx, oldWithdrawal as any, newWithdrawal as any),
-    withdrawalsByStatus.replace(ctx, oldWithdrawal as any, newWithdrawal as any),
+    totalWithdrawals.replace(ctx, oldWithdrawal, newWithdrawal),
+    withdrawalsByStatus.replace(ctx, oldWithdrawal, newWithdrawal),
   ]);
 }
