@@ -1,10 +1,10 @@
-import { createFunctionHandle } from "convex/server";
+import { Crons } from "@convex-dev/crons";
 
 import { internalAction } from "./_generated/server";
-import { runReconciliation } from "./transactions";
-import { refreshDashboardKpis } from "./kpis";
-import { components } from "./_generated/api";
+import { components, internal } from "./_generated/api";
 import { auditLog } from "./auditLog";
+
+const crons = new Crons(components.crons);
 
 /**
  * Idempotent setup function to register dynamic cron jobs via the crons component.
@@ -22,32 +22,25 @@ export const setup = internalAction({
     const cronJobs = [
       {
         name: "refresh dashboard kpis",
-        handle: await createFunctionHandle(refreshDashboardKpis as any),
-        schedule: { kind: "interval" as const, ms: 10 * 60 * 1000 },
+        fn: internal.kpis.refreshDashboardKpis,
+        schedule: { kind: "interval" as const, ms: 10 * 60 * 1000 }, // 10 minutes
       },
       {
         name: "run transaction reconciliation",
-        handle: await createFunctionHandle(runReconciliation as any),
-        schedule: { kind: "interval" as const, ms: 60 * 60 * 1000 },
+        fn: internal.transactions.runReconciliation,
+        schedule: { kind: "interval" as const, ms: 60 * 60 * 1000 }, // 1 hour
       },
     ];
 
     for (const job of cronJobs) {
-      const existing = await ctx.runQuery(components.crons.public.get, {
-        identifier: { name: job.name },
-      });
+      const existing = await crons.get(ctx, { name: job.name });
 
       if (existing) {
         console.log(`Cron job '${job.name}' is already registered.`);
         continue;
       }
 
-      await ctx.runMutation(components.crons.public.register, {
-        name: job.name,
-        functionHandle: job.handle,
-        schedule: job.schedule,
-        args: {},
-      });
+      await crons.register(ctx, job.schedule, job.fn, {}, job.name);
 
       console.log(
         `Successfully registered cron job '${job.name}' via the crons component.`,

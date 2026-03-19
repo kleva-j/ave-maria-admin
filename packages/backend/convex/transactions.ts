@@ -76,6 +76,7 @@ const paginatedTransactionsValidator = v.object({
 
 const reconciliationRunValidator = v.object({
   _id: v.id("transaction_reconciliation_runs"),
+  _creationTime: v.number(),
   status: v.string(),
   started_at: v.number(),
   completed_at: v.optional(v.number()),
@@ -88,6 +89,7 @@ const reconciliationRunValidator = v.object({
 
 const reconciliationIssueValidator = v.object({
   _id: v.id("transaction_reconciliation_issues"),
+  _creationTime: v.number(),
   run_id: v.id("transaction_reconciliation_runs"),
   issue_type: v.string(),
   issue_status: v.string(),
