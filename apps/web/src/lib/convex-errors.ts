@@ -5,6 +5,7 @@ import {
 } from "@avm-daily/backend/convex/shared";
 
 const WITHDRAWAL_ACTION_FORBIDDEN_CODE = "withdrawal_action_forbidden";
+const WITHDRAWAL_RISK_BLOCKED_CODE = "withdrawal_risk_blocked";
 
 export type WithdrawalActionForbiddenErrorData = {
   code: typeof WITHDRAWAL_ACTION_FORBIDDEN_CODE;
@@ -12,6 +13,19 @@ export type WithdrawalActionForbiddenErrorData = {
   method: typeof WithdrawalMethod.CASH;
   allowed_roles: AdminRole[];
   message: string;
+};
+
+export type WithdrawalRiskBlockedErrorData = {
+  code: typeof WITHDRAWAL_RISK_BLOCKED_CODE;
+  scope: "withdrawals";
+  rule:
+    | "manual_hold"
+    | "daily_amount_limit"
+    | "daily_count_limit"
+    | "velocity_limit"
+    | "bank_account_cooldown";
+  message: string;
+  details?: Record<string, unknown>;
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -45,6 +59,22 @@ export function isWithdrawalActionForbiddenErrorData(
   );
 }
 
+export function isWithdrawalRiskBlockedErrorData(
+  value: unknown,
+): value is WithdrawalRiskBlockedErrorData {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    value.code === WITHDRAWAL_RISK_BLOCKED_CODE &&
+    value.scope === "withdrawals" &&
+    typeof value.rule === "string" &&
+    typeof value.message === "string" &&
+    (value.details === undefined || isRecord(value.details))
+  );
+}
+
 /**
  * Normalize Convex mutation/action failures into admin-friendly text.
  *
@@ -57,6 +87,10 @@ export function normalizeConvexErrorMessage(error: unknown, fallback: string) {
   const data = getConvexErrorData(error);
 
   if (isWithdrawalActionForbiddenErrorData(data)) {
+    return data.message;
+  }
+
+  if (isWithdrawalRiskBlockedErrorData(data)) {
     return data.message;
   }
 

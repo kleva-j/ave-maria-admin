@@ -1,129 +1,33 @@
-import type { Id } from "@avm-daily/backend/convex/_generated/dataModel";
-import type { ChangeEvent } from "react";
-
-import { api } from "@avm-daily/backend/convex/_generated/api";
-import { Checkbox } from "@avm-daily/ui/components/checkbox";
-import { useSuspenseQuery } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
-import { Button } from "@avm-daily/ui/components/button";
-import { Input } from "@avm-daily/ui/components/input";
-import { convexQuery } from "@convex-dev/react-query";
-import { useMutation } from "convex/react";
-import { Trash2 } from "lucide-react";
-import { useState } from "react";
-
 import {
-  CardDescription,
+  Card,
   CardContent,
+  CardDescription,
   CardHeader,
   CardTitle,
-  Card,
 } from "@avm-daily/ui/components/card";
+import { createFileRoute, Link } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/todos")({ component: TodosRoute });
 
 function TodosRoute() {
-  const [newTodoText, setNewTodoText] = useState("");
-
-  const todosQuery = useSuspenseQuery(convexQuery(api.todos.getAll, {}));
-  const todos = todosQuery.data;
-
-  const createTodo = useMutation(api.todos.create);
-  const toggleTodo = useMutation(api.todos.toggle);
-  const removeTodo = useMutation(api.todos.deleteTodo);
-
-  const handleAddTodo = async (e: ChangeEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    const text = newTodoText.trim();
-    if (text) {
-      setNewTodoText("");
-      try {
-        await createTodo({ text });
-      } catch (error) {
-        console.error("Failed to add todo:", error);
-        setNewTodoText(text);
-      }
-    }
-  };
-
-  const handleToggleTodo = async (id: Id<"todos">, completed: boolean) => {
-    try {
-      await toggleTodo({ id, completed: !completed });
-    } catch (error) {
-      console.error("Failed to toggle todo:", error);
-    }
-  };
-
-  const handleDeleteTodo = async (id: Id<"todos">) => {
-    try {
-      await removeTodo({ id });
-    } catch (error) {
-      console.error("Failed to delete todo:", error);
-    }
-  };
-
   return (
-    <div className="mx-auto w-full max-w-md py-10">
-      <Card>
+    <div className="mx-auto flex w-full max-w-2xl px-4 py-12">
+      <Card className="w-full rounded-3xl border-zinc-200 shadow-sm">
         <CardHeader>
-          <CardTitle>Todo List (Convex)</CardTitle>
-          <CardDescription>Manage your tasks efficiently</CardDescription>
+          <CardTitle>Todo Demo Retired</CardTitle>
+          <CardDescription>
+            The old Convex todo example was removed while we shifted the backend
+            toward savings, KYC, withdrawals, and admin operations.
+          </CardDescription>
         </CardHeader>
-        <CardContent>
-          <form
-            onSubmit={handleAddTodo}
-            className="mb-6 flex items-center space-x-2"
-          >
-            <Input
-              value={newTodoText}
-              onChange={(e) => setNewTodoText(e.target.value)}
-              placeholder="Add a new task..."
-            />
-            <Button type="submit" disabled={!newTodoText.trim()}>
-              Add
-            </Button>
-          </form>
-
-          {todos?.length === 0 ? (
-            <p className="py-4 text-center">No todos yet. Add one above!</p>
-          ) : (
-            <ul className="space-y-2">
-              {todos?.map((todo) => (
-                <li
-                  key={todo._id}
-                  className="flex items-center justify-between rounded-md border p-2"
-                >
-                  <div className="flex items-center space-x-2">
-                    <Checkbox
-                      checked={todo.completed}
-                      onCheckedChange={() =>
-                        handleToggleTodo(todo._id, todo.completed)
-                      }
-                      id={`todo-${todo._id}`}
-                    />
-                    <label
-                      htmlFor={`todo-${todo._id}`}
-                      className={`${
-                        todo.completed
-                          ? "text-muted-foreground line-through"
-                          : ""
-                      }`}
-                    >
-                      {todo.text}
-                    </label>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleDeleteTodo(todo._id)}
-                    aria-label="Delete todo"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
+        <CardContent className="space-y-3 text-sm text-zinc-600">
+          <p>
+            If you still want a sandbox feature here, we can replace this route
+            with a transaction explorer or another finance-safe demo.
+          </p>
+          <Link to="/dashboard" className="font-medium text-zinc-950 underline underline-offset-4">
+            Back to dashboard
+          </Link>
         </CardContent>
       </Card>
     </div>

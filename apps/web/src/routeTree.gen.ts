@@ -15,7 +15,13 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ProtectedDashboardRouteImport } from './routes/_protected/dashboard'
+import { Route as ProtectedAdminRouteImport } from './routes/_protected/admin'
+import { Route as ProtectedAdminIndexRouteImport } from './routes/_protected/admin/index'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
+import { Route as ProtectedAdminWithdrawalsRouteImport } from './routes/_protected/admin/withdrawals'
+import { Route as ProtectedAdminReconciliationRouteImport } from './routes/_protected/admin/reconciliation'
+import { Route as ProtectedAdminKycRouteImport } from './routes/_protected/admin/kyc'
+import { Route as ProtectedAdminBankVerificationRouteImport } from './routes/_protected/admin/bank-verification'
 
 const TodosRoute = TodosRouteImport.update({
   id: '/todos',
@@ -46,19 +52,58 @@ const ProtectedDashboardRoute = ProtectedDashboardRouteImport.update({
   path: '/dashboard',
   getParentRoute: () => ProtectedRoute,
 } as any)
+const ProtectedAdminRoute = ProtectedAdminRouteImport.update({
+  id: '/admin',
+  path: '/admin',
+  getParentRoute: () => ProtectedRoute,
+} as any)
+const ProtectedAdminIndexRoute = ProtectedAdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
 const ApiAuthCallbackRoute = ApiAuthCallbackRouteImport.update({
   id: '/api/auth/callback',
   path: '/api/auth/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProtectedAdminWithdrawalsRoute =
+  ProtectedAdminWithdrawalsRouteImport.update({
+    id: '/withdrawals',
+    path: '/withdrawals',
+    getParentRoute: () => ProtectedAdminRoute,
+  } as any)
+const ProtectedAdminReconciliationRoute =
+  ProtectedAdminReconciliationRouteImport.update({
+    id: '/reconciliation',
+    path: '/reconciliation',
+    getParentRoute: () => ProtectedAdminRoute,
+  } as any)
+const ProtectedAdminKycRoute = ProtectedAdminKycRouteImport.update({
+  id: '/kyc',
+  path: '/kyc',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
+const ProtectedAdminBankVerificationRoute =
+  ProtectedAdminBankVerificationRouteImport.update({
+    id: '/bank-verification',
+    path: '/bank-verification',
+    getParentRoute: () => ProtectedAdminRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/signout': typeof SignoutRoute
   '/todos': typeof TodosRoute
+  '/admin': typeof ProtectedAdminRouteWithChildren
   '/dashboard': typeof ProtectedDashboardRoute
+  '/admin/bank-verification': typeof ProtectedAdminBankVerificationRoute
+  '/admin/kyc': typeof ProtectedAdminKycRoute
+  '/admin/reconciliation': typeof ProtectedAdminReconciliationRoute
+  '/admin/withdrawals': typeof ProtectedAdminWithdrawalsRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/admin/': typeof ProtectedAdminIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -66,7 +111,12 @@ export interface FileRoutesByTo {
   '/signout': typeof SignoutRoute
   '/todos': typeof TodosRoute
   '/dashboard': typeof ProtectedDashboardRoute
+  '/admin/bank-verification': typeof ProtectedAdminBankVerificationRoute
+  '/admin/kyc': typeof ProtectedAdminKycRoute
+  '/admin/reconciliation': typeof ProtectedAdminReconciliationRoute
+  '/admin/withdrawals': typeof ProtectedAdminWithdrawalsRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/admin': typeof ProtectedAdminIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -75,8 +125,14 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/signout': typeof SignoutRoute
   '/todos': typeof TodosRoute
+  '/_protected/admin': typeof ProtectedAdminRouteWithChildren
   '/_protected/dashboard': typeof ProtectedDashboardRoute
+  '/_protected/admin/bank-verification': typeof ProtectedAdminBankVerificationRoute
+  '/_protected/admin/kyc': typeof ProtectedAdminKycRoute
+  '/_protected/admin/reconciliation': typeof ProtectedAdminReconciliationRoute
+  '/_protected/admin/withdrawals': typeof ProtectedAdminWithdrawalsRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
+  '/_protected/admin/': typeof ProtectedAdminIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -85,8 +141,14 @@ export interface FileRouteTypes {
     | '/login'
     | '/signout'
     | '/todos'
+    | '/admin'
     | '/dashboard'
+    | '/admin/bank-verification'
+    | '/admin/kyc'
+    | '/admin/reconciliation'
+    | '/admin/withdrawals'
     | '/api/auth/callback'
+    | '/admin/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -94,7 +156,12 @@ export interface FileRouteTypes {
     | '/signout'
     | '/todos'
     | '/dashboard'
+    | '/admin/bank-verification'
+    | '/admin/kyc'
+    | '/admin/reconciliation'
+    | '/admin/withdrawals'
     | '/api/auth/callback'
+    | '/admin'
   id:
     | '__root__'
     | '/'
@@ -102,8 +169,14 @@ export interface FileRouteTypes {
     | '/login'
     | '/signout'
     | '/todos'
+    | '/_protected/admin'
     | '/_protected/dashboard'
+    | '/_protected/admin/bank-verification'
+    | '/_protected/admin/kyc'
+    | '/_protected/admin/reconciliation'
+    | '/_protected/admin/withdrawals'
     | '/api/auth/callback'
+    | '/_protected/admin/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -159,6 +232,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedDashboardRouteImport
       parentRoute: typeof ProtectedRoute
     }
+    '/_protected/admin': {
+      id: '/_protected/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof ProtectedAdminRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
+    '/_protected/admin/': {
+      id: '/_protected/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof ProtectedAdminIndexRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
     '/api/auth/callback': {
       id: '/api/auth/callback'
       path: '/api/auth/callback'
@@ -166,14 +253,64 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_protected/admin/withdrawals': {
+      id: '/_protected/admin/withdrawals'
+      path: '/withdrawals'
+      fullPath: '/admin/withdrawals'
+      preLoaderRoute: typeof ProtectedAdminWithdrawalsRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/admin/reconciliation': {
+      id: '/_protected/admin/reconciliation'
+      path: '/reconciliation'
+      fullPath: '/admin/reconciliation'
+      preLoaderRoute: typeof ProtectedAdminReconciliationRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/admin/kyc': {
+      id: '/_protected/admin/kyc'
+      path: '/kyc'
+      fullPath: '/admin/kyc'
+      preLoaderRoute: typeof ProtectedAdminKycRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
+    '/_protected/admin/bank-verification': {
+      id: '/_protected/admin/bank-verification'
+      path: '/bank-verification'
+      fullPath: '/admin/bank-verification'
+      preLoaderRoute: typeof ProtectedAdminBankVerificationRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
   }
 }
 
+interface ProtectedAdminRouteChildren {
+  ProtectedAdminBankVerificationRoute: typeof ProtectedAdminBankVerificationRoute
+  ProtectedAdminKycRoute: typeof ProtectedAdminKycRoute
+  ProtectedAdminReconciliationRoute: typeof ProtectedAdminReconciliationRoute
+  ProtectedAdminWithdrawalsRoute: typeof ProtectedAdminWithdrawalsRoute
+  ProtectedAdminIndexRoute: typeof ProtectedAdminIndexRoute
+}
+
+const ProtectedAdminRouteChildren: ProtectedAdminRouteChildren = {
+  ProtectedAdminBankVerificationRoute: ProtectedAdminBankVerificationRoute,
+  ProtectedAdminKycRoute: ProtectedAdminKycRoute,
+  ProtectedAdminReconciliationRoute: ProtectedAdminReconciliationRoute,
+  ProtectedAdminWithdrawalsRoute: ProtectedAdminWithdrawalsRoute,
+  ProtectedAdminIndexRoute: ProtectedAdminIndexRoute,
+}
+
+const ProtectedAdminRouteWithChildren = ProtectedAdminRoute._addFileChildren(
+  ProtectedAdminRouteChildren,
+)
+
 interface ProtectedRouteChildren {
+  ProtectedAdminRoute: typeof ProtectedAdminRouteWithChildren
   ProtectedDashboardRoute: typeof ProtectedDashboardRoute
 }
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
+  ProtectedAdminRoute: ProtectedAdminRouteWithChildren,
   ProtectedDashboardRoute: ProtectedDashboardRoute,
 }
 

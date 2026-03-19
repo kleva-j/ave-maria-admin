@@ -69,7 +69,7 @@ export const serverFnHelpers = {
     const context = {
       ...authMocks.createMockContext(),
       ...contextOverrides,
-    } as C;
+    } as unknown as C;
 
     return handler({ context });
   },

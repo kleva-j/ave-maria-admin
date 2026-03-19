@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   getConvexErrorData,
   isWithdrawalActionForbiddenErrorData,
+  isWithdrawalRiskBlockedErrorData,
   normalizeConvexErrorMessage,
 } from "@/lib/convex-errors";
 
@@ -53,5 +54,26 @@ describe("convex error helpers", () => {
     });
 
     expect(isWithdrawalActionForbiddenErrorData(data)).toBe(true);
+  });
+
+  it("recognizes and normalizes structured withdrawal risk errors", () => {
+    const error = Object.assign(new Error("Blocked by risk controls"), {
+      data: {
+        code: "withdrawal_risk_blocked",
+        scope: "withdrawals",
+        rule: "manual_hold",
+        message: "Withdrawals are currently blocked for this user: Compliance review",
+        details: {
+          hold_id: "hold_1",
+        },
+      },
+    });
+
+    const data = getConvexErrorData(error);
+
+    expect(isWithdrawalRiskBlockedErrorData(data)).toBe(true);
+    expect(
+      normalizeConvexErrorMessage(error, "Unable to request withdrawal"),
+    ).toBe("Withdrawals are currently blocked for this user: Compliance review");
   });
 });
