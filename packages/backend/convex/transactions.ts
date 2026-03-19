@@ -1,3 +1,28 @@
+/**
+ * Transaction Ledger Module
+ * 
+ * Core financial transaction processing system for the savings platform.
+ * Handles all monetary movements including contributions, withdrawals, interest accrual,
+ * investment yields, referral bonuses, and reversals.
+ * 
+ * Key Features:
+ * - Idempotent transaction posting (prevents duplicate entries)
+ * - Automatic balance projection updates (user & plan levels)
+ * - Comprehensive audit logging for compliance
+ * - Reversal mechanism with full traceability
+ * - Real-time reconciliation issue detection
+ * - Aggregate table synchronization for O(log n) analytics queries
+ * 
+ * Transaction Types:
+ * - CONTRIBUTION: User deposits into savings
+ * - WITHDRAWAL: User withdrawals from savings
+ * - INTEREST_ACCRUAL: Periodic interest earned
+ * - INVESTMENT_YIELD: Investment returns credited
+ * - REFERRAL_BONUS: Bonus for referring new users
+ * - REVERSAL: Undoing a previous transaction
+ * 
+ * @module transactions
+ */
 import type { MutationCtx } from "./_generated/server";
 import type {
   UserSavingsPlanId,
@@ -37,7 +62,7 @@ import {
 } from "./shared";
 
 const transactionActorIdValidator = v.optional(
-  v.union(v.id("users"), v.id("admin_users"))
+  v.union(v.id("users"), v.id("admin_users")),
 );
 
 const transactionMetadataSummaryValidator = v.object({
@@ -200,10 +225,26 @@ type TransactionListFilters = {
   dateTo?: number;
 };
 
+/**
+ * Type guard to check if a value is a record object.
+ * Used for safe metadata parsing and validation.
+ * 
+ * @param value - The value to check
+ * @returns True if the value is a non-null object (not an array)
+ */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+/**
+ * Safely extracts and validates metadata as a record object.
+ * Throws ConvexError if the value is not a valid object.
+ * 
+ * @param value - The value to validate (default: undefined)
+ * @param fieldName - Name of the field for error messages (default: "metadata")
+ * @returns The validated record object or empty object if undefined
+ * @throws ConvexError if value is not an object
+ */
 function asObject(value: unknown, fieldName = "metadata") {
   if (value === undefined) {
     return {};
@@ -216,6 +257,13 @@ function asObject(value: unknown, fieldName = "metadata") {
   return { ...value };
 }
 
+/**
+ * Converts a value to a string ID representation.
+ * Handles null, undefined, and converts to string safely.
+ * 
+ * @param value - The value to convert
+ * @returns String representation or undefined if null/undefined
+ */
 function asStringId(value: unknown) {
   if (value === undefined || value === null) {
     return undefined;
@@ -224,10 +272,20 @@ function asStringId(value: unknown) {
   return String(value);
 }
 
+/**
+ * Extracts a required string field from a metadata object.
+ * Validates presence and trims whitespace.
+ * 
+ * @param object - The metadata object to extract from
+ * @param key - The key to look up
+ * @param message - Custom error message (default: "{key} is required")
+ * @returns The trimmed string value
+ * @throws ConvexError if the field is missing, empty, or not a string
+ */
 function getRequiredString(
   object: Record<string, unknown>,
   key: string,
-  message = `${key} is required`
+  message = `${key} is required`,
 ) {
   const value = object[key];
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -237,6 +295,15 @@ function getRequiredString(
   return value.trim();
 }
 
+/**
+ * Extracts an optional string field from a metadata object.
+ * Returns undefined for missing/null/empty values.
+ * 
+ * @param object - The metadata object to extract from
+ * @param key - The key to look up
+ * @returns The trimmed string value or undefined
+ * @throws ConvexError if the value exists but is not a string
+ */
 function getOptionalString(object: Record<string, unknown>, key: string) {
   const value = object[key];
   if (value === undefined || value === null || value === "") {
@@ -250,6 +317,15 @@ function getOptionalString(object: Record<string, unknown>, key: string) {
   return value.trim();
 }
 
+/**
+ * Extracts a required number field from a metadata object.
+ * Validates that the value is a finite number.
+ * 
+ * @param object - The metadata object to extract from
+ * @param key - The key to look up
+ * @returns The numeric value
+ * @throws ConvexError if the field is missing or not a valid number
+ */
 function getRequiredNumber(object: Record<string, unknown>, key: string) {
   const value = object[key];
   if (typeof value !== "number" || !Number.isFinite(value)) {
@@ -259,28 +335,69 @@ function getRequiredNumber(object: Record<string, unknown>, key: string) {
   return value;
 }
 
+/**
+ * Type guard to validate transaction type values.
+ * Ensures the value matches one of the defined TxnType enum values.
+ * 
+ * @param value - The value to validate
+ * @returns True if the value is a valid TxnType
+ */
 function isTxnTypeValue(value: unknown): value is TxnType {
   return Object.values(TxnType).includes(value as TxnType);
 }
 
+/**
+ * Validates that a transaction reference is provided and non-empty.
+ * References are critical for idempotency and audit trails.
+ * 
+ * @param reference - The transaction reference to validate
+ * @throws ConvexError if the reference is empty or whitespace
+ */
 function assertReference(reference: string) {
   if (reference.trim().length === 0) {
     throw new ConvexError("reference is required");
   }
 }
 
+/**
+ * Validates that positive-amount transactions have the correct amount sign.
+ * Applied to: CONTRIBUTION, INTEREST_ACCRUAL, INVESTMENT_YIELD, REFERRAL_BONUS
+ * 
+ * @param type - The transaction type
+ * @param amountKobo - The amount in kobo (must be positive)
+ * @throws ConvexError if amount is not positive
+ */
 function assertPositiveAmount(type: TxnType, amountKobo: bigint) {
   if (amountKobo <= 0n) {
     throw new ConvexError(`${type} transactions must have a positive amount`);
   }
 }
 
+/**
+ * Validates that negative-amount transactions have the correct amount sign.
+ * Applied to: WITHDRAWAL
+ * 
+ * @param type - The transaction type
+ * @param amountKobo - The amount in kobo (must be negative)
+ * @throws ConvexError if amount is not negative
+ */
 function assertNegativeAmount(type: TxnType, amountKobo: bigint) {
   if (amountKobo >= 0n) {
     throw new ConvexError(`${type} transactions must have a negative amount`);
   }
 }
 
+/**
+ * Canonicalizes a value for stable string comparison.
+ * Recursively sorts object keys and processes arrays to ensure
+ * consistent ordering regardless of input order.
+ * 
+ * This is critical for idempotency checks - two identical payloads
+ * must produce the same canonical form even if keys were in different order.
+ * 
+ * @param value - The value to canonicalize
+ * @returns A canonically ordered version of the value
+ */
 function canonicalizeValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map((item) => canonicalizeValue(item));
@@ -298,14 +415,38 @@ function canonicalizeValue(value: unknown): unknown {
   return value;
 }
 
+/**
+ * Creates a stable JSON string representation of a value.
+ * Used for comparing metadata objects and detecting duplicates.
+ * 
+ * @param value - The value to stringify
+ * @returns A deterministic JSON string representation
+ */
 function stableStringify(value: unknown) {
   return JSON.stringify(canonicalizeValue(value));
 }
 
+/**
+ * Normalizes and validates contribution transaction metadata.
+ * Contributions represent user deposits into their savings plans.
+ * 
+ * Required fields:
+ * - channel: Where the contribution originated (e.g., "mobile_app", "web")
+ * - origin_reference: External system reference for tracing
+ * 
+ * Optional fields:
+ * - note: Additional context or memo
+ * 
+ * @param metadata - Raw metadata object
+ * @param source - Transaction source (USER, ADMIN, SYSTEM)
+ * @param actorId - ID of the user/admin performing the action
+ * @returns Normalized metadata with standardized structure
+ * @throws ConvexError if required fields are missing
+ */
 function normalizeContributionMetadata(
   metadata: Record<string, unknown>,
   source: TransactionSource,
-  actorId?: TransactionActorId
+  actorId?: TransactionActorId,
 ) {
   return {
     source,
@@ -316,10 +457,29 @@ function normalizeContributionMetadata(
   };
 }
 
+/**
+ * Normalizes and validates accrual transaction metadata.
+ * Accruals represent periodic interest or investment returns.
+ * 
+ * Required fields:
+ * - period_start: Start date of the accrual period
+ * - period_end: End date of the accrual period
+ * - rate: Accrual rate (e.g., 0.05 for 5%)
+ * - run_id: ID of the accrual run
+ * 
+ * Optional fields:
+ * - note: Additional context or memo
+ * 
+ * @param metadata - Raw metadata object
+ * @param source - Transaction source (USER, ADMIN, SYSTEM)
+ * @param actorId - ID of the user/admin performing the action
+ * @returns Normalized metadata with standardized structure
+ * @throws ConvexError if required fields are missing
+ */
 function normalizeAccrualMetadata(
   metadata: Record<string, unknown>,
   source: TransactionSource,
-  actorId: TransactionActorId | undefined
+  actorId: TransactionActorId | undefined,
 ) {
   return {
     source,
@@ -332,10 +492,28 @@ function normalizeAccrualMetadata(
   };
 }
 
+/**
+ * Normalizes and validates referral bonus transaction metadata.
+ * Referral bonuses are awarded to users for referring new users.
+ * 
+ * Required fields:
+ * - referrer_user_id: ID of the referring user
+ * - referred_user_id: ID of the referred user
+ * - trigger_transaction_reference: Reference of the triggering transaction
+ * 
+ * Optional fields:
+ * - note: Additional context or memo
+ * 
+ * @param metadata - Raw metadata object
+ * @param source - Transaction source (USER, ADMIN, SYSTEM)
+ * @param actorId - ID of the user/admin performing the action
+ * @returns Normalized metadata with standardized structure
+ * @throws ConvexError if required fields are missing
+ */
 function normalizeReferralBonusMetadata(
   metadata: Record<string, unknown>,
   source: TransactionSource,
-  actorId: TransactionActorId | undefined
+  actorId: TransactionActorId | undefined,
 ) {
   return {
     source,
@@ -344,16 +522,35 @@ function normalizeReferralBonusMetadata(
     referred_user_id: getRequiredString(metadata, "referred_user_id"),
     trigger_transaction_reference: getRequiredString(
       metadata,
-      "trigger_transaction_reference"
+      "trigger_transaction_reference",
     ),
     note: getOptionalString(metadata, "note"),
   };
 }
 
+/**
+ * Normalizes and validates withdrawal transaction metadata.
+ * Withdrawals represent user withdrawals from their savings plans.
+ * 
+ * Required fields:
+ * - method: Withdrawal method (e.g., "BANK_TRANSFER", "CASH")
+ * - withdrawal_status: Status of the withdrawal (e.g., "PENDING", "COMPLETED")
+ * 
+ * Optional fields:
+ * - bank_account: Bank account details (required for bank transfers)
+ * - cash_details: Cash details (required for cash withdrawals)
+ * - note: Additional context or memo
+ * 
+ * @param metadata - Raw metadata object
+ * @param source - Transaction source (USER, ADMIN, SYSTEM)
+ * @param actorId - ID of the user/admin performing the action
+ * @returns Normalized metadata with standardized structure
+ * @throws ConvexError if required fields are missing
+ */
 function normalizeWithdrawalMetadata(
   metadata: Record<string, unknown>,
   source: TransactionSource,
-  actorId: TransactionActorId | undefined
+  actorId: TransactionActorId | undefined,
 ) {
   const method = getRequiredString(metadata, "method");
   const withdrawalStatus = getRequiredString(metadata, "withdrawal_status");
@@ -362,13 +559,13 @@ function normalizeWithdrawalMetadata(
 
   if (method === WithdrawalMethod.BANK_TRANSFER && !isRecord(bankAccount)) {
     throw new ConvexError(
-      "withdrawal metadata.bank_account is required for bank transfer withdrawals"
+      "withdrawal metadata.bank_account is required for bank transfer withdrawals",
     );
   }
 
   if (method === WithdrawalMethod.CASH && !isRecord(cashDetails)) {
     throw new ConvexError(
-      "withdrawal metadata.cash_details is required for cash withdrawals"
+      "withdrawal metadata.cash_details is required for cash withdrawals",
     );
   }
 
@@ -383,10 +580,26 @@ function normalizeWithdrawalMetadata(
   };
 }
 
+/**
+ * Normalizes and validates reversal transaction metadata.
+ * Reversals undo previous transactions.
+ * 
+ * Required fields:
+ * - original_transaction_id: ID of the original transaction
+ * - original_reference: Reference of the original transaction
+ * - original_type: Type of the original transaction
+ * - reason: Reason for the reversal
+ * 
+ * @param metadata - Raw metadata object
+ * @param source - Transaction source (USER, ADMIN, SYSTEM)
+ * @param actorId - ID of the user/admin performing the action
+ * @returns Normalized metadata with standardized structure
+ * @throws ConvexError if required fields are missing
+ */
 function normalizeReversalMetadata(
   metadata: Record<string, unknown>,
   source: TransactionSource,
-  actorId: TransactionActorId | undefined
+  actorId: TransactionActorId | undefined,
 ) {
   const originalType = metadata.original_type;
   if (!isTxnTypeValue(originalType)) {
@@ -398,7 +611,7 @@ function normalizeReversalMetadata(
     actor_id: actorId ? String(actorId) : undefined,
     original_transaction_id: getRequiredString(
       metadata,
-      "original_transaction_id"
+      "original_transaction_id",
     ),
     original_reference: getRequiredString(metadata, "original_reference"),
     original_type: originalType,
@@ -406,11 +619,15 @@ function normalizeReversalMetadata(
   };
 }
 
+/**
+ * Validates and transforms raw metadata into a structured format based on the transaction type.
+ * Each transaction type has specific required fields to ensure data integrity in the ledger.
+ */
 function normalizeTransactionMetadata(
   type: TxnType,
   metadata: unknown,
   source: TransactionSource,
-  actorId?: TransactionActorId
+  actorId?: TransactionActorId,
 ) {
   const object = asObject(metadata);
 
@@ -429,6 +646,10 @@ function normalizeTransactionMetadata(
   }
 }
 
+/**
+ * Strips sensitive or internal-only metadata fields to create a summary suitable for UI consumption.
+ * This preserves only the essential context needed for user-facing transaction history.
+ */
 function summarizeTransactionMetadata(metadata: unknown) {
   const object = asObject(metadata);
 
@@ -451,13 +672,13 @@ function summarizeTransactionMetadata(metadata: unknown) {
     referred_user_id: getOptionalString(object, "referred_user_id"),
     trigger_transaction_reference: getOptionalString(
       object,
-      "trigger_transaction_reference"
+      "trigger_transaction_reference",
     ),
     withdrawal_status: getOptionalString(object, "withdrawal_status"),
     method: getOptionalString(object, "method"),
     original_transaction_id: getOptionalString(
       object,
-      "original_transaction_id"
+      "original_transaction_id",
     ),
     original_reference: getOptionalString(object, "original_reference"),
     original_type: isTxnTypeValue(object.original_type)
@@ -467,6 +688,10 @@ function summarizeTransactionMetadata(metadata: unknown) {
   };
 }
 
+/**
+ * Transforms a raw Transaction document into a structured summary for API responses.
+ * Includes a cleaned-up metadata summary and core financial fields.
+ */
 function buildTransactionSummary(transaction: Transaction) {
   return {
     _id: transaction._id,
@@ -486,7 +711,7 @@ function buildTransactionSummary(transaction: Transaction) {
 async function getUserPlan(
   ctx: Context,
   userId: UserId,
-  userPlanId?: UserSavingsPlanId
+  userPlanId?: UserSavingsPlanId,
 ) {
   if (!userPlanId) {
     return undefined;
@@ -511,7 +736,7 @@ async function getTransactionsByReference(ctx: Context, reference: string) {
     .collect();
 }
 
-function buildComparableTransactionPayload(input: {
+export function buildComparableTransactionPayload(input: {
   userId: UserId;
   userPlanId?: UserSavingsPlanId;
   type: TxnType;
@@ -558,17 +783,22 @@ function getEffectiveType(transaction: Transaction) {
 
   if (!transaction.reversal_of_type) {
     throw new ConvexError(
-      `Reversal transaction ${transaction._id} is missing reversal_of_type`
+      `Reversal transaction ${transaction._id} is missing reversal_of_type`,
     );
   }
 
   return transaction.reversal_of_type;
 }
 
-function computeProjectionDelta(
+/**
+ * Calculates the impact of a transaction on the user's total balance, savings balance,
+ * and specific plan balance. This logic is used to maintain a projected view of the
+ * user's financial state without needing to re-sum the entire transaction history.
+ */
+export function computeProjectionDelta(
   effectiveType: TxnType,
   amountKobo: bigint,
-  userPlanId?: UserSavingsPlanId
+  userPlanId?: UserSavingsPlanId,
 ): ProjectionDelta {
   switch (effectiveType) {
     case TxnType.CONTRIBUTION:
@@ -596,12 +826,26 @@ function computeProjectionDelta(
   }
 }
 
+export function areComparableTransactionPayloadsEqual(
+  left: ReturnType<typeof buildComparableTransactionPayload>,
+  right: ReturnType<typeof buildComparableTransactionPayload>,
+) {
+  return stableStringify(left) === stableStringify(right);
+}
+
+/**
+ * Updates the denormalized balances for a user and their savings plan.
+ *
+ * This function performs the actual mutations to the `users` and `user_savings_plans` tables.
+ * It ensures that the projected balances never drop below zero, which would indicate
+ * a violation of the system's financial constraints.
+ */
 async function applyProjectionDelta(
   ctx: MutationCtx,
   user: User,
   userPlan: UserSavingsPlan | undefined,
   delta: ProjectionDelta,
-  updatedAt: number
+  updatedAt: number,
 ) {
   const nextTotalBalance = user.total_balance_kobo + delta.totalBalanceKobo;
   const nextSavingsBalance =
@@ -609,7 +853,7 @@ async function applyProjectionDelta(
 
   if (nextTotalBalance < 0n || nextSavingsBalance < 0n) {
     throw new ConvexError(
-      "Transaction would result in a negative user balance"
+      "Transaction would result in a negative user balance",
     );
   }
 
@@ -617,7 +861,7 @@ async function applyProjectionDelta(
     const nextPlanAmount = userPlan.current_amount_kobo + delta.planAmountKobo;
     if (nextPlanAmount < 0n) {
       throw new ConvexError(
-        "Transaction would result in a negative plan balance"
+        "Transaction would result in a negative plan balance",
       );
     }
 
@@ -634,9 +878,15 @@ async function applyProjectionDelta(
   });
 }
 
+/**
+ * Validates transaction arguments and prepares them for processing.
+ *
+ * Handles complex logic for Reversals (verifying original transactions and amounts)
+ * and normalizes metadata before the transaction is committed to the database.
+ */
 async function preparePostArgs(
   ctx: MutationCtx,
-  args: TransactionPostArgs
+  args: TransactionPostArgs,
 ): Promise<PreparedPostArgs> {
   assertReference(args.reference);
 
@@ -651,7 +901,7 @@ async function preparePostArgs(
   if (args.type === TxnType.REVERSAL) {
     if (!args.reversalOfTransactionId) {
       throw new ConvexError(
-        "reversalOfTransactionId is required for reversal transactions"
+        "reversalOfTransactionId is required for reversal transactions",
       );
     }
 
@@ -667,7 +917,7 @@ async function preparePostArgs(
 
     if (reversalOfTransaction.user_id !== args.userId) {
       throw new ConvexError(
-        "Reversal must target the original transaction user"
+        "Reversal must target the original transaction user",
       );
     }
 
@@ -676,7 +926,7 @@ async function preparePostArgs(
       args.amountKobo === 0n
     ) {
       throw new ConvexError(
-        "Reversal amount must be the exact inverse of the original transaction amount"
+        "Reversal amount must be the exact inverse of the original transaction amount",
       );
     }
 
@@ -685,7 +935,7 @@ async function preparePostArgs(
       args.userPlanId !== reversalOfTransaction.user_plan_id
     ) {
       throw new ConvexError(
-        "Reversal savings plan must match the original transaction"
+        "Reversal savings plan must match the original transaction",
       );
     }
 
@@ -693,13 +943,13 @@ async function preparePostArgs(
       userPlan = await getUserPlan(
         ctx,
         args.userId,
-        reversalOfTransaction.user_plan_id
+        reversalOfTransaction.user_plan_id,
       );
     }
   } else {
     if (args.reversalOfTransactionId) {
       throw new ConvexError(
-        "reversalOfTransactionId can only be used with reversal transactions"
+        "reversalOfTransactionId can only be used with reversal transactions",
       );
     }
 
@@ -717,7 +967,7 @@ async function preparePostArgs(
 
     if (args.type === TxnType.REFERRAL_BONUS && userPlan) {
       throw new ConvexError(
-        "Referral bonus transactions cannot be linked to a savings plan"
+        "Referral bonus transactions cannot be linked to a savings plan",
       );
     }
   }
@@ -733,13 +983,13 @@ async function preparePostArgs(
             original_type: reversalOfTransaction.type,
           },
           args.source,
-          args.actorId
+          args.actorId,
         )
       : normalizeTransactionMetadata(
           args.type,
           args.metadata,
           args.source,
-          args.actorId
+          args.actorId,
         );
 
   return {
@@ -762,31 +1012,37 @@ async function preparePostArgs(
   };
 }
 
+/**
+ * Performs a deep comparison between an existing transaction and a new request.
+ * Used for idempotency to ensure that the same reference isn't used for different financial data.
+ */
 function matchesIdempotentPayload(
   transaction: Transaction,
-  prepared: PreparedPostArgs
+  prepared: PreparedPostArgs,
 ) {
-  return (
-    stableStringify(comparableTransactionFromDoc(transaction)) ===
-    stableStringify(
-      buildComparableTransactionPayload({
-        userId: prepared.user._id,
-        userPlanId: prepared.userPlan?._id,
-        type: prepared.type,
-        amountKobo: prepared.amountKobo,
-        reference: prepared.reference,
-        reversalOfTransactionId: prepared.reversalOfTransaction?._id,
-        reversalOfReference: prepared.reversalOfReference,
-        reversalOfType: prepared.reversalOfType,
-        metadata: prepared.metadata,
-      })
-    )
+  return areComparableTransactionPayloadsEqual(
+    comparableTransactionFromDoc(transaction),
+    buildComparableTransactionPayload({
+      userId: prepared.user._id,
+      userPlanId: prepared.userPlan?._id,
+      type: prepared.type,
+      amountKobo: prepared.amountKobo,
+      reference: prepared.reference,
+      reversalOfTransactionId: prepared.reversalOfTransaction?._id,
+      reversalOfReference: prepared.reversalOfReference,
+      reversalOfType: prepared.reversalOfType,
+      metadata: prepared.metadata,
+    }),
   );
 }
 
+/**
+ * Resolves a transaction reference during a posting attempt.
+ * If the reference exists, it verifies idempotency; otherwise, it allows a new entry.
+ */
 async function resolveExistingReference(
   ctx: MutationCtx,
-  prepared: PreparedPostArgs
+  prepared: PreparedPostArgs,
 ) {
   const existing = await getTransactionsByReference(ctx, prepared.reference);
   if (existing.length === 0) {
@@ -799,7 +1055,7 @@ async function resolveExistingReference(
 
   if (!matchesIdempotentPayload(existing[0], prepared)) {
     throw new ConvexError(
-      "Transaction reference already exists with different payload"
+      "Transaction reference already exists with different payload",
     );
   }
 
@@ -816,7 +1072,7 @@ async function auditPostedTransaction(
   ctx: MutationCtx,
   transaction: Transaction,
   source: TransactionSource,
-  actorId?: TransactionActorId
+  actorId?: TransactionActorId,
 ) {
   if (!shouldAuditTransaction(source)) {
     return;
@@ -840,9 +1096,21 @@ async function auditPostedTransaction(
   });
 }
 
+/**
+ * The primary entry point for recording any financial movement in the system.
+ *
+ * This function handles:
+ * 1. Idempotency checks using the `reference` field (prevents double-posting).
+ * 2. Balance projection updates for both the User and any linked Savings Plan.
+ * 3. Metadata normalization and validation.
+ * 4. Ledger entry insertion.
+ * 5. Update of aggregate/denormalized tables for performant queries.
+ *
+ * @returns The created or existing transaction and an `idempotent` flag.
+ */
 export async function postTransactionEntry(
   ctx: MutationCtx,
-  args: TransactionPostArgs
+  args: TransactionPostArgs,
 ): Promise<PostTransactionResult> {
   const prepared = await preparePostArgs(ctx, args);
   const existing = await resolveExistingReference(ctx, prepared);
@@ -856,7 +1124,7 @@ export async function postTransactionEntry(
     const existingReversals = await ctx.db
       .query(TABLE_NAMES.TRANSACTIONS)
       .withIndex("by_reversal_of_transaction_id", (q) =>
-        q.eq("reversal_of_transaction_id", reversalTarget._id)
+        q.eq("reversal_of_transaction_id", reversalTarget._id),
       )
       .collect();
 
@@ -868,7 +1136,7 @@ export async function postTransactionEntry(
   const delta = computeProjectionDelta(
     prepared.effectiveType,
     prepared.amountKobo,
-    prepared.userPlan?._id
+    prepared.userPlan?._id,
   );
 
   await applyProjectionDelta(
@@ -876,7 +1144,7 @@ export async function postTransactionEntry(
     prepared.user,
     prepared.userPlan,
     delta,
-    prepared.createdAt
+    prepared.createdAt,
   );
 
   const transactionId = await ctx.db.insert(TABLE_NAMES.TRANSACTIONS, {
@@ -904,15 +1172,22 @@ export async function postTransactionEntry(
     ctx,
     transaction,
     prepared.source,
-    prepared.actorId
+    prepared.actorId,
   );
 
   return { transaction, idempotent: false };
 }
 
+/**
+ * Reverses a previously posted transaction by creating an inverse entry.
+ *
+ * This is the safe way to "undo" a transaction. It ensures the ledger remains immutable
+ * while correcting the balances. It requires a reason for the reversal and links
+ * the new entry to the original one.
+ */
 export async function reverseTransactionEntry(
   ctx: MutationCtx,
-  args: TransactionReverseArgs
+  args: TransactionReverseArgs,
 ): Promise<PostTransactionResult> {
   const originalTransaction = await ctx.db.get(args.originalTransactionId);
   if (!originalTransaction) {
@@ -936,9 +1211,13 @@ export async function reverseTransactionEntry(
   });
 }
 
+/**
+ * Re-sums the entire transaction history for a user to calculate their absolute balance.
+ * This is the ultimate "source of truth" calculation used during reconciliation.
+ */
 async function buildProjectedUserBalances(
   ctx: MutationCtx,
-  userId: UserId
+  userId: UserId,
 ): Promise<ProjectionTotals> {
   const transactions = await ctx.db
     .query(TABLE_NAMES.TRANSACTIONS)
@@ -953,7 +1232,7 @@ async function buildProjectedUserBalances(
     const delta = computeProjectionDelta(
       effectiveType,
       transaction.amount_kobo,
-      transaction.user_plan_id
+      transaction.user_plan_id,
     );
     totalBalanceKobo += delta.totalBalanceKobo;
     savingsBalanceKobo += delta.savingsBalanceKobo;
@@ -967,7 +1246,7 @@ async function buildProjectedUserBalances(
 
 async function buildProjectedPlanAmount(
   ctx: MutationCtx,
-  userPlanId: UserSavingsPlanId
+  userPlanId: UserSavingsPlanId,
 ) {
   const transactions = await ctx.db
     .query(TABLE_NAMES.TRANSACTIONS)
@@ -981,7 +1260,7 @@ async function buildProjectedPlanAmount(
     const delta = computeProjectionDelta(
       effectiveType,
       transaction.amount_kobo,
-      transaction.user_plan_id
+      transaction.user_plan_id,
     );
     currentAmountKobo += delta.planAmountKobo;
   }
@@ -991,7 +1270,7 @@ async function buildProjectedPlanAmount(
 
 function transactionMatchesFilters(
   transaction: Transaction,
-  filters: TransactionListFilters
+  filters: TransactionListFilters,
 ) {
   if (filters.type && transaction.type !== filters.type) {
     return false;
@@ -1023,10 +1302,14 @@ function transactionMatchesFilters(
   return true;
 }
 
+/**
+ * Internal helper for handling cursor-based pagination across transaction listings.
+ * Applies filters in-memory after fetching from indices to ensure correct ordering.
+ */
 async function paginateTransactionSummaries(
   baseTransactions: Promise<Transaction[]>,
   paginationOpts: { cursor: string | null; numItems: number },
-  filters: TransactionListFilters
+  filters: TransactionListFilters,
 ) {
   const transactions = (await baseTransactions)
     .filter((transaction) => transactionMatchesFilters(transaction, filters))
@@ -1102,6 +1385,10 @@ export const reverse = internalMutation({
   },
 });
 
+/**
+ * Manually triggers a recalculation of a user's balances from their ledger history.
+ * Used to fix drift in the denormalized `total_balance_kobo` and `savings_balance_kobo` fields.
+ */
 export const rebuildUserProjection = internalMutation({
   args: {
     userId: v.id("users"),
@@ -1161,6 +1448,16 @@ export const rebuildPlanProjection = internalMutation({
   },
 });
 
+/**
+ * A comprehensive audit process that reconciles the transaction ledger with projected balances.
+ *
+ * It iterates through all users and savings plans, calculates what their balances SHOULD be
+ * by re-summing all linked transactions, and compares this against their current `total_balance_kobo`
+ * and `savings_balance_kobo`.
+ *
+ * It also detects ledger anomalies like "Double Reversals" or "Orphaned Reversals".
+ * Any mismatches are recorded as `transaction_reconciliation_issues` for admin review.
+ */
 export const runReconciliation = internalMutation({
   args: {},
   returns: reconciliationRunValidator,
@@ -1177,14 +1474,14 @@ export const runReconciliation = internalMutation({
         plan_count: 0,
         transaction_count: 0,
         created_at: startedAt,
-      }
+      },
     );
 
     try {
       const previousOpenIssues = await ctx.db
         .query(TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES)
         .withIndex("by_issue_status", (q) =>
-          q.eq("issue_status", TransactionReconciliationIssueStatus.OPEN)
+          q.eq("issue_status", TransactionReconciliationIssueStatus.OPEN),
         )
         .collect();
 
@@ -1196,7 +1493,7 @@ export const runReconciliation = internalMutation({
         .query(TABLE_NAMES.TRANSACTIONS)
         .collect();
       const reversals = allTransactions.filter(
-        (transaction) => transaction.type === TxnType.REVERSAL
+        (transaction) => transaction.type === TxnType.REVERSAL,
       );
 
       const issues: Array<ReturnType<typeof buildReconciliationIssue>> = [];
@@ -1213,7 +1510,7 @@ export const runReconciliation = internalMutation({
               userId: user._id,
               expectedAmountKobo: projected.totalBalanceKobo,
               actualAmountKobo: user.total_balance_kobo,
-            })
+            }),
           );
         }
 
@@ -1226,7 +1523,7 @@ export const runReconciliation = internalMutation({
               userId: user._id,
               expectedAmountKobo: projected.savingsBalanceKobo,
               actualAmountKobo: user.savings_balance_kobo,
-            })
+            }),
           );
         }
       }
@@ -1243,7 +1540,7 @@ export const runReconciliation = internalMutation({
               userPlanId: plan._id,
               expectedAmountKobo: projectedAmount,
               actualAmountKobo: plan.current_amount_kobo,
-            })
+            }),
           );
         }
       }
@@ -1265,7 +1562,7 @@ export const runReconciliation = internalMutation({
               details: {
                 reason: "Reversal is missing original transaction linkage",
               },
-            })
+            }),
           );
           continue;
         }
@@ -1286,7 +1583,7 @@ export const runReconciliation = internalMutation({
                 reason:
                   "Original transaction is missing or reference does not match",
               },
-            })
+            }),
           );
           continue;
         }
@@ -1315,13 +1612,13 @@ export const runReconciliation = internalMutation({
             reference: original?.reference,
             details: {
               reversal_transaction_ids: linkedReversals.map((transaction) =>
-                String(transaction._id)
+                String(transaction._id),
               ),
               reversal_references: linkedReversals.map(
-                (transaction) => transaction.reference
+                (transaction) => transaction.reference,
               ),
             },
-          })
+          }),
         );
       }
 
@@ -1347,7 +1644,7 @@ export const runReconciliation = internalMutation({
           {
             run_id: runId,
             ...issue,
-          }
+          },
         );
 
         // Sync aggregates - add new issue
@@ -1406,6 +1703,10 @@ export const runReconciliation = internalMutation({
   },
 });
 
+/**
+ * Fetches a paginated list of the current user's transactions.
+ * Supports filtering by type, plan, and date range.
+ */
 export const listMine = query({
   args: {
     paginationOpts: paginationOptsValidator,
@@ -1436,7 +1737,7 @@ export const listMine = query({
         planId: args.planId,
         dateFrom: args.dateFrom,
         dateTo: args.dateTo,
-      }
+      },
     );
   },
 });
@@ -1469,11 +1770,15 @@ export const listByPlan = query({
         planId: args.planId,
         dateFrom: args.dateFrom,
         dateTo: args.dateTo,
-      }
+      },
     );
   },
 });
 
+/**
+ * Administrative query for searching and auditing transactions across all users.
+ * Optimized for performance using various indices depending on the provided filters.
+ */
 export const listForAdmin = query({
   args: {
     paginationOpts: paginationOptsValidator,
@@ -1499,7 +1804,7 @@ export const listForAdmin = query({
           planId: args.planId,
           dateFrom: args.dateFrom,
           dateTo: args.dateTo,
-        }
+        },
       );
     }
 
@@ -1508,7 +1813,7 @@ export const listForAdmin = query({
         ctx.db
           .query(TABLE_NAMES.TRANSACTIONS)
           .withIndex("by_user_plan_id", (q) =>
-            q.eq("user_plan_id", args.planId)
+            q.eq("user_plan_id", args.planId),
           )
           .collect(),
         args.paginationOpts,
@@ -1518,7 +1823,7 @@ export const listForAdmin = query({
           planId: args.planId,
           dateFrom: args.dateFrom,
           dateTo: args.dateTo,
-        }
+        },
       );
     }
 
@@ -1535,7 +1840,7 @@ export const listForAdmin = query({
           type: args.type,
           dateFrom: args.dateFrom,
           dateTo: args.dateTo,
-        }
+        },
       );
     }
 
@@ -1551,7 +1856,7 @@ export const listForAdmin = query({
           type: transactionType,
           dateFrom: args.dateFrom,
           dateTo: args.dateTo,
-        }
+        },
       );
     }
 
@@ -1561,7 +1866,7 @@ export const listForAdmin = query({
       {
         dateFrom: args.dateFrom,
         dateTo: args.dateTo,
-      }
+      },
     );
   },
 });
@@ -1618,7 +1923,7 @@ export const listOpenReconciliationIssues = query({
     return await ctx.db
       .query(TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES)
       .withIndex("by_issue_status", (q) =>
-        q.eq("issue_status", TransactionReconciliationIssueStatus.OPEN)
+        q.eq("issue_status", TransactionReconciliationIssueStatus.OPEN),
       )
       .order("desc")
       .take(limit);

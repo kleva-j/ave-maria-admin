@@ -1,3 +1,30 @@
+/**
+ * Withdrawal Management
+ *
+ * Handles all withdrawal-related operations including requests, approvals, rejections, and processing.
+ *
+ * Core Concepts:
+ * - Withdrawals are created as PENDING transactions
+ * - Admins can APPROVE, REJECT, or PROCESS withdrawals
+ * - Only APPROVED withdrawals can be processed
+ * - Cash withdrawals have additional restrictions
+ *
+ * Key Features:
+ * - Idempotent withdrawal requests
+ * - Role-based access control
+ * - Risk-aware processing
+ * - Comprehensive audit logging
+ *
+ * Workflow:
+ * 1. User requests withdrawal
+ * 2. System validates request
+ * 3. System creates PENDING transaction
+ * 4. Admin approves withdrawal
+ * 5. System processes withdrawal
+ * 6. System updates transaction status
+ *
+ * @module withdrawals
+ */
 import type { MutationCtx } from "./_generated/server";
 import type {
   UserBankAccountId,
@@ -14,6 +41,19 @@ import { postTransactionEntry, reverseTransactionEntry } from "./transactions";
 import { mutation, query } from "./_generated/server";
 import { getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
+
+import {
+  assertWithdrawalAdminActionAllowed,
+  withdrawalRiskSummaryValidator,
+  assertWithdrawalRequestAllowed,
+  buildWithdrawalRiskSummary,
+} from "./risk";
+
+import {
+  getCashWithdrawalForbiddenData,
+  buildWithdrawalCapabilities,
+} from "./withdrawalPolicy";
+
 import {
   BankAccountVerificationStatus,
   TransactionSource,
@@ -28,20 +68,6 @@ import {
   AdminRole,
   TxnType,
 } from "./shared";
-
-const cashWithdrawalAllowedRoles = [
-  AdminRole.SUPER_ADMIN,
-  AdminRole.OPERATIONS,
-  AdminRole.FINANCE,
-] as const;
-
-const cashWithdrawalAdminRoles = new Set<string>(cashWithdrawalAllowedRoles);
-
-const withdrawalActionPastTense = {
-  [WithdrawalAction.APPROVE]: WithdrawalStatus.APPROVED,
-  [WithdrawalAction.REJECT]: WithdrawalStatus.REJECTED,
-  [WithdrawalAction.PROCESS]: WithdrawalStatus.PROCESSED,
-} as const;
 
 const bankAccountDetailsValidator = v.object({
   account_id: v.optional(v.id("user_bank_accounts")),
@@ -92,6 +118,7 @@ const adminWithdrawalSummaryValidator = v.object({
     phone: v.string(),
     status: v.string(),
   }),
+  risk: withdrawalRiskSummaryValidator,
   capabilities: withdrawalCapabilitiesValidator,
 });
 
@@ -117,12 +144,6 @@ function buildCashDetails(user: User, pickupNote?: string) {
     recipient_phone: user.phone,
     pickup_note: pickupNote?.trim() || undefined,
   };
-}
-
-function normalizeWithdrawalMethod(method: unknown) {
-  return method === WithdrawalMethod.CASH
-    ? WithdrawalMethod.CASH
-    : WithdrawalMethod.BANK_TRANSFER;
 }
 
 function normalizeBankAccountDetails(details: unknown) {
@@ -174,132 +195,10 @@ function normalizeCashDetails(details: unknown) {
   };
 }
 
-function getCashWithdrawalRoleBlockedMessage(action: WithdrawalAction) {
-  return `Cash withdrawals can only be ${withdrawalActionPastTense[action]} by Finance, Operations, or Super Admin.`;
-}
-
-function getCashWithdrawalForbiddenData(action: WithdrawalAction) {
-  return {
-    code: "withdrawal_action_forbidden" as const,
-    action,
-    method: WithdrawalMethod.CASH,
-    allowed_roles: [...cashWithdrawalAllowedRoles],
-    message: getCashWithdrawalRoleBlockedMessage(action),
-  };
-}
-
-function getWithdrawalStatusBlockedReason(
-  withdrawal: Withdrawal,
-  action: WithdrawalAction,
-) {
-  switch (action) {
-    case WithdrawalAction.APPROVE:
-      return withdrawal.status === WithdrawalStatus.PENDING
-        ? undefined
-        : "Only pending withdrawals can be approved";
-    case WithdrawalAction.REJECT:
-      return withdrawal.status === WithdrawalStatus.PENDING
-        ? undefined
-        : "Only pending withdrawals can be rejected";
-    case WithdrawalAction.PROCESS:
-      return withdrawal.status === WithdrawalStatus.APPROVED
-        ? undefined
-        : "Only approved withdrawals can be processed";
-  }
-}
-
-function getCashWithdrawalRoleBlockedReason(
-  adminRole: AdminRole,
-  withdrawal: Withdrawal,
-  action: WithdrawalAction,
-) {
-  if (normalizeWithdrawalMethod(withdrawal.method) !== WithdrawalMethod.CASH) {
-    return undefined;
-  }
-
-  if (cashWithdrawalAdminRoles.has(adminRole)) {
-    return undefined;
-  }
-
-  return getCashWithdrawalRoleBlockedMessage(action);
-}
-
-function buildWithdrawalActionCapability(
-  adminRole: AdminRole,
-  withdrawal: Withdrawal,
-  action: WithdrawalAction,
-) {
-  const statusReason = getWithdrawalStatusBlockedReason(withdrawal, action);
-  if (statusReason) {
-    return {
-      allowed: false,
-      reason: statusReason,
-    };
-  }
-
-  const roleReason = getCashWithdrawalRoleBlockedReason(
-    adminRole,
-    withdrawal,
-    action,
-  );
-  if (roleReason) {
-    return {
-      allowed: false,
-      reason: roleReason,
-    };
-  }
-
-  return {
-    allowed: true,
-  };
-}
-
-function buildWithdrawalCapabilities(
-  adminRole: AdminRole,
-  withdrawal: Withdrawal,
-) {
-  return {
-    approve: buildWithdrawalActionCapability(
-      adminRole,
-      withdrawal,
-      WithdrawalAction.APPROVE,
-    ),
-    reject: buildWithdrawalActionCapability(
-      adminRole,
-      withdrawal,
-      WithdrawalAction.REJECT,
-    ),
-    process: buildWithdrawalActionCapability(
-      adminRole,
-      withdrawal,
-      WithdrawalAction.PROCESS,
-    ),
-  };
-}
-
-function assertCashWithdrawalRole(
-  adminRole: AdminRole,
-  action: WithdrawalAction,
-) {
-  if (cashWithdrawalAdminRoles.has(adminRole)) {
-    return;
-  }
-
-  throw new ConvexError(getCashWithdrawalForbiddenData(action));
-}
-
-function assertAdminCanHandleCashWithdrawal(
-  adminRole: AdminRole,
-  withdrawal: Withdrawal,
-  action: WithdrawalAction,
-) {
-  if (normalizeWithdrawalMethod(withdrawal.method) !== WithdrawalMethod.CASH) {
-    return;
-  }
-
-  assertCashWithdrawalRole(adminRole, action);
-}
-
+/**
+ * Fetches and validates a user's bank account for a withdrawal.
+ * Defaults to the primary verified account if no specific ID is provided.
+ */
 async function resolveWithdrawalBankAccount(
   ctx: MutationCtx,
   user: User,
@@ -341,15 +240,21 @@ async function resolveWithdrawalBankAccount(
   return verifiedPrimary;
 }
 
+/**
+ * Combines data from the `withdrawals` table and its linked `transactions` entry
+ * to create a comprehensive object for the frontend components.
+ */
 async function buildWithdrawalSummary(ctx: Context, withdrawal: Withdrawal) {
   const transaction = await ctx.db.get(withdrawal.transaction_id);
   if (!transaction) {
     throw new ConvexError("Linked transaction not found");
   }
 
-  const method = normalizeWithdrawalMethod(
-    (withdrawal as Withdrawal & { method?: unknown }).method,
-  );
+  const method =
+    (withdrawal as Withdrawal & { method?: unknown }).method ===
+    WithdrawalMethod.CASH
+      ? WithdrawalMethod.CASH
+      : WithdrawalMethod.BANK_TRANSFER;
 
   return {
     _id: withdrawal._id,
@@ -376,6 +281,33 @@ async function buildWithdrawalSummary(ctx: Context, withdrawal: Withdrawal) {
   };
 }
 
+/**
+ * Enforces role-based permissions for handling cash-specific withdrawals.
+ * Ensures only authorized admin roles (Finance, Operations) can approve/process cash.
+ */
+function assertAdminCanHandleCashWithdrawal(
+  adminRole: AdminRole,
+  withdrawal: Withdrawal,
+  action: WithdrawalAction,
+) {
+  const isCashWithdrawal =
+    (withdrawal as Withdrawal & { method?: unknown }).method ===
+    WithdrawalMethod.CASH;
+
+  if (!isCashWithdrawal) {
+    return;
+  }
+
+  const capabilities = buildWithdrawalCapabilities(adminRole, withdrawal, {
+    has_active_hold: false,
+  });
+  const capability = capabilities[action];
+
+  if (!capability.allowed) {
+    throw new ConvexError(getCashWithdrawalForbiddenData(action));
+  }
+}
+
 export const listMine = query({
   args: {},
   returns: v.array(withdrawalSummaryValidator),
@@ -396,6 +328,10 @@ export const listMine = query({
   },
 });
 
+/**
+ * Administrative query for reviewing withdrawal requests.
+ * Pulls together user details, risk summaries, and functional capabilities for the review UI.
+ */
 export const listForReview = query({
   args: {
     status: v.optional(withdrawalStatus),
@@ -426,6 +362,11 @@ export const listForReview = query({
           throw new ConvexError("User not found for withdrawal");
         }
 
+        const risk = await buildWithdrawalRiskSummary(
+          ctx,
+          withdrawal.requested_by,
+        );
+
         return {
           withdrawal: summary,
           user: {
@@ -436,7 +377,12 @@ export const listForReview = query({
             phone: user.phone,
             status: user.status,
           },
-          capabilities: buildWithdrawalCapabilities(admin.role, withdrawal),
+          risk,
+          capabilities: buildWithdrawalCapabilities(
+            admin.role,
+            withdrawal,
+            risk,
+          ),
         };
       }),
     );
@@ -445,6 +391,15 @@ export const listForReview = query({
   },
 });
 
+/**
+ * Initiates a new withdrawal request for the current user.
+ *
+ * This function:
+ * 1. Validates the user's status and available balance.
+ * 2. Performs automated risk checks (velocity, daily limits, active holds).
+ * 3. Creates a PENDING transaction entry in the ledger (subtracting the amount).
+ * 4. Records the withdrawal request details for admin review.
+ */
 export const request = mutation({
   args: {
     amount_kobo: v.int64(),
@@ -494,6 +449,13 @@ export const request = mutation({
       }
       cashDetails = buildCashDetails(user, args.pickup_note);
     }
+
+    await assertWithdrawalRequestAllowed(ctx, {
+      user,
+      method,
+      amountKobo: args.amount_kobo,
+      now,
+    });
 
     const postedTransaction = await postTransactionEntry(ctx, {
       userId: user._id,
@@ -562,6 +524,12 @@ export const request = mutation({
   },
 });
 
+/**
+ * Authorizes a pending withdrawal request.
+ *
+ * Moves the withdrawal status to APPROVED. This marks the request as ready
+ * for payout processing. Requires specific admin roles and passes manual risk review.
+ */
 export const approve = mutation({
   args: {
     withdrawal_id: v.id("withdrawals"),
@@ -584,6 +552,11 @@ export const approve = mutation({
       withdrawal,
       WithdrawalAction.APPROVE,
     );
+
+    await assertWithdrawalAdminActionAllowed(ctx, {
+      userId: withdrawal.requested_by,
+      actorAdminId: admin._id,
+    });
 
     const summaryBefore = await buildWithdrawalSummary(ctx, withdrawal);
     const now = Date.now();
@@ -619,6 +592,14 @@ export const approve = mutation({
   },
 });
 
+/**
+ * Denies a pending withdrawal request and refunds the user.
+ *
+ * This mutation:
+ * 1. Reverses the PENDING withdrawal transaction in the ledger (refunding the user).
+ * 2. Updates the withdrawal status to REJECTED with a reason.
+ * 3. Logs the administrative action for auditing.
+ */
 export const reject = mutation({
   args: {
     withdrawal_id: v.id("withdrawals"),
@@ -696,6 +677,12 @@ export const reject = mutation({
   },
 });
 
+/**
+ * Finalizes an approved withdrawal after the payout has been executed.
+ *
+ * Transitions the status to PROCESSED, indicating the funds have successfully
+ * left the system (e.g., bank transfer sent or cash picked up).
+ */
 export const process = mutation({
   args: {
     withdrawal_id: v.id("withdrawals"),
@@ -718,6 +705,11 @@ export const process = mutation({
       withdrawal,
       WithdrawalAction.PROCESS,
     );
+
+    await assertWithdrawalAdminActionAllowed(ctx, {
+      userId: withdrawal.requested_by,
+      actorAdminId: admin._id,
+    });
 
     const summaryBefore = await buildWithdrawalSummary(ctx, withdrawal);
 
