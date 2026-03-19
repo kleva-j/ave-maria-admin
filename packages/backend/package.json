@@ -7,7 +7,9 @@
   "scripts": {
     "dev": "convex dev",
     "dev:setup": "convex dev --configure --until-success",
-    "setup:crons": "convex run init:setup"
+    "setup:crons": "convex run init:setup",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@convex-dev/aggregate": "^0.2.1",
@@ -22,6 +24,7 @@
   "devDependencies": {
     "@avm-daily/config": "workspace:*",
     "@types/node": "^24.3.0",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.0.18"
   }
 }
