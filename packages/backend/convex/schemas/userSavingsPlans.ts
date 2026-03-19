@@ -5,7 +5,7 @@ import { planStatus } from "../shared";
 
 export const user_savings_plans = defineTable({
   user_id: v.id("users"),
-  template_id: v.optional(v.id("savings_plan_templates")),
+  template_id: v.id("savings_plan_templates"),
   custom_target_kobo: v.int64(),
   current_amount_kobo: v.int64(),
   start_date: v.string(),

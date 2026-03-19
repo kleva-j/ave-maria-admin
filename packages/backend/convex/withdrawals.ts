@@ -74,6 +74,7 @@ const withdrawalSummaryValidator = v.object({
   method: withdrawalMethod,
   status: withdrawalStatus,
   requested_at: v.number(),
+  requested_by: v.id("users"),
   approved_at: v.optional(v.number()),
   rejection_reason: v.optional(v.string()),
   bank_account: v.optional(bankAccountDetailsValidator),
@@ -357,6 +358,7 @@ async function buildWithdrawalSummary(ctx: Context, withdrawal: Withdrawal) {
     method,
     status: withdrawal.status,
     requested_at: withdrawal.requested_at,
+    requested_by: withdrawal.requested_by,
     approved_at: withdrawal.approved_at,
     rejection_reason: withdrawal.rejection_reason,
     bank_account:
@@ -378,31 +380,17 @@ export const listMine = query({
   handler: async (ctx) => {
     const user = await getUser(ctx);
 
-    const transactions = await ctx.db
-      .query(TABLE_NAMES.TRANSACTIONS)
-      .withIndex("by_user_id_and_created_at", (q) => q.eq("user_id", user._id))
+    const withdrawals = await ctx.db
+      .query(TABLE_NAMES.WITHDRAWALS)
+      .withIndex("by_requested_by_and_requested_at", (q) =>
+        q.eq("requested_by", user._id)
+      )
+      .order("desc")
       .collect();
 
-    const withdrawalTransactions = transactions
-      .filter((transaction) => transaction.type === TxnType.WITHDRAWAL)
-      .sort((a, b) => b.created_at - a.created_at);
-
-    const summaries = await Promise.all(
-      withdrawalTransactions.map(async (transaction) => {
-        const withdrawal = await ctx.db
-          .query(TABLE_NAMES.WITHDRAWALS)
-          .withIndex("by_transaction_id", (q) =>
-            q.eq("transaction_id", transaction._id)
-          )
-          .unique();
-
-        if (!withdrawal) return null;
-
-        return buildWithdrawalSummary(ctx, withdrawal);
-      })
+    return Promise.all(
+      withdrawals.map((withdrawal) => buildWithdrawalSummary(ctx, withdrawal))
     );
-
-    return summaries.filter((withdrawal) => withdrawal !== null);
   },
 });
 
@@ -523,6 +511,7 @@ export const request = mutation({
 
     const withdrawalId = await ctx.db.insert(TABLE_NAMES.WITHDRAWALS, {
       transaction_id: postedTransaction.transaction._id,
+      requested_by: user._id,
       requested_amount_kobo: args.amount_kobo,
       method,
       status: WithdrawalStatus.PENDING,
@@ -559,6 +548,7 @@ export const request = mutation({
       method,
       status: withdrawal.status,
       requested_at: withdrawal.requested_at,
+      requested_by: withdrawal.requested_by,
       approved_at: withdrawal.approved_at,
       rejection_reason: withdrawal.rejection_reason,
       bank_account: bankAccountDetails,

@@ -13,6 +13,9 @@ export type User = Doc<"users">;
 export type UserSavingsPlanId = Id<"user_savings_plans">;
 export type UserSavingsPlan = Doc<"user_savings_plans">;
 
+export type SavingsPlanTemplateId = Id<"savings_plan_templates">;
+export type SavingsPlanTemplate = Doc<"savings_plan_templates">;
+
 // KYC
 export type KycDocument = Doc<"kyc_documents">;
 export type KycDocumentId = Id<"kyc_documents">;
