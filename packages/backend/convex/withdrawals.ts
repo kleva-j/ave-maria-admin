@@ -9,6 +9,7 @@ import type {
 
 import { ConvexError, v } from "convex/values";
 
+import { syncWithdrawalInsert, syncWithdrawalUpdate } from "./aggregateHelpers";
 import { postTransactionEntry, reverseTransactionEntry } from "./transactions";
 import { mutation, query } from "./_generated/server";
 import { getAdminUser, getUser } from "./utils";
@@ -189,7 +190,7 @@ function getCashWithdrawalForbiddenData(action: WithdrawalAction) {
 
 function getWithdrawalStatusBlockedReason(
   withdrawal: Withdrawal,
-  action: WithdrawalAction
+  action: WithdrawalAction,
 ) {
   switch (action) {
     case WithdrawalAction.APPROVE:
@@ -210,7 +211,7 @@ function getWithdrawalStatusBlockedReason(
 function getCashWithdrawalRoleBlockedReason(
   adminRole: AdminRole,
   withdrawal: Withdrawal,
-  action: WithdrawalAction
+  action: WithdrawalAction,
 ) {
   if (normalizeWithdrawalMethod(withdrawal.method) !== WithdrawalMethod.CASH) {
     return undefined;
@@ -226,7 +227,7 @@ function getCashWithdrawalRoleBlockedReason(
 function buildWithdrawalActionCapability(
   adminRole: AdminRole,
   withdrawal: Withdrawal,
-  action: WithdrawalAction
+  action: WithdrawalAction,
 ) {
   const statusReason = getWithdrawalStatusBlockedReason(withdrawal, action);
   if (statusReason) {
@@ -239,7 +240,7 @@ function buildWithdrawalActionCapability(
   const roleReason = getCashWithdrawalRoleBlockedReason(
     adminRole,
     withdrawal,
-    action
+    action,
   );
   if (roleReason) {
     return {
@@ -255,30 +256,30 @@ function buildWithdrawalActionCapability(
 
 function buildWithdrawalCapabilities(
   adminRole: AdminRole,
-  withdrawal: Withdrawal
+  withdrawal: Withdrawal,
 ) {
   return {
     approve: buildWithdrawalActionCapability(
       adminRole,
       withdrawal,
-      WithdrawalAction.APPROVE
+      WithdrawalAction.APPROVE,
     ),
     reject: buildWithdrawalActionCapability(
       adminRole,
       withdrawal,
-      WithdrawalAction.REJECT
+      WithdrawalAction.REJECT,
     ),
     process: buildWithdrawalActionCapability(
       adminRole,
       withdrawal,
-      WithdrawalAction.PROCESS
+      WithdrawalAction.PROCESS,
     ),
   };
 }
 
 function assertCashWithdrawalRole(
   adminRole: AdminRole,
-  action: WithdrawalAction
+  action: WithdrawalAction,
 ) {
   if (cashWithdrawalAdminRoles.has(adminRole)) {
     return;
@@ -290,7 +291,7 @@ function assertCashWithdrawalRole(
 function assertAdminCanHandleCashWithdrawal(
   adminRole: AdminRole,
   withdrawal: Withdrawal,
-  action: WithdrawalAction
+  action: WithdrawalAction,
 ) {
   if (normalizeWithdrawalMethod(withdrawal.method) !== WithdrawalMethod.CASH) {
     return;
@@ -302,7 +303,7 @@ function assertAdminCanHandleCashWithdrawal(
 async function resolveWithdrawalBankAccount(
   ctx: MutationCtx,
   user: User,
-  bankAccountId?: UserBankAccountId
+  bankAccountId?: UserBankAccountId,
 ) {
   if (bankAccountId) {
     const account = await ctx.db.get(bankAccountId);
@@ -326,11 +327,11 @@ async function resolveWithdrawalBankAccount(
     accounts.find(
       (account) =>
         account.is_primary &&
-        account.verification_status === BankAccountVerificationStatus.VERIFIED
+        account.verification_status === BankAccountVerificationStatus.VERIFIED,
     ) ??
     accounts.find(
       (account) =>
-        account.verification_status === BankAccountVerificationStatus.VERIFIED
+        account.verification_status === BankAccountVerificationStatus.VERIFIED,
     );
 
   if (!verifiedPrimary) {
@@ -347,7 +348,7 @@ async function buildWithdrawalSummary(ctx: Context, withdrawal: Withdrawal) {
   }
 
   const method = normalizeWithdrawalMethod(
-    (withdrawal as Withdrawal & { method?: unknown }).method
+    (withdrawal as Withdrawal & { method?: unknown }).method,
   );
 
   return {
@@ -368,7 +369,8 @@ async function buildWithdrawalSummary(ctx: Context, withdrawal: Withdrawal) {
     cash_details:
       method === WithdrawalMethod.CASH
         ? normalizeCashDetails(
-            (withdrawal as Withdrawal & { cash_details?: unknown }).cash_details
+            (withdrawal as Withdrawal & { cash_details?: unknown })
+              .cash_details,
           )
         : undefined,
   };
@@ -383,13 +385,13 @@ export const listMine = query({
     const withdrawals = await ctx.db
       .query(TABLE_NAMES.WITHDRAWALS)
       .withIndex("by_requested_by_and_requested_at", (q) =>
-        q.eq("requested_by", user._id)
+        q.eq("requested_by", user._id),
       )
       .order("desc")
       .collect();
 
     return Promise.all(
-      withdrawals.map((withdrawal) => buildWithdrawalSummary(ctx, withdrawal))
+      withdrawals.map((withdrawal) => buildWithdrawalSummary(ctx, withdrawal)),
     );
   },
 });
@@ -436,7 +438,7 @@ export const listForReview = query({
           },
           capabilities: buildWithdrawalCapabilities(admin.role, withdrawal),
         };
-      })
+      }),
     );
 
     return rows;
@@ -472,7 +474,7 @@ export const request = mutation({
 
     const now = Date.now();
     const transactionReference = createReference(
-      method === WithdrawalMethod.CASH ? "cwdr" : "wdr"
+      method === WithdrawalMethod.CASH ? "cwdr" : "wdr",
     );
     let bankAccountDetails: ReturnType<typeof maskBankAccount> | undefined =
       undefined;
@@ -483,7 +485,7 @@ export const request = mutation({
       const bankAccount = await resolveWithdrawalBankAccount(
         ctx,
         user,
-        args.bank_account_id
+        args.bank_account_id,
       );
       bankAccountDetails = maskBankAccount(bankAccount);
     } else {
@@ -524,6 +526,9 @@ export const request = mutation({
     if (!withdrawal) {
       throw new ConvexError("Failed to create withdrawal");
     }
+
+    // Sync with aggregate tables
+    await syncWithdrawalInsert(ctx, withdrawal);
 
     await auditLog.log(ctx, {
       action: "withdrawal.requested",
@@ -577,7 +582,7 @@ export const approve = mutation({
     assertAdminCanHandleCashWithdrawal(
       admin.role,
       withdrawal,
-      WithdrawalAction.APPROVE
+      WithdrawalAction.APPROVE,
     );
 
     const summaryBefore = await buildWithdrawalSummary(ctx, withdrawal);
@@ -594,6 +599,9 @@ export const approve = mutation({
     if (!updated) {
       throw new ConvexError("Failed to update withdrawal");
     }
+
+    // Sync aggregates after status change
+    await syncWithdrawalUpdate(ctx, withdrawal, updated);
 
     const summaryAfter = await buildWithdrawalSummary(ctx, updated);
 
@@ -632,7 +640,7 @@ export const reject = mutation({
     assertAdminCanHandleCashWithdrawal(
       admin.role,
       withdrawal,
-      WithdrawalAction.REJECT
+      WithdrawalAction.REJECT,
     );
 
     const transaction = await ctx.db.get(withdrawal.transaction_id);
@@ -665,6 +673,9 @@ export const reject = mutation({
     if (!updated) {
       throw new ConvexError("Failed to update withdrawal");
     }
+
+    // Sync aggregates after status change
+    await syncWithdrawalUpdate(ctx, withdrawal, updated);
 
     const summaryAfter = await buildWithdrawalSummary(ctx, updated);
 
@@ -705,7 +716,7 @@ export const process = mutation({
     assertAdminCanHandleCashWithdrawal(
       admin.role,
       withdrawal,
-      WithdrawalAction.PROCESS
+      WithdrawalAction.PROCESS,
     );
 
     const summaryBefore = await buildWithdrawalSummary(ctx, withdrawal);

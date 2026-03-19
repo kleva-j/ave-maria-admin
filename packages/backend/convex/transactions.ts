@@ -16,6 +16,13 @@ import { ConvexError, v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
 import { getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
+
+import {
+  syncReconciliationIssueInsert,
+  syncReconciliationIssueUpdate,
+  syncTransactionInsert,
+} from "./aggregateHelpers";
+
 import {
   TransactionReconciliationIssueStatus,
   TransactionReconciliationIssueType,
@@ -30,7 +37,7 @@ import {
 } from "./shared";
 
 const transactionActorIdValidator = v.optional(
-  v.union(v.id("users"), v.id("admin_users")),
+  v.union(v.id("users"), v.id("admin_users"))
 );
 
 const transactionMetadataSummaryValidator = v.object({
@@ -220,7 +227,7 @@ function asStringId(value: unknown) {
 function getRequiredString(
   object: Record<string, unknown>,
   key: string,
-  message = `${key} is required`,
+  message = `${key} is required`
 ) {
   const value = object[key];
   if (typeof value !== "string" || value.trim().length === 0) {
@@ -298,7 +305,7 @@ function stableStringify(value: unknown) {
 function normalizeContributionMetadata(
   metadata: Record<string, unknown>,
   source: TransactionSource,
-  actorId?: TransactionActorId,
+  actorId?: TransactionActorId
 ) {
   return {
     source,
@@ -312,7 +319,7 @@ function normalizeContributionMetadata(
 function normalizeAccrualMetadata(
   metadata: Record<string, unknown>,
   source: TransactionSource,
-  actorId: TransactionActorId | undefined,
+  actorId: TransactionActorId | undefined
 ) {
   return {
     source,
@@ -328,7 +335,7 @@ function normalizeAccrualMetadata(
 function normalizeReferralBonusMetadata(
   metadata: Record<string, unknown>,
   source: TransactionSource,
-  actorId: TransactionActorId | undefined,
+  actorId: TransactionActorId | undefined
 ) {
   return {
     source,
@@ -337,7 +344,7 @@ function normalizeReferralBonusMetadata(
     referred_user_id: getRequiredString(metadata, "referred_user_id"),
     trigger_transaction_reference: getRequiredString(
       metadata,
-      "trigger_transaction_reference",
+      "trigger_transaction_reference"
     ),
     note: getOptionalString(metadata, "note"),
   };
@@ -346,7 +353,7 @@ function normalizeReferralBonusMetadata(
 function normalizeWithdrawalMetadata(
   metadata: Record<string, unknown>,
   source: TransactionSource,
-  actorId: TransactionActorId | undefined,
+  actorId: TransactionActorId | undefined
 ) {
   const method = getRequiredString(metadata, "method");
   const withdrawalStatus = getRequiredString(metadata, "withdrawal_status");
@@ -355,13 +362,13 @@ function normalizeWithdrawalMetadata(
 
   if (method === WithdrawalMethod.BANK_TRANSFER && !isRecord(bankAccount)) {
     throw new ConvexError(
-      "withdrawal metadata.bank_account is required for bank transfer withdrawals",
+      "withdrawal metadata.bank_account is required for bank transfer withdrawals"
     );
   }
 
   if (method === WithdrawalMethod.CASH && !isRecord(cashDetails)) {
     throw new ConvexError(
-      "withdrawal metadata.cash_details is required for cash withdrawals",
+      "withdrawal metadata.cash_details is required for cash withdrawals"
     );
   }
 
@@ -379,7 +386,7 @@ function normalizeWithdrawalMetadata(
 function normalizeReversalMetadata(
   metadata: Record<string, unknown>,
   source: TransactionSource,
-  actorId: TransactionActorId | undefined,
+  actorId: TransactionActorId | undefined
 ) {
   const originalType = metadata.original_type;
   if (!isTxnTypeValue(originalType)) {
@@ -391,7 +398,7 @@ function normalizeReversalMetadata(
     actor_id: actorId ? String(actorId) : undefined,
     original_transaction_id: getRequiredString(
       metadata,
-      "original_transaction_id",
+      "original_transaction_id"
     ),
     original_reference: getRequiredString(metadata, "original_reference"),
     original_type: originalType,
@@ -403,7 +410,7 @@ function normalizeTransactionMetadata(
   type: TxnType,
   metadata: unknown,
   source: TransactionSource,
-  actorId?: TransactionActorId,
+  actorId?: TransactionActorId
 ) {
   const object = asObject(metadata);
 
@@ -444,13 +451,13 @@ function summarizeTransactionMetadata(metadata: unknown) {
     referred_user_id: getOptionalString(object, "referred_user_id"),
     trigger_transaction_reference: getOptionalString(
       object,
-      "trigger_transaction_reference",
+      "trigger_transaction_reference"
     ),
     withdrawal_status: getOptionalString(object, "withdrawal_status"),
     method: getOptionalString(object, "method"),
     original_transaction_id: getOptionalString(
       object,
-      "original_transaction_id",
+      "original_transaction_id"
     ),
     original_reference: getOptionalString(object, "original_reference"),
     original_type: isTxnTypeValue(object.original_type)
@@ -479,7 +486,7 @@ function buildTransactionSummary(transaction: Transaction) {
 async function getUserPlan(
   ctx: Context,
   userId: UserId,
-  userPlanId?: UserSavingsPlanId,
+  userPlanId?: UserSavingsPlanId
 ) {
   if (!userPlanId) {
     return undefined;
@@ -551,7 +558,7 @@ function getEffectiveType(transaction: Transaction) {
 
   if (!transaction.reversal_of_type) {
     throw new ConvexError(
-      `Reversal transaction ${transaction._id} is missing reversal_of_type`,
+      `Reversal transaction ${transaction._id} is missing reversal_of_type`
     );
   }
 
@@ -561,7 +568,7 @@ function getEffectiveType(transaction: Transaction) {
 function computeProjectionDelta(
   effectiveType: TxnType,
   amountKobo: bigint,
-  userPlanId?: UserSavingsPlanId,
+  userPlanId?: UserSavingsPlanId
 ): ProjectionDelta {
   switch (effectiveType) {
     case TxnType.CONTRIBUTION:
@@ -594,7 +601,7 @@ async function applyProjectionDelta(
   user: User,
   userPlan: UserSavingsPlan | undefined,
   delta: ProjectionDelta,
-  updatedAt: number,
+  updatedAt: number
 ) {
   const nextTotalBalance = user.total_balance_kobo + delta.totalBalanceKobo;
   const nextSavingsBalance =
@@ -602,7 +609,7 @@ async function applyProjectionDelta(
 
   if (nextTotalBalance < 0n || nextSavingsBalance < 0n) {
     throw new ConvexError(
-      "Transaction would result in a negative user balance",
+      "Transaction would result in a negative user balance"
     );
   }
 
@@ -610,7 +617,7 @@ async function applyProjectionDelta(
     const nextPlanAmount = userPlan.current_amount_kobo + delta.planAmountKobo;
     if (nextPlanAmount < 0n) {
       throw new ConvexError(
-        "Transaction would result in a negative plan balance",
+        "Transaction would result in a negative plan balance"
       );
     }
 
@@ -629,7 +636,7 @@ async function applyProjectionDelta(
 
 async function preparePostArgs(
   ctx: MutationCtx,
-  args: TransactionPostArgs,
+  args: TransactionPostArgs
 ): Promise<PreparedPostArgs> {
   assertReference(args.reference);
 
@@ -644,7 +651,7 @@ async function preparePostArgs(
   if (args.type === TxnType.REVERSAL) {
     if (!args.reversalOfTransactionId) {
       throw new ConvexError(
-        "reversalOfTransactionId is required for reversal transactions",
+        "reversalOfTransactionId is required for reversal transactions"
       );
     }
 
@@ -660,7 +667,7 @@ async function preparePostArgs(
 
     if (reversalOfTransaction.user_id !== args.userId) {
       throw new ConvexError(
-        "Reversal must target the original transaction user",
+        "Reversal must target the original transaction user"
       );
     }
 
@@ -669,7 +676,7 @@ async function preparePostArgs(
       args.amountKobo === 0n
     ) {
       throw new ConvexError(
-        "Reversal amount must be the exact inverse of the original transaction amount",
+        "Reversal amount must be the exact inverse of the original transaction amount"
       );
     }
 
@@ -678,7 +685,7 @@ async function preparePostArgs(
       args.userPlanId !== reversalOfTransaction.user_plan_id
     ) {
       throw new ConvexError(
-        "Reversal savings plan must match the original transaction",
+        "Reversal savings plan must match the original transaction"
       );
     }
 
@@ -686,13 +693,13 @@ async function preparePostArgs(
       userPlan = await getUserPlan(
         ctx,
         args.userId,
-        reversalOfTransaction.user_plan_id,
+        reversalOfTransaction.user_plan_id
       );
     }
   } else {
     if (args.reversalOfTransactionId) {
       throw new ConvexError(
-        "reversalOfTransactionId can only be used with reversal transactions",
+        "reversalOfTransactionId can only be used with reversal transactions"
       );
     }
 
@@ -710,7 +717,7 @@ async function preparePostArgs(
 
     if (args.type === TxnType.REFERRAL_BONUS && userPlan) {
       throw new ConvexError(
-        "Referral bonus transactions cannot be linked to a savings plan",
+        "Referral bonus transactions cannot be linked to a savings plan"
       );
     }
   }
@@ -726,13 +733,13 @@ async function preparePostArgs(
             original_type: reversalOfTransaction.type,
           },
           args.source,
-          args.actorId,
+          args.actorId
         )
       : normalizeTransactionMetadata(
           args.type,
           args.metadata,
           args.source,
-          args.actorId,
+          args.actorId
         );
 
   return {
@@ -757,7 +764,7 @@ async function preparePostArgs(
 
 function matchesIdempotentPayload(
   transaction: Transaction,
-  prepared: PreparedPostArgs,
+  prepared: PreparedPostArgs
 ) {
   return (
     stableStringify(comparableTransactionFromDoc(transaction)) ===
@@ -772,14 +779,14 @@ function matchesIdempotentPayload(
         reversalOfReference: prepared.reversalOfReference,
         reversalOfType: prepared.reversalOfType,
         metadata: prepared.metadata,
-      }),
+      })
     )
   );
 }
 
 async function resolveExistingReference(
   ctx: MutationCtx,
-  prepared: PreparedPostArgs,
+  prepared: PreparedPostArgs
 ) {
   const existing = await getTransactionsByReference(ctx, prepared.reference);
   if (existing.length === 0) {
@@ -792,7 +799,7 @@ async function resolveExistingReference(
 
   if (!matchesIdempotentPayload(existing[0], prepared)) {
     throw new ConvexError(
-      "Transaction reference already exists with different payload",
+      "Transaction reference already exists with different payload"
     );
   }
 
@@ -809,7 +816,7 @@ async function auditPostedTransaction(
   ctx: MutationCtx,
   transaction: Transaction,
   source: TransactionSource,
-  actorId?: TransactionActorId,
+  actorId?: TransactionActorId
 ) {
   if (!shouldAuditTransaction(source)) {
     return;
@@ -835,7 +842,7 @@ async function auditPostedTransaction(
 
 export async function postTransactionEntry(
   ctx: MutationCtx,
-  args: TransactionPostArgs,
+  args: TransactionPostArgs
 ): Promise<PostTransactionResult> {
   const prepared = await preparePostArgs(ctx, args);
   const existing = await resolveExistingReference(ctx, prepared);
@@ -849,7 +856,7 @@ export async function postTransactionEntry(
     const existingReversals = await ctx.db
       .query(TABLE_NAMES.TRANSACTIONS)
       .withIndex("by_reversal_of_transaction_id", (q) =>
-        q.eq("reversal_of_transaction_id", reversalTarget._id),
+        q.eq("reversal_of_transaction_id", reversalTarget._id)
       )
       .collect();
 
@@ -861,7 +868,7 @@ export async function postTransactionEntry(
   const delta = computeProjectionDelta(
     prepared.effectiveType,
     prepared.amountKobo,
-    prepared.userPlan?._id,
+    prepared.userPlan?._id
   );
 
   await applyProjectionDelta(
@@ -869,7 +876,7 @@ export async function postTransactionEntry(
     prepared.user,
     prepared.userPlan,
     delta,
-    prepared.createdAt,
+    prepared.createdAt
   );
 
   const transactionId = await ctx.db.insert(TABLE_NAMES.TRANSACTIONS, {
@@ -890,11 +897,14 @@ export async function postTransactionEntry(
     throw new ConvexError("Failed to create transaction");
   }
 
+  // Sync with aggregate tables for O(log n) queries
+  await syncTransactionInsert(ctx, transaction);
+
   await auditPostedTransaction(
     ctx,
     transaction,
     prepared.source,
-    prepared.actorId,
+    prepared.actorId
   );
 
   return { transaction, idempotent: false };
@@ -902,7 +912,7 @@ export async function postTransactionEntry(
 
 export async function reverseTransactionEntry(
   ctx: MutationCtx,
-  args: TransactionReverseArgs,
+  args: TransactionReverseArgs
 ): Promise<PostTransactionResult> {
   const originalTransaction = await ctx.db.get(args.originalTransactionId);
   if (!originalTransaction) {
@@ -928,7 +938,7 @@ export async function reverseTransactionEntry(
 
 async function buildProjectedUserBalances(
   ctx: MutationCtx,
-  userId: UserId,
+  userId: UserId
 ): Promise<ProjectionTotals> {
   const transactions = await ctx.db
     .query(TABLE_NAMES.TRANSACTIONS)
@@ -943,7 +953,7 @@ async function buildProjectedUserBalances(
     const delta = computeProjectionDelta(
       effectiveType,
       transaction.amount_kobo,
-      transaction.user_plan_id,
+      transaction.user_plan_id
     );
     totalBalanceKobo += delta.totalBalanceKobo;
     savingsBalanceKobo += delta.savingsBalanceKobo;
@@ -957,7 +967,7 @@ async function buildProjectedUserBalances(
 
 async function buildProjectedPlanAmount(
   ctx: MutationCtx,
-  userPlanId: UserSavingsPlanId,
+  userPlanId: UserSavingsPlanId
 ) {
   const transactions = await ctx.db
     .query(TABLE_NAMES.TRANSACTIONS)
@@ -971,7 +981,7 @@ async function buildProjectedPlanAmount(
     const delta = computeProjectionDelta(
       effectiveType,
       transaction.amount_kobo,
-      transaction.user_plan_id,
+      transaction.user_plan_id
     );
     currentAmountKobo += delta.planAmountKobo;
   }
@@ -981,7 +991,7 @@ async function buildProjectedPlanAmount(
 
 function transactionMatchesFilters(
   transaction: Transaction,
-  filters: TransactionListFilters,
+  filters: TransactionListFilters
 ) {
   if (filters.type && transaction.type !== filters.type) {
     return false;
@@ -1016,7 +1026,7 @@ function transactionMatchesFilters(
 async function paginateTransactionSummaries(
   baseTransactions: Promise<Transaction[]>,
   paginationOpts: { cursor: string | null; numItems: number },
-  filters: TransactionListFilters,
+  filters: TransactionListFilters
 ) {
   const transactions = (await baseTransactions)
     .filter((transaction) => transactionMatchesFilters(transaction, filters))
@@ -1167,14 +1177,14 @@ export const runReconciliation = internalMutation({
         plan_count: 0,
         transaction_count: 0,
         created_at: startedAt,
-      },
+      }
     );
 
     try {
       const previousOpenIssues = await ctx.db
         .query(TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES)
         .withIndex("by_issue_status", (q) =>
-          q.eq("issue_status", TransactionReconciliationIssueStatus.OPEN),
+          q.eq("issue_status", TransactionReconciliationIssueStatus.OPEN)
         )
         .collect();
 
@@ -1186,7 +1196,7 @@ export const runReconciliation = internalMutation({
         .query(TABLE_NAMES.TRANSACTIONS)
         .collect();
       const reversals = allTransactions.filter(
-        (transaction) => transaction.type === TxnType.REVERSAL,
+        (transaction) => transaction.type === TxnType.REVERSAL
       );
 
       const issues: Array<ReturnType<typeof buildReconciliationIssue>> = [];
@@ -1203,7 +1213,7 @@ export const runReconciliation = internalMutation({
               userId: user._id,
               expectedAmountKobo: projected.totalBalanceKobo,
               actualAmountKobo: user.total_balance_kobo,
-            }),
+            })
           );
         }
 
@@ -1216,7 +1226,7 @@ export const runReconciliation = internalMutation({
               userId: user._id,
               expectedAmountKobo: projected.savingsBalanceKobo,
               actualAmountKobo: user.savings_balance_kobo,
-            }),
+            })
           );
         }
       }
@@ -1233,7 +1243,7 @@ export const runReconciliation = internalMutation({
               userPlanId: plan._id,
               expectedAmountKobo: projectedAmount,
               actualAmountKobo: plan.current_amount_kobo,
-            }),
+            })
           );
         }
       }
@@ -1255,7 +1265,7 @@ export const runReconciliation = internalMutation({
               details: {
                 reason: "Reversal is missing original transaction linkage",
               },
-            }),
+            })
           );
           continue;
         }
@@ -1276,7 +1286,7 @@ export const runReconciliation = internalMutation({
                 reason:
                   "Original transaction is missing or reference does not match",
               },
-            }),
+            })
           );
           continue;
         }
@@ -1305,30 +1315,46 @@ export const runReconciliation = internalMutation({
             reference: original?.reference,
             details: {
               reversal_transaction_ids: linkedReversals.map((transaction) =>
-                String(transaction._id),
+                String(transaction._id)
               ),
               reversal_references: linkedReversals.map(
-                (transaction) => transaction.reference,
+                (transaction) => transaction.reference
               ),
             },
-          }),
+          })
         );
       }
 
       const completedAt = Date.now();
 
       for (const issue of previousOpenIssues) {
+        const oldIssue = await ctx.db.get(issue._id);
         await ctx.db.patch(issue._id, {
           issue_status: TransactionReconciliationIssueStatus.RESOLVED,
           resolved_at: completedAt,
         });
+        const newIssue = await ctx.db.get(issue._id);
+
+        // Sync aggregates - mark as resolved
+        if (oldIssue && newIssue) {
+          await syncReconciliationIssueUpdate(ctx, oldIssue, newIssue);
+        }
       }
 
       for (const issue of issues) {
-        await ctx.db.insert(TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES, {
-          run_id: runId,
-          ...issue,
-        });
+        const issueId = await ctx.db.insert(
+          TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES,
+          {
+            run_id: runId,
+            ...issue,
+          }
+        );
+
+        // Sync aggregates - add new issue
+        const createdIssue = await ctx.db.get(issueId);
+        if (createdIssue) {
+          await syncReconciliationIssueInsert(ctx, createdIssue);
+        }
       }
 
       await ctx.db.patch(runId, {
@@ -1410,7 +1436,7 @@ export const listMine = query({
         planId: args.planId,
         dateFrom: args.dateFrom,
         dateTo: args.dateTo,
-      },
+      }
     );
   },
 });
@@ -1443,7 +1469,7 @@ export const listByPlan = query({
         planId: args.planId,
         dateFrom: args.dateFrom,
         dateTo: args.dateTo,
-      },
+      }
     );
   },
 });
@@ -1473,7 +1499,7 @@ export const listForAdmin = query({
           planId: args.planId,
           dateFrom: args.dateFrom,
           dateTo: args.dateTo,
-        },
+        }
       );
     }
 
@@ -1482,7 +1508,7 @@ export const listForAdmin = query({
         ctx.db
           .query(TABLE_NAMES.TRANSACTIONS)
           .withIndex("by_user_plan_id", (q) =>
-            q.eq("user_plan_id", args.planId),
+            q.eq("user_plan_id", args.planId)
           )
           .collect(),
         args.paginationOpts,
@@ -1492,7 +1518,7 @@ export const listForAdmin = query({
           planId: args.planId,
           dateFrom: args.dateFrom,
           dateTo: args.dateTo,
-        },
+        }
       );
     }
 
@@ -1509,7 +1535,7 @@ export const listForAdmin = query({
           type: args.type,
           dateFrom: args.dateFrom,
           dateTo: args.dateTo,
-        },
+        }
       );
     }
 
@@ -1525,7 +1551,7 @@ export const listForAdmin = query({
           type: transactionType,
           dateFrom: args.dateFrom,
           dateTo: args.dateTo,
-        },
+        }
       );
     }
 
@@ -1535,7 +1561,7 @@ export const listForAdmin = query({
       {
         dateFrom: args.dateFrom,
         dateTo: args.dateTo,
-      },
+      }
     );
   },
 });
@@ -1592,7 +1618,7 @@ export const listOpenReconciliationIssues = query({
     return await ctx.db
       .query(TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES)
       .withIndex("by_issue_status", (q) =>
-        q.eq("issue_status", TransactionReconciliationIssueStatus.OPEN),
+        q.eq("issue_status", TransactionReconciliationIssueStatus.OPEN)
       )
       .order("desc")
       .take(limit);

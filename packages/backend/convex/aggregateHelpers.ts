@@ -18,11 +18,13 @@ import {
   reconciliationIssuesByType,
   totalReconciliationIssues,
   savingsPlansByStatus,
+  withdrawalsByStatus,
   transactionsByUser,
   transactionsByType,
   savingsPlansByUser,
   totalTransactions,
   totalSavingsPlans,
+  totalWithdrawals,
   usersByStatus,
   totalUsers,
 } from "./aggregates";
@@ -200,5 +202,38 @@ export async function syncReconciliationIssueUpdate(
     totalReconciliationIssues.replace(ctx, oldIssue, newIssue),
     reconciliationIssuesByStatus.replace(ctx, oldIssue, newIssue),
     reconciliationIssuesByType.replace(ctx, oldIssue, newIssue),
+  ]);
+}
+
+// ============================================================================
+// WITHDRAWAL HELPERS
+// ============================================================================
+
+/**
+ * Sync withdrawal insertion with aggregates
+ * Call this after creating a withdrawal
+ */
+export async function syncWithdrawalInsert(
+  ctx: MutationCtx,
+  withdrawal: { _id: string; status: string },
+) {
+  await Promise.all([
+    totalWithdrawals.insert(ctx, withdrawal as any),
+    withdrawalsByStatus.insert(ctx, withdrawal as any),
+  ]);
+}
+
+/**
+ * Sync withdrawal update with aggregates
+ * Call this when updating a withdrawal status
+ */
+export async function syncWithdrawalUpdate(
+  ctx: MutationCtx,
+  oldWithdrawal: { _id: string; status: string },
+  newWithdrawal: { _id: string; status: string },
+) {
+  await Promise.all([
+    totalWithdrawals.replace(ctx, oldWithdrawal as any, newWithdrawal as any),
+    withdrawalsByStatus.replace(ctx, oldWithdrawal as any, newWithdrawal as any),
   ]);
 }
