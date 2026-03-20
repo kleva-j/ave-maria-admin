@@ -49,3 +49,6 @@ coverage
 .cache
 tmp
 temp
+
+# Agents
+/.kiro
