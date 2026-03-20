@@ -1,0 +1,24 @@
+{
+  "name": "@avm-daily/application",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "exports": {
+    "./dto": "./src/dto/index.ts",
+    "./ports": "./src/ports/index.ts",
+    "./use-cases": "./src/use-cases/index.ts"
+  },
+  "dependencies": {
+    "@avm-daily/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@avm-daily/config": "workspace:*",
+    "@types/node": "^24.3.0",
+    "typescript": "^5",
+    "vitest": "^4.0.18"
+  }
+}

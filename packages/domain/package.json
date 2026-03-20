@@ -1,0 +1,25 @@
+{
+  "name": "@avm-daily/domain",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./entities": "./src/entities/index.ts",
+    "./value-objects": "./src/value-objects/index.ts",
+    "./enums": "./src/enums/index.ts",
+    "./errors": "./src/errors/index.ts",
+    "./services": "./src/services/index.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@avm-daily/config": "workspace:*",
+    "@types/node": "^24.3.0",
+    "typescript": "^5",
+    "vitest": "^4.0.18"
+  }
+}
