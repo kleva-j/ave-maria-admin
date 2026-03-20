@@ -8,9 +8,10 @@ import type {
 } from "@avm-daily/domain";
 
 import type {
+  BankAccountEventRepository,
   WithdrawalRepository,
-  RiskEventRepository,
   RiskHoldRepository,
+  RiskEventService,
   AuditLogService,
 } from "@/app/ports";
 
@@ -18,7 +19,10 @@ import {
   evaluateWithdrawalRiskDecision,
   buildWithdrawalCapabilities,
   WithdrawalBlockedError,
+  VELOCITY_WINDOW_MS,
   RiskHoldScope,
+  DomainError,
+  DAY_MS,
 } from "@avm-daily/domain";
 
 export type EvaluateWithdrawalRiskInput = {
@@ -28,26 +32,22 @@ export type EvaluateWithdrawalRiskInput = {
   now?: number;
 };
 
+// 4.1: replaced riskEventRepository with bankAccountEventRepository; replaced inline constants with domain imports
 export function createEvaluateWithdrawalRiskUseCase(deps: {
   riskHoldRepository: RiskHoldRepository;
   withdrawalRepository: WithdrawalRepository;
-  riskEventRepository: RiskEventRepository;
+  bankAccountEventRepository: BankAccountEventRepository;
 }) {
   return async function evaluateWithdrawalRisk(
     input: EvaluateWithdrawalRiskInput,
   ): Promise<RiskDecisionDTO> {
     const now = input.now ?? Date.now();
-    const DAY_MS = 24 * 60 * 60 * 1000;
-    const VELOCITY_WINDOW_MS = 15 * 60 * 1000;
 
-    const activeHold = await deps.riskHoldRepository.findActiveWithdrawalHold(
-      input.userId,
-    );
-    const lastBankChange =
-      await deps.riskEventRepository.getLastBankAccountChangeAt(input.userId);
-    const recentWithdrawals = await deps.withdrawalRepository.findByUserId(
-      input.userId,
-    );
+    const [activeHold, lastBankChange, recentWithdrawals] = await Promise.all([
+      deps.riskHoldRepository.findActiveWithdrawalHold(input.userId),
+      deps.bankAccountEventRepository.getLastBankAccountChangeAt(input.userId),
+      deps.withdrawalRepository.findByUserId(input.userId),
+    ]);
 
     const sinceDay = now - DAY_MS;
     const sinceVelocity = now - VELOCITY_WINDOW_MS;
@@ -90,11 +90,12 @@ export function createEvaluateWithdrawalRiskUseCase(deps: {
   };
 }
 
+// 4.2: replaced riskEventRepository with riskEventService
 export function createAssertWithdrawalAllowedUseCase(deps: {
   evaluateWithdrawalRisk: ReturnType<
     typeof createEvaluateWithdrawalRiskUseCase
   >;
-  riskEventRepository: RiskEventRepository;
+  riskEventService: RiskEventService;
 }) {
   return async function assertWithdrawalAllowed(
     input: EvaluateWithdrawalRiskInput & { actorAdminId?: string },
@@ -114,15 +115,14 @@ export function createAssertWithdrawalAllowedUseCase(deps: {
       details?: Record<string, unknown>;
     };
 
-    await deps.riskEventRepository.create({
-      user_id: input.userId,
+    await deps.riskEventService.record({
+      userId: input.userId,
       scope: RiskHoldScope.WITHDRAWALS,
-      event_type: blockedDecision.eventType,
+      eventType: blockedDecision.eventType,
       severity: blockedDecision.severity,
       message: blockedDecision.message,
       details: blockedDecision.details,
-      actor_admin_id: input.actorAdminId,
-      created_at: Date.now(),
+      actorAdminId: input.actorAdminId,
     });
 
     throw new WithdrawalBlockedError(
@@ -161,9 +161,10 @@ export function createBuildWithdrawalCapabilitiesUseCase(deps: {
   };
 }
 
+// 4.3: replaced riskEventRepository with riskEventService; throw typed DomainError
 export function createPlaceRiskHoldUseCase(deps: {
   riskHoldRepository: RiskHoldRepository;
-  riskEventRepository: RiskEventRepository;
+  riskEventService: RiskEventService;
   auditLogService: AuditLogService;
 }) {
   return async function placeRiskHold(input: {
@@ -175,7 +176,10 @@ export function createPlaceRiskHoldUseCase(deps: {
       input.userId,
     );
     if (existing) {
-      throw new Error("User already has an active withdrawal hold");
+      throw new DomainError(
+        "User already has an active withdrawal hold",
+        "hold_already_active",
+      );
     }
 
     const placedAt = Date.now();
@@ -188,15 +192,14 @@ export function createPlaceRiskHoldUseCase(deps: {
       placed_at: placedAt,
     });
 
-    await deps.riskEventRepository.create({
-      user_id: input.userId,
+    await deps.riskEventService.record({
+      userId: input.userId,
       scope: RiskHoldScope.WITHDRAWALS,
-      event_type: "hold_placed",
+      eventType: "hold_placed",
       severity: "warning",
       message: `Withdrawal hold placed: ${input.reason.trim()}`,
       details: { hold_id: hold._id },
-      actor_admin_id: input.adminId,
-      created_at: placedAt,
+      actorAdminId: input.adminId,
     });
 
     await deps.auditLogService.log({
@@ -216,9 +219,10 @@ export function createPlaceRiskHoldUseCase(deps: {
   };
 }
 
+// 4.3: replaced riskEventRepository with riskEventService; use auditLogService.logChange; throw typed DomainError
 export function createReleaseRiskHoldUseCase(deps: {
   riskHoldRepository: RiskHoldRepository;
-  riskEventRepository: RiskEventRepository;
+  riskEventService: RiskEventService;
   auditLogService: AuditLogService;
 }) {
   return async function releaseRiskHold(input: {
@@ -230,7 +234,10 @@ export function createReleaseRiskHoldUseCase(deps: {
     );
 
     if (!activeHold) {
-      throw new Error("User does not have an active withdrawal hold");
+      throw new DomainError(
+        "User does not have an active withdrawal hold",
+        "hold_not_found",
+      );
     }
 
     const releasedAt = Date.now();
@@ -240,22 +247,27 @@ export function createReleaseRiskHoldUseCase(deps: {
       releasedAt,
     );
 
-    await deps.riskEventRepository.create({
-      user_id: input.userId,
+    await deps.riskEventService.record({
+      userId: input.userId,
       scope: RiskHoldScope.WITHDRAWALS,
-      event_type: "hold_released",
+      eventType: "hold_released",
       severity: "info",
       message: "Withdrawal hold released.",
       details: { hold_id: activeHold._id },
-      actor_admin_id: input.adminId,
-      created_at: releasedAt,
+      actorAdminId: input.adminId,
     });
 
-    await deps.auditLogService.log({
+    await deps.auditLogService.logChange({
       action: "risk.hold_released",
       actorId: input.adminId,
       resourceType: "user_risk_hold",
       resourceId: activeHold._id,
+      before: {
+        status: "active",
+        reason: activeHold.reason,
+        placed_at: activeHold.placed_at,
+      },
+      after: { status: "released", released_at: releasedAt },
       severity: "info",
     });
   };
