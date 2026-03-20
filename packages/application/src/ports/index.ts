@@ -1,12 +1,20 @@
 import type { Transaction, User, UserSavingsPlan } from "@avm-daily/domain";
 
-export interface TransactionRepository {
+// --- Transaction Ports (ISP: split read vs write) ---
+
+export interface TransactionReadRepository {
   findByReference(reference: string): Promise<Transaction | null>;
   findById(id: string): Promise<Transaction | null>;
   findByUserId(userId: string): Promise<Transaction[]>;
   findByReversalOfTransactionId(transactionId: string): Promise<Transaction[]>;
-  create(transaction: Omit<Transaction, "_id">): Promise<Transaction>;
 }
+
+export interface TransactionWriteRepository {
+  create(transaction: Omit<Transaction, "_id">): Promise<Transaction>;
+  updateMetadata(id: string, metadata: Record<string, unknown>): Promise<void>;
+}
+
+// --- User / Plan Ports ---
 
 export interface UserRepository {
   findById(id: string): Promise<User | null>;
@@ -28,6 +36,8 @@ export interface SavingsPlanRepository {
   ): Promise<void>;
 }
 
+// --- Withdrawal Port ---
+
 export interface WithdrawalRepository {
   findById(id: string): Promise<{
     _id: string;
@@ -38,6 +48,8 @@ export interface WithdrawalRepository {
     userId: string,
   ): Promise<Array<{ requested_at: number; requested_amount_kobo: bigint }>>;
 }
+
+// --- Risk Hold Port ---
 
 export interface RiskHoldRepository {
   findActiveWithdrawalHold(userId: string): Promise<{
@@ -60,6 +72,8 @@ export interface RiskHoldRepository {
   ): Promise<void>;
 }
 
+// --- Risk Event Ports (ISP: bank-account events separated from risk events) ---
+
 export interface RiskEventRepository {
   findLatestByUserId(userId: string): Promise<{
     event_type: string;
@@ -67,18 +81,27 @@ export interface RiskEventRepository {
     message: string;
     created_at: number;
   } | null>;
+}
+
+/** Separated from RiskEventRepository per ISP — queries a different table. */
+export interface BankAccountEventRepository {
   getLastBankAccountChangeAt(userId: string): Promise<number | undefined>;
-  create(event: {
-    user_id: string;
+}
+
+/** Delegate pattern: use-cases record risk events through this service port. */
+export interface RiskEventService {
+  record(event: {
+    userId: string;
     scope: string;
-    event_type: string;
+    eventType: string;
     severity: string;
     message: string;
     details?: Record<string, unknown>;
-    actor_admin_id?: string;
-    created_at: number;
-  }): Promise<{ _id: string }>;
+    actorAdminId?: string;
+  }): Promise<{ id: string }>;
 }
+
+// --- Audit Log Port ---
 
 export interface AuditLogService {
   log(params: {
@@ -88,5 +111,14 @@ export interface AuditLogService {
     resourceId: string;
     severity: string;
     metadata?: Record<string, unknown>;
+  }): Promise<void>;
+  logChange(params: {
+    action: string;
+    actorId?: string;
+    resourceType: string;
+    resourceId: string;
+    before: unknown;
+    after: unknown;
+    severity: string;
   }): Promise<void>;
 }
