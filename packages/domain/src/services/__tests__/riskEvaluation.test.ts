@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import * as fc from "fast-check";
 import {
   type WithdrawalRiskEvaluationInput,
   evaluateWithdrawalRiskDecision,
@@ -172,5 +173,51 @@ describe("riskEvaluation", () => {
         expect(decision.rule).toBe("manual_hold");
       }
     });
+  });
+});
+
+// Feature: clean-architecture-refactor, Property 3: Risk evaluation is a pure function
+describe("Property 3: Risk evaluation is a pure function", () => {
+  const arbitraryRiskInput = fc.record<WithdrawalRiskEvaluationInput>({
+    amountKobo: fc.bigInt({ min: 1n, max: 100_000_000n }),
+    method: fc.constantFrom("bank_transfer" as const, "cash" as const),
+    now: fc.integer({ min: 1_000_000_000_000, max: 9_999_999_999_999 }),
+    lastBankAccountChangeAt: fc.option(
+      fc.integer({ min: 0, max: 9_999_999_999_999 }),
+      { nil: undefined }
+    ),
+    activeHold: fc.option(
+      fc.record({
+        _id: fc.string({ minLength: 1, maxLength: 32 }),
+        reason: fc.string({ minLength: 1, maxLength: 64 }),
+        placed_at: fc.integer({ min: 0, max: 9_999_999_999_999 }),
+      }),
+      { nil: undefined }
+    ),
+    recentDailyAmountKobo: fc.bigInt({ min: 0n, max: 100_000_000n }),
+    recentDailyCount: fc.integer({ min: 0, max: 10 }),
+    recentVelocityCount: fc.integer({ min: 0, max: 10 }),
+  });
+
+  it("returns structurally equal results for the same input (purity)", () => {
+    // Validates: Requirements 2.1, 4.2
+    fc.assert(
+      fc.property(arbitraryRiskInput, (input) => {
+        const r1 = evaluateWithdrawalRiskDecision(input);
+        const r2 = evaluateWithdrawalRiskDecision(input);
+        return JSON.stringify(r1) === JSON.stringify(r2);
+      }),
+      { numRuns: 100 }
+    );
+  });
+
+  it("does not throw for any valid input", () => {
+    // Validates: Requirements 2.1, 4.2
+    fc.assert(
+      fc.property(arbitraryRiskInput, (input) => {
+        expect(() => evaluateWithdrawalRiskDecision(input)).not.toThrow();
+      }),
+      { numRuns: 100 }
+    );
   });
 });

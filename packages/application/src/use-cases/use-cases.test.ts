@@ -4,12 +4,14 @@ import {
   createEvaluateWithdrawalRiskUseCase,
   createReleaseRiskHoldUseCase,
   createPlaceRiskHoldUseCase,
-} from "../use-cases";
+} from "./index";
 
 import type {
   WithdrawalRepository,
-  RiskEventRepository,
   RiskHoldRepository,
+  BankAccountEventRepository,
+  RiskEventService,
+  AuditLogService,
 } from "../ports";
 
 const createMockRiskHoldRepository = (
@@ -29,12 +31,25 @@ const createMockWithdrawalRepository = (
   ...overrides,
 });
 
-const createMockRiskEventRepository = (
-  overrides: Partial<RiskEventRepository> = {},
-): RiskEventRepository => ({
-  findLatestByUserId: vi.fn(),
+const createMockBankAccountEventRepository = (
+  overrides: Partial<BankAccountEventRepository> = {},
+): BankAccountEventRepository => ({
   getLastBankAccountChangeAt: vi.fn(),
-  create: vi.fn(),
+  ...overrides,
+});
+
+const createMockRiskEventService = (
+  overrides: Partial<RiskEventService> = {},
+): RiskEventService => ({
+  record: vi.fn(),
+  ...overrides,
+});
+
+const createMockAuditLogService = (
+  overrides: Partial<AuditLogService> = {},
+): AuditLogService => ({
+  log: vi.fn(),
+  logChange: vi.fn(),
   ...overrides,
 });
 
@@ -51,14 +66,15 @@ describe("use-cases", () => {
       const mockWithdrawalRepository = createMockWithdrawalRepository({
         findByUserId: vi.fn().mockResolvedValue([]),
       });
-      const mockRiskEventRepository = createMockRiskEventRepository({
-        getLastBankAccountChangeAt: vi.fn().mockResolvedValue(undefined),
-      });
+      const mockBankAccountEventRepository =
+        createMockBankAccountEventRepository({
+          getLastBankAccountChangeAt: vi.fn().mockResolvedValue(undefined),
+        });
 
       const evaluateRisk = createEvaluateWithdrawalRiskUseCase({
         riskHoldRepository: mockRiskHoldRepository,
         withdrawalRepository: mockWithdrawalRepository,
-        riskEventRepository: mockRiskEventRepository,
+        bankAccountEventRepository: mockBankAccountEventRepository,
       });
 
       const result = await evaluateRisk({
@@ -78,14 +94,15 @@ describe("use-cases", () => {
       const mockWithdrawalRepository = createMockWithdrawalRepository({
         findByUserId: vi.fn().mockResolvedValue([]),
       });
-      const mockRiskEventRepository = createMockRiskEventRepository({
-        getLastBankAccountChangeAt: vi.fn().mockResolvedValue(undefined),
-      });
+      const mockBankAccountEventRepository =
+        createMockBankAccountEventRepository({
+          getLastBankAccountChangeAt: vi.fn().mockResolvedValue(undefined),
+        });
 
       const evaluateRisk = createEvaluateWithdrawalRiskUseCase({
         riskHoldRepository: mockRiskHoldRepository,
         withdrawalRepository: mockWithdrawalRepository,
-        riskEventRepository: mockRiskEventRepository,
+        bankAccountEventRepository: mockBankAccountEventRepository,
       });
 
       const result = await evaluateRisk({
@@ -99,23 +116,19 @@ describe("use-cases", () => {
   });
 
   describe("createPlaceRiskHoldUseCase", () => {
-    const createMockAuditLogService = () => ({
-      log: vi.fn().mockResolvedValue(undefined),
-    });
-
     it("should place a risk hold successfully", async () => {
       const mockRiskHoldRepository = createMockRiskHoldRepository({
         findActiveWithdrawalHold: vi.fn().mockResolvedValue(null),
         create: vi.fn().mockResolvedValue({ _id: "hold-new" }),
       });
-      const mockRiskEventRepository = createMockRiskEventRepository({
-        create: vi.fn().mockResolvedValue({ _id: "event-1" }),
+      const mockRiskEventService = createMockRiskEventService({
+        record: vi.fn().mockResolvedValue({ id: "event-1" }),
       });
       const mockAuditLogService = createMockAuditLogService();
 
       const placeHold = createPlaceRiskHoldUseCase({
         riskHoldRepository: mockRiskHoldRepository,
-        riskEventRepository: mockRiskEventRepository,
+        riskEventService: mockRiskEventService,
         auditLogService: mockAuditLogService,
       });
 
@@ -127,7 +140,7 @@ describe("use-cases", () => {
 
       expect(result.id).toBe("hold-new");
       expect(mockRiskHoldRepository.create).toHaveBeenCalled();
-      expect(mockRiskEventRepository.create).toHaveBeenCalled();
+      expect(mockRiskEventService.record).toHaveBeenCalled();
       expect(mockAuditLogService.log).toHaveBeenCalled();
     });
 
@@ -139,12 +152,12 @@ describe("use-cases", () => {
           placed_at: Date.now(),
         }),
       });
-      const mockRiskEventRepository = createMockRiskEventRepository();
+      const mockRiskEventService = createMockRiskEventService();
       const mockAuditLogService = createMockAuditLogService();
 
       const placeHold = createPlaceRiskHoldUseCase({
         riskHoldRepository: mockRiskHoldRepository,
-        riskEventRepository: mockRiskEventRepository,
+        riskEventService: mockRiskEventService,
         auditLogService: mockAuditLogService,
       });
 
@@ -159,10 +172,6 @@ describe("use-cases", () => {
   });
 
   describe("createReleaseRiskHoldUseCase", () => {
-    const createMockAuditLogService = () => ({
-      log: vi.fn().mockResolvedValue(undefined),
-    });
-
     it("should release a risk hold successfully", async () => {
       const mockRiskHoldRepository = createMockRiskHoldRepository({
         findActiveWithdrawalHold: vi.fn().mockResolvedValue({
@@ -172,14 +181,14 @@ describe("use-cases", () => {
         }),
         release: vi.fn().mockResolvedValue(undefined),
       });
-      const mockRiskEventRepository = createMockRiskEventRepository({
-        create: vi.fn().mockResolvedValue({ _id: "event-1" }),
+      const mockRiskEventService = createMockRiskEventService({
+        record: vi.fn().mockResolvedValue({ id: "event-1" }),
       });
       const mockAuditLogService = createMockAuditLogService();
 
       const releaseHold = createReleaseRiskHoldUseCase({
         riskHoldRepository: mockRiskHoldRepository,
-        riskEventRepository: mockRiskEventRepository,
+        riskEventService: mockRiskEventService,
         auditLogService: mockAuditLogService,
       });
 
@@ -193,20 +202,20 @@ describe("use-cases", () => {
         "admin-1",
         expect.any(Number),
       );
-      expect(mockRiskEventRepository.create).toHaveBeenCalled();
-      expect(mockAuditLogService.log).toHaveBeenCalled();
+      expect(mockRiskEventService.record).toHaveBeenCalled();
+      expect(mockAuditLogService.logChange).toHaveBeenCalled();
     });
 
     it("should throw if no active hold exists", async () => {
       const mockRiskHoldRepository = createMockRiskHoldRepository({
         findActiveWithdrawalHold: vi.fn().mockResolvedValue(null),
       });
-      const mockRiskEventRepository = createMockRiskEventRepository();
+      const mockRiskEventService = createMockRiskEventService();
       const mockAuditLogService = createMockAuditLogService();
 
       const releaseHold = createReleaseRiskHoldUseCase({
         riskHoldRepository: mockRiskHoldRepository,
-        riskEventRepository: mockRiskEventRepository,
+        riskEventService: mockRiskEventService,
         auditLogService: mockAuditLogService,
       });
 
