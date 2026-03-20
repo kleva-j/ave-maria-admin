@@ -26,6 +26,7 @@
  * @module withdrawals
  */
 import type { MutationCtx } from "./_generated/server";
+import type { AdminRole } from "./shared";
 import type {
   UserBankAccountId,
   UserBankAccount,
@@ -65,7 +66,6 @@ import {
   RESOURCE_TYPE,
   TABLE_NAMES,
   UserStatus,
-  AdminRole,
   TxnType,
 } from "./shared";
 

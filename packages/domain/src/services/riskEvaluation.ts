@@ -49,6 +49,10 @@ export type WithdrawalRiskEvaluationInput = {
   recentVelocityCount: number;
 };
 
+export type WithdrawalRiskRuleEvaluator = (
+  input: WithdrawalRiskEvaluationInput
+) => WithdrawalRiskDecision | null; // null = rule does not apply / not triggered
+
 export function evaluateWithdrawalRiskDecision(
   input: WithdrawalRiskEvaluationInput,
 ): WithdrawalRiskDecision {
