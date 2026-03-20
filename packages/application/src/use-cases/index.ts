@@ -1,6 +1,8 @@
 import type {
   WithdrawalCapabilitiesDTO,
+  ReverseTransactionOutput,
   PostTransactionOutput,
+  ReverseTransactionDTO,
   PostTransactionDTO,
   RiskDecisionDTO,
   TransactionDTO,
@@ -459,5 +461,54 @@ export function createPostTransactionUseCase(deps: PostTransactionDeps) {
     await Promise.all(balanceUpdates);
 
     return { transaction: transactionToDTO(newTx), idempotent: false };
+  };
+}
+
+export type ReverseTransactionDeps = PostTransactionDeps;
+
+// 7.1: createReverseTransactionUseCase — validates original exists and is not a reversal, then delegates to postTransaction
+export function createReverseTransactionUseCase(deps: ReverseTransactionDeps) {
+  const postTransaction = createPostTransactionUseCase(deps);
+
+  return async function reverseTransaction(
+    input: ReverseTransactionDTO,
+  ): Promise<ReverseTransactionOutput> {
+    // 1. Look up the original transaction
+    const original = await deps.transactionReadRepository.findById(
+      input.originalTransactionId,
+    );
+
+    if (!original) {
+      throw new TransactionValidationError(
+        `Original transaction not found: ${input.originalTransactionId}`,
+      );
+    }
+
+    // 2. Reject reversals of reversals (Property 10, Requirement 10.4)
+    if (original.type === TxnType.REVERSAL) {
+      throw new TransactionValidationError(
+        `Cannot reverse a reversal transaction: ${input.originalTransactionId}`,
+      );
+    }
+
+    // 3. Delegate to createPostTransactionUseCase with type REVERSAL
+    const result = await postTransaction({
+      userId: original.user_id,
+      userPlanId: original.user_plan_id,
+      type: TxnType.REVERSAL,
+      amountKobo: -original.amount_kobo,
+      reference: input.reference,
+      reversalOfTransactionId: original._id,
+      metadata: {
+        ...input.metadata,
+        original_type: original.type,
+        reason: input.reason,
+      },
+      source: input.source,
+      actorId: input.actorId,
+      createdAt: input.createdAt,
+    });
+
+    return { transaction: result.transaction };
   };
 }
