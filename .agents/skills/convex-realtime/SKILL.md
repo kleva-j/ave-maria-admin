@@ -128,7 +128,7 @@ function TaskItem({ task }: { task: Task }) {
     (localStore, args) => {
       const { taskId } = args;
       const currentValue = localStore.getQuery(api.tasks.get, { taskId });
-
+      
       if (currentValue !== undefined) {
         localStore.setQuery(api.tasks.get, { taskId }, {
           ...currentValue,
@@ -153,23 +153,28 @@ import { useMutation } from "convex/react";
 import { api } from "../convex/_generated/api";
 
 function useCreateTask(userId: Id<"users">) {
-  return useMutation(api.tasks.create).withOptimisticUpdate((localStore, args) => {
-    const { title, userId } = args;
-    const currentTasks = localStore.getQuery(api.tasks.list, { userId });
-
-    if (currentTasks !== undefined) {
-      // Add optimistic task to the list
-      const optimisticTask = {
-        _id: crypto.randomUUID() as Id<"tasks">,
-        _creationTime: Date.now(),
-        title,
-        userId,
-        completed: false,
-      };
-
-      localStore.setQuery(api.tasks.list, { userId }, [optimisticTask, ...currentTasks]);
+  return useMutation(api.tasks.create).withOptimisticUpdate(
+    (localStore, args) => {
+      const { title, userId } = args;
+      const currentTasks = localStore.getQuery(api.tasks.list, { userId });
+      
+      if (currentTasks !== undefined) {
+        // Add optimistic task to the list
+        const optimisticTask = {
+          _id: crypto.randomUUID() as Id<"tasks">,
+          _creationTime: Date.now(),
+          title,
+          userId,
+          completed: false,
+        };
+        
+        localStore.setQuery(api.tasks.list, { userId }, [
+          optimisticTask,
+          ...currentTasks,
+        ]);
+      }
     }
-  });
+  );
 }
 ```
 
@@ -213,13 +218,13 @@ function MessageList({ channelId }: { channelId: Id<"channels"> }) {
       {results.map((message) => (
         <div key={message._id}>{message.content}</div>
       ))}
-
+      
       {status === "CanLoadMore" && (
         <button onClick={() => loadMore(20)}>Load More</button>
       )}
-
+      
       {status === "LoadingMore" && <div>Loading...</div>}
-
+      
       {status === "Exhausted" && <div>No more messages</div>}
     </div>
   );
@@ -239,7 +244,7 @@ function InfiniteMessageList({ channelId }: { channelId: Id<"channels"> }) {
     { channelId },
     { initialNumItems: 20 }
   );
-
+  
   const observerRef = useRef<IntersectionObserver>();
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
@@ -285,8 +290,8 @@ function Dashboard({ userId }: { userId: Id<"users"> }) {
   const tasks = useQuery(api.tasks.list, { userId });
   const notifications = useQuery(api.notifications.unread, { userId });
 
-  const isLoading = user === undefined ||
-                    tasks === undefined ||
+  const isLoading = user === undefined || 
+                    tasks === undefined || 
                     notifications === undefined;
 
   if (isLoading) {
@@ -314,15 +319,13 @@ import { v } from "convex/values";
 
 export const list = query({
   args: { channelId: v.id("channels") },
-  returns: v.array(
-    v.object({
-      _id: v.id("messages"),
-      _creationTime: v.number(),
-      content: v.string(),
-      authorId: v.id("users"),
-      authorName: v.string(),
-    }),
-  ),
+  returns: v.array(v.object({
+    _id: v.id("messages"),
+    _creationTime: v.number(),
+    content: v.string(),
+    authorId: v.id("users"),
+    authorName: v.string(),
+  })),
   handler: async (ctx, args) => {
     const messages = await ctx.db
       .query("messages")
@@ -338,7 +341,7 @@ export const list = query({
           ...msg,
           authorName: author?.name ?? "Unknown",
         };
-      }),
+      })
     );
   },
 });
@@ -399,7 +402,7 @@ function ChatRoom({ channelId, userId }: Props) {
         ))}
         <div ref={messagesEndRef} />
       </div>
-
+      
       <form onSubmit={handleSend}>
         <input
           value={input}

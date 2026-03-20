@@ -20,7 +20,9 @@ npm i @convex-dev/eslint-plugin --save-dev
 import { defineConfig } from "eslint/config";
 import convexPlugin from "@convex-dev/eslint-plugin";
 
-export default defineConfig([...convexPlugin.configs.recommended]);
+export default defineConfig([
+  ...convexPlugin.configs.recommended,
+]);
 ```
 
 The plugin enforces four rules:
@@ -211,7 +213,9 @@ export const reorderItems = mutation({
   args: { itemIds: v.array(v.id("items")) },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const updates = args.itemIds.map((id, index) => ctx.db.patch("items", id, { order: index }));
+    const updates = args.itemIds.map((id, index) =>
+      ctx.db.patch("items", id, { order: index }),
+    );
     await Promise.all(updates);
     return null;
   },

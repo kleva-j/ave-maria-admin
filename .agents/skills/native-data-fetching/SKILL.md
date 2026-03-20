@@ -153,11 +153,7 @@ function CreateUserForm() {
 
 ```tsx
 class ApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-    public code?: string,
-  ) {
+  constructor(message: string, public status: number, public code?: string) {
     super(message);
     this.name = "ApiError";
   }
@@ -169,7 +165,11 @@ const fetchWithErrorHandling = async (url: string, options?: RequestInit) => {
 
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
-      throw new ApiError(error.message || "Request failed", response.status, error.code);
+      throw new ApiError(
+        error.message || "Request failed",
+        response.status,
+        error.code
+      );
     }
 
     return response.json();
@@ -186,7 +186,11 @@ const fetchWithErrorHandling = async (url: string, options?: RequestInit) => {
 **Retry logic**:
 
 ```tsx
-const fetchWithRetry = async (url: string, options?: RequestInit, retries = 3) => {
+const fetchWithRetry = async (
+  url: string,
+  options?: RequestInit,
+  retries = 3
+) => {
   for (let i = 0; i < retries; i++) {
     try {
       return await fetchWithErrorHandling(url, options);

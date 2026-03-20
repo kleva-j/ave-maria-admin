@@ -81,20 +81,19 @@ async function requireAuth(ctx: QueryCtx | MutationCtx) {
 // Secure query pattern
 export const getMyProfile = query({
   args: {},
-  returns: v.union(
-    v.object({
-      _id: v.id("users"),
-      name: v.string(),
-      email: v.string(),
-    }),
-    v.null(),
-  ),
+  returns: v.union(v.object({
+    _id: v.id("users"),
+    name: v.string(),
+    email: v.string(),
+  }), v.null()),
   handler: async (ctx) => {
     const identity = await requireAuth(ctx);
-
+    
     return await ctx.db
       .query("users")
-      .withIndex("by_tokenIdentifier", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+      .withIndex("by_tokenIdentifier", (q) => 
+        q.eq("tokenIdentifier", identity.tokenIdentifier)
+      )
       .unique();
   },
 });
@@ -106,11 +105,7 @@ export const getMyProfile = query({
 // PUBLIC - Exposed to clients (review carefully!)
 export const listPublicPosts = query({
   args: {},
-  returns: v.array(
-    v.object({
-      /* ... */
-    }),
-  ),
+  returns: v.array(v.object({ /* ... */ })),
   handler: async (ctx) => {
     // Anyone can call this - intentionally public
     return await ctx.db
@@ -142,7 +137,11 @@ export const createPost = mutation({
   args: {
     title: v.string(),
     content: v.string(),
-    category: v.union(v.literal("tech"), v.literal("news"), v.literal("other")),
+    category: v.union(
+      v.literal("tech"),
+      v.literal("news"),
+      v.literal("other")
+    ),
   },
   returns: v.id("posts"),
   handler: async (ctx, args) => {
@@ -178,14 +177,14 @@ export const updateTask = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const identity = await requireAuth(ctx);
-
+    
     const task = await ctx.db.get(args.taskId);
-
+    
     // Check ownership
     if (!task || task.userId !== identity.tokenIdentifier) {
       throw new ConvexError("Not authorized to update this task");
     }
-
+    
     await ctx.db.patch(args.taskId, { title: args.title });
     return null;
   },
@@ -197,13 +196,13 @@ export const deleteTask = mutation({
   returns: v.null(),
   handler: async (ctx, args) => {
     const identity = await requireAuth(ctx);
-
+    
     const task = await ctx.db.get(args.taskId);
-
+    
     if (!task || task.userId !== identity.tokenIdentifier) {
       throw new ConvexError("Not authorized to delete this task");
     }
-
+    
     await ctx.db.delete(args.taskId);
     return null;
   },
@@ -229,15 +228,15 @@ export const sendEmail = action({
   handler: async (ctx, args) => {
     // Access API key from environment
     const apiKey = process.env.RESEND_API_KEY;
-
+    
     if (!apiKey) {
       throw new Error("RESEND_API_KEY not configured");
     }
-
+    
     const response = await fetch("https://api.resend.com/emails", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
+        "Authorization": `Bearer ${apiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
@@ -247,7 +246,7 @@ export const sendEmail = action({
         html: args.body,
       }),
     });
-
+    
     return { success: response.ok };
   },
 });
@@ -272,49 +271,49 @@ async function getAuthenticatedUser(ctx: QueryCtx | MutationCtx) {
       message: "You must be logged in",
     });
   }
-
+  
   const user = await ctx.db
     .query("users")
-    .withIndex("by_tokenIdentifier", (q) => q.eq("tokenIdentifier", identity.tokenIdentifier))
+    .withIndex("by_tokenIdentifier", (q) => 
+      q.eq("tokenIdentifier", identity.tokenIdentifier)
+    )
     .unique();
-
+    
   if (!user) {
     throw new ConvexError({
       code: "USER_NOT_FOUND",
       message: "User profile not found",
     });
   }
-
+  
   return user;
 }
 
 // Check admin role
 async function requireAdmin(ctx: QueryCtx | MutationCtx) {
   const user = await getAuthenticatedUser(ctx);
-
+  
   if (user.role !== "admin") {
     throw new ConvexError({
       code: "FORBIDDEN",
       message: "Admin access required",
     });
   }
-
+  
   return user;
 }
 
 // Public: List own tasks
 export const listMyTasks = query({
   args: {},
-  returns: v.array(
-    v.object({
-      _id: v.id("tasks"),
-      title: v.string(),
-      completed: v.boolean(),
-    }),
-  ),
+  returns: v.array(v.object({
+    _id: v.id("tasks"),
+    title: v.string(),
+    completed: v.boolean(),
+  })),
   handler: async (ctx) => {
     const user = await getAuthenticatedUser(ctx);
-
+    
     return await ctx.db
       .query("tasks")
       .withIndex("by_user", (q) => q.eq("userId", user._id))
@@ -325,16 +324,14 @@ export const listMyTasks = query({
 // Admin only: List all users
 export const listAllUsers = query({
   args: {},
-  returns: v.array(
-    v.object({
-      _id: v.id("users"),
-      name: v.string(),
-      role: v.string(),
-    }),
-  ),
+  returns: v.array(v.object({
+    _id: v.id("users"),
+    name: v.string(),
+    role: v.string(),
+  })),
   handler: async (ctx) => {
     await requireAdmin(ctx);
-
+    
     return await ctx.db.query("users").collect();
   },
 });

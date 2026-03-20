@@ -250,7 +250,11 @@ export default http;
 Use internal functions for sensitive operations:
 
 ```typescript
-import { internalMutation, internalQuery, internalAction } from "./_generated/server";
+import {
+  internalMutation,
+  internalQuery,
+  internalAction,
+} from "./_generated/server";
 import { v } from "convex/values";
 
 // Only callable from other Convex functions
@@ -307,10 +311,11 @@ export const scheduleReminder = mutation({
   },
   returns: v.id("_scheduled_functions"),
   handler: async (ctx, args) => {
-    return await ctx.scheduler.runAfter(args.delayMs, internal.notifications.sendReminder, {
-      userId: args.userId,
-      message: args.message,
-    });
+    return await ctx.scheduler.runAfter(
+      args.delayMs,
+      internal.notifications.sendReminder,
+      { userId: args.userId, message: args.message },
+    );
   },
 });
 

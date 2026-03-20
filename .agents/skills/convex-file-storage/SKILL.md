@@ -25,7 +25,6 @@ Before implementing, do not assume; fetch the latest documentation:
 ### File Storage Overview
 
 Convex provides built-in file storage with:
-
 - Automatic URL generation for serving files
 - Support for any file type (images, PDFs, videos, etc.)
 - File metadata via the `_storage` system table
@@ -153,14 +152,14 @@ export const getFile = query({
       fileSize: v.number(),
       url: v.union(v.string(), v.null()),
     }),
-    v.null(),
+    v.null()
   ),
   handler: async (ctx, args) => {
     const file = await ctx.db.get(args.fileId);
     if (!file) return null;
 
     const url = await ctx.storage.getUrl(file.storageId);
-
+    
     return {
       _id: file._id,
       fileName: file.fileName,
@@ -280,7 +279,7 @@ export const getFileMetadata = query({
       sha256: v.string(),
       size: v.number(),
     }),
-    v.null(),
+    v.null()
   ),
   handler: async (ctx, args) => {
     const metadata = await ctx.db.system.get(args.storageId);
@@ -382,7 +381,7 @@ function ImageUploader({ onUpload }: { onUpload: (id: Id<"files">) => void }) {
         onChange={handleFileSelect}
         style={{ display: "none" }}
       />
-
+      
       <button
         onClick={() => inputRef.current?.click()}
         disabled={uploading}

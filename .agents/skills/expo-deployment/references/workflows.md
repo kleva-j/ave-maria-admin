@@ -70,7 +70,7 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    tags: ['v*']
 
 jobs:
   build-ios:
@@ -158,23 +158,23 @@ jobs:
 on:
   push:
     branches: [main, develop]
-    tags: ["v*"]
+    tags: ['v*']
   pull_request:
     types: [opened, synchronize, reopened]
   schedule:
-    - cron: "0 0 * * *" # Daily at midnight
-  workflow_dispatch: # Manual trigger
+    - cron: '0 0 * * *'  # Daily at midnight
+  workflow_dispatch:  # Manual trigger
 ```
 
 ### Job Types
 
-| Type     | Purpose                 |
-| -------- | ----------------------- |
-| `build`  | Create app builds       |
-| `submit` | Submit to app stores    |
-| `update` | Publish OTA updates     |
-| `deploy` | Deploy web apps         |
-| `run`    | Execute custom commands |
+| Type | Purpose |
+|------|---------|
+| `build` | Create app builds |
+| `submit` | Submit to app stores |
+| `update` | Publish OTA updates |
+| `deploy` | Deploy web apps |
+| `run` | Execute custom commands |
 
 ### Job Dependencies
 
@@ -187,7 +187,7 @@ jobs:
 
   second:
     type: submit
-    needs: [first] # Runs after 'first' completes
+    needs: [first]  # Runs after 'first' completes
     params:
       platform: ios
 ```

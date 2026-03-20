@@ -96,11 +96,16 @@ export function useSearch(options: any = {}) {
 function SearchScreen() {
   const search = useSearch({ placeholder: "Search items..." });
 
-  const filteredItems = items.filter((item) =>
-    item.name.toLowerCase().includes(search.toLowerCase()),
+  const filteredItems = items.filter(item =>
+    item.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  return <FlatList data={filteredItems} renderItem={({ item }) => <ItemRow item={item} />} />;
+  return (
+    <FlatList
+      data={filteredItems}
+      renderItem={({ item }) => <ItemRow item={item} />}
+    />
+  );
 }
 ```
 
@@ -109,18 +114,20 @@ function SearchScreen() {
 ### Simple Text Filter
 
 ```tsx
-const filtered = items.filter((item) => item.name.toLowerCase().includes(search.toLowerCase()));
+const filtered = items.filter(item =>
+  item.name.toLowerCase().includes(search.toLowerCase())
+);
 ```
 
 ### Multiple Fields
 
 ```tsx
-const filtered = items.filter((item) => {
+const filtered = items.filter(item => {
   const query = search.toLowerCase();
   return (
     item.name.toLowerCase().includes(query) ||
     item.description.toLowerCase().includes(query) ||
-    item.tags.some((tag) => tag.toLowerCase().includes(query))
+    item.tags.some(tag => tag.toLowerCase().includes(query))
   );
 });
 ```
@@ -147,9 +154,11 @@ function SearchScreen() {
   const search = useSearch();
   const debouncedSearch = useDebounce(search, 300);
 
-  const filteredItems = useMemo(
-    () => items.filter((item) => item.name.toLowerCase().includes(debouncedSearch.toLowerCase())),
-    [debouncedSearch],
+  const filteredItems = useMemo(() =>
+    items.filter(item =>
+      item.name.toLowerCase().includes(debouncedSearch.toLowerCase())
+    ),
+    [debouncedSearch]
   );
 
   return <FlatList data={filteredItems} />;
@@ -199,7 +208,9 @@ function SearchResults({ search, items }) {
   if (search && filtered.length === 0) {
     return (
       <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-        <Text style={{ color: PlatformColor("secondaryLabel") }}>No results for "{search}"</Text>
+        <Text style={{ color: PlatformColor("secondaryLabel") }}>
+          No results for "{search}"
+        </Text>
       </View>
     );
   }

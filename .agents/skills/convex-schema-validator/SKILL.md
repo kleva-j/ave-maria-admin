@@ -36,35 +36,39 @@ export default defineSchema({
     avatarUrl: v.optional(v.string()),
     createdAt: v.number(),
   }),
-
+  
   tasks: defineTable({
     title: v.string(),
     description: v.optional(v.string()),
     completed: v.boolean(),
     userId: v.id("users"),
-    priority: v.union(v.literal("low"), v.literal("medium"), v.literal("high")),
+    priority: v.union(
+      v.literal("low"),
+      v.literal("medium"),
+      v.literal("high")
+    ),
   }),
 });
 ```
 
 ### Validator Types
 
-| Validator        | TypeScript Type  | Example             |
-| ---------------- | ---------------- | ------------------- |
-| `v.string()`     | `string`         | `"hello"`           |
-| `v.number()`     | `number`         | `42`, `3.14`        |
-| `v.boolean()`    | `boolean`        | `true`, `false`     |
-| `v.null()`       | `null`           | `null`              |
-| `v.int64()`      | `bigint`         | `9007199254740993n` |
-| `v.bytes()`      | `ArrayBuffer`    | Binary data         |
-| `v.id("table")`  | `Id<"table">`    | Document reference  |
-| `v.array(v)`     | `T[]`            | `[1, 2, 3]`         |
-| `v.object({})`   | `{ ... }`        | `{ name: "..." }`   |
-| `v.optional(v)`  | `T \| undefined` | Optional field      |
-| `v.union(...)`   | `T1 \| T2`       | Multiple types      |
-| `v.literal(x)`   | `"x"`            | Exact value         |
-| `v.any()`        | `any`            | Any value           |
-| `v.record(k, v)` | `Record<K, V>`   | Dynamic keys        |
+| Validator | TypeScript Type | Example |
+|-----------|----------------|---------|
+| `v.string()` | `string` | `"hello"` |
+| `v.number()` | `number` | `42`, `3.14` |
+| `v.boolean()` | `boolean` | `true`, `false` |
+| `v.null()` | `null` | `null` |
+| `v.int64()` | `bigint` | `9007199254740993n` |
+| `v.bytes()` | `ArrayBuffer` | Binary data |
+| `v.id("table")` | `Id<"table">` | Document reference |
+| `v.array(v)` | `T[]` | `[1, 2, 3]` |
+| `v.object({})` | `{ ... }` | `{ name: "..." }` |
+| `v.optional(v)` | `T \| undefined` | Optional field |
+| `v.union(...)` | `T1 \| T2` | Multiple types |
+| `v.literal(x)` | `"x"` | Exact value |
+| `v.any()` | `any` | Any value |
+| `v.record(k, v)` | `Record<K, V>` | Dynamic keys |
 
 ### Index Configuration
 
@@ -82,16 +86,17 @@ export default defineSchema({
     .index("by_channel_and_author", ["channelId", "authorId"])
     // Index for sorting
     .index("by_channel_and_time", ["channelId", "sentAt"]),
-
+    
   // Full-text search index
   articles: defineTable({
     title: v.string(),
     body: v.string(),
     category: v.string(),
-  }).searchIndex("search_content", {
-    searchField: "body",
-    filterFields: ["category"],
-  }),
+  })
+    .searchIndex("search_content", {
+      searchField: "body",
+      filterFields: ["category"],
+    }),
 });
 ```
 
@@ -114,18 +119,16 @@ export default defineSchema({
   // Arrays of objects
   orders: defineTable({
     customerId: v.id("users"),
-    items: v.array(
-      v.object({
-        productId: v.id("products"),
-        quantity: v.number(),
-        price: v.number(),
-      }),
-    ),
+    items: v.array(v.object({
+      productId: v.id("products"),
+      quantity: v.number(),
+      price: v.number(),
+    })),
     status: v.union(
       v.literal("pending"),
       v.literal("processing"),
       v.literal("shipped"),
-      v.literal("delivered"),
+      v.literal("delivered")
     ),
   }),
 
@@ -158,8 +161,8 @@ export default defineSchema({
         type: v.literal("page_view"),
         sessionId: v.string(),
         path: v.string(),
-      }),
-    ),
+      })
+    )
   ).index("by_type", ["type"]),
 });
 ```
@@ -171,10 +174,10 @@ export default defineSchema({
   items: defineTable({
     // Optional: field may not exist
     description: v.optional(v.string()),
-
+    
     // Nullable: field exists but can be null
     deletedAt: v.union(v.number(), v.null()),
-
+    
     // Optional and nullable
     notes: v.optional(v.union(v.string(), v.null())),
   }),
@@ -210,14 +213,14 @@ export default defineSchema({
 users: defineTable({
   name: v.string(),
   email: v.string(),
-});
+})
 
 // After - add as optional first
 users: defineTable({
   name: v.string(),
   email: v.string(),
   avatarUrl: v.optional(v.string()), // New optional field
-});
+})
 ```
 
 #### Backfilling Data
@@ -256,7 +259,7 @@ users: defineTable({
   name: v.string(),
   email: v.string(),
   avatarUrl: v.string(), // Now required after backfill
-});
+})
 ```
 
 ## Examples
@@ -295,20 +298,18 @@ export default defineSchema({
 
   orders: defineTable({
     userId: v.id("users"),
-    items: v.array(
-      v.object({
-        productId: v.id("products"),
-        quantity: v.number(),
-        priceAtPurchase: v.number(),
-      }),
-    ),
+    items: v.array(v.object({
+      productId: v.id("products"),
+      quantity: v.number(),
+      priceAtPurchase: v.number(),
+    })),
     total: v.number(),
     status: v.union(
       v.literal("pending"),
       v.literal("paid"),
       v.literal("shipped"),
       v.literal("delivered"),
-      v.literal("cancelled"),
+      v.literal("cancelled")
     ),
     shippingAddress: v.object({
       street: v.string(),
@@ -363,7 +364,7 @@ export const get = query({
       inventory: v.number(),
       isActive: v.boolean(),
     }),
-    v.null(),
+    v.null()
   ),
   handler: async (ctx, args): Promise<Product | null> => {
     return await ctx.db.get(args.productId);
@@ -388,7 +389,7 @@ export const get = query({
 2. **Wrong index field order** - Fields must be queried in order defined
 3. **Using v.any() excessively** - Lose type safety benefits
 4. **Not making new fields optional** - Breaks existing data
-5. **Forgetting system fields** - \_id and \_creationTime are automatic
+5. **Forgetting system fields** - _id and _creationTime are automatic
 
 ## References
 

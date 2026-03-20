@@ -22,13 +22,10 @@ You write one function and the framework manages when and how it executes.
       "output": "server"
     },
     "plugins": [
-      [
-        "expo-router",
-        {
-          "unstable_useServerDataLoaders": true,
-          "unstable_useServerRendering": true
-        }
-      ]
+      ["expo-router", {
+        "unstable_useServerDataLoaders": true,
+        "unstable_useServerRendering": true
+      }]
     ]
   }
 }
@@ -43,24 +40,21 @@ You write one function and the framework manages when and how it executes.
       "output": "static"
     },
     "plugins": [
-      [
-        "expo-router",
-        {
-          "unstable_useServerDataLoaders": true
-        }
-      ]
+      ["expo-router", {
+        "unstable_useServerDataLoaders": true
+      }]
     ]
   }
 }
 ```
 
-|                                 | `"server"`                     | `"static"`                            |
-| ------------------------------- | ------------------------------ | ------------------------------------- |
-| `unstable_useServerDataLoaders` | Required                       | Required                              |
-| `unstable_useServerRendering`   | Required                       | Not required                          |
-| Loader runs on                  | Live server (every request)    | Build time (static generation)        |
-| `request` object                | Full access (headers, cookies) | Not available                         |
-| Hosting                         | Node.js server (EAS Hosting)   | Any static host (Netlify, Vercel, S3) |
+| | `"server"` | `"static"` |
+|---|-----------|------------|
+| `unstable_useServerDataLoaders` | Required | Required |
+| `unstable_useServerRendering` | Required | Not required |
+| Loader runs on | Live server (every request) | Build time (static generation) |
+| `request` object | Full access (headers, cookies) | Not available |
+| Hosting | Node.js server (EAS Hosting) | Any static host (Netlify, Vercel, S3) |
 
 ## Imports
 
@@ -125,7 +119,10 @@ type Post = {
   body: string;
 };
 
-export const loader: LoaderFunction<{ post: Post }> = async (request, params) => {
+export const loader: LoaderFunction<{ post: Post }> = async (
+  request,
+  params,
+) => {
   const id = params.id as string;
   const response = await fetch(`https://api.example.com/posts/${id}`);
 
@@ -316,13 +313,13 @@ When a loader throws (including `StatusError`), the nearest `ErrorBoundary` catc
 
 ## Static vs Server Rendering
 
-|                      | Server (`"server"`)             | Static (`"static"`)               |
-| -------------------- | ------------------------------- | --------------------------------- |
-| **When loader runs** | Every request (live)            | At build time (`npx expo export`) |
-| **Data freshness**   | Fresh on initial server request | Stale until next build            |
-| **`request` object** | Full access                     | Not available                     |
-| **Hosting**          | Node.js server (EAS Hosting)    | Any static host                   |
-| **Use case**         | Personalized/dynamic content    | Marketing pages, blogs, docs      |
+| | Server (`"server"`) | Static (`"static"`) |
+|---|---|---|
+| **When loader runs** | Every request (live) | At build time (`npx expo export`) |
+| **Data freshness** | Fresh on initial server request | Stale until next build |
+| **`request` object** | Full access | Not available |
+| **Hosting** | Node.js server (EAS Hosting) | Any static host |
+| **Use case** | Personalized/dynamic content | Marketing pages, blogs, docs |
 
 **Choose server** when data changes frequently or content is personalized (cookies, auth, headers).
 

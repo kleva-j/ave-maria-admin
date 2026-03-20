@@ -66,7 +66,7 @@ export const getUser = query({
       email: v.string(),
       avatarUrl: v.union(v.string(), v.null()),
     }),
-    v.null(),
+    v.null()
   ),
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -292,17 +292,17 @@ export default defineSchema({
 // Step 3: Now use the index in queries
 export const getPublishedPosts = query({
   args: {},
-  returns: v.array(
-    v.object({
-      _id: v.id("posts"),
-      title: v.string(),
-      publishedAt: v.number(),
-    }),
-  ),
+  returns: v.array(v.object({
+    _id: v.id("posts"),
+    title: v.string(),
+    publishedAt: v.number(),
+  })),
   handler: async (ctx) => {
     const posts = await ctx.db
       .query("posts")
-      .withIndex("by_status_and_published", (q) => q.eq("status", "published"))
+      .withIndex("by_status_and_published", (q) =>
+        q.eq("status", "published")
+      )
       .order("desc")
       .take(10);
 
@@ -417,7 +417,11 @@ export default defineSchema({
     name: v.string(),
     startedAt: v.number(),
     completedAt: v.optional(v.number()),
-    status: v.union(v.literal("running"), v.literal("completed"), v.literal("failed")),
+    status: v.union(
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed")
+    ),
     error: v.optional(v.string()),
     processed: v.number(),
   }).index("by_name", ["name"]),
@@ -624,7 +628,11 @@ export default defineSchema({
     name: v.string(),
     startedAt: v.number(),
     completedAt: v.optional(v.number()),
-    status: v.union(v.literal("running"), v.literal("completed"), v.literal("failed")),
+    status: v.union(
+      v.literal("running"),
+      v.literal("completed"),
+      v.literal("failed")
+    ),
     error: v.optional(v.string()),
     processed: v.number(),
   }).index("by_name", ["name"]),
@@ -634,21 +642,19 @@ export default defineSchema({
     // Original fields
     name: v.string(),
     email: v.string(),
-
+    
     // Added in migration v1
     createdAt: v.optional(v.number()),
     updatedAt: v.optional(v.number()),
-
+    
     // Added in migration v2
     avatarUrl: v.optional(v.string()),
-
+    
     // Added in migration v3
-    settings: v.optional(
-      v.object({
-        theme: v.string(),
-        notifications: v.boolean(),
-      }),
-    ),
+    settings: v.optional(v.object({
+      theme: v.string(),
+      notifications: v.boolean(),
+    })),
   })
     .index("by_email", ["email"])
     .index("by_createdAt", ["createdAt"]),
@@ -658,7 +664,11 @@ export default defineSchema({
     title: v.string(),
     content: v.string(),
     authorId: v.id("users"),
-    status: v.union(v.literal("draft"), v.literal("published"), v.literal("archived")),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("published"),
+      v.literal("archived")
+    ),
     publishedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

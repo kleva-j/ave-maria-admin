@@ -192,7 +192,13 @@ import { NativeTabs } from "expo-router/unstable-native-tabs";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
-function MiniPlayer({ isPlaying, onToggle }: { isPlaying: boolean; onToggle: () => void }) {
+function MiniPlayer({
+  isPlaying,
+  onToggle,
+}: {
+  isPlaying: boolean;
+  onToggle: () => void;
+}) {
   const placement = NativeTabs.BottomAccessory.usePlacement();
   if (placement === "inline") {
     return (
@@ -209,7 +215,10 @@ export default function TabLayout() {
   return (
     <NativeTabs>
       <NativeTabs.BottomAccessory>
-        <MiniPlayer isPlaying={isPlaying} onToggle={() => setIsPlaying(!isPlaying)} />
+        <MiniPlayer
+          isPlaying={isPlaying}
+          onToggle={() => setIsPlaying(!isPlaying)}
+        />
       </NativeTabs.BottomAccessory>
       <NativeTabs.Trigger name="index">
         <NativeTabs.Trigger.Icon sf="house.fill" md="home" />
@@ -259,7 +268,7 @@ import Ionicons from "@expo/vector-icons/Ionicons";
 <NativeTabs.Trigger name="home">
   <NativeTabs.Trigger.VectorIcon vector={Ionicons} name="home" />
   <NativeTabs.Trigger.Label>Home</NativeTabs.Trigger.Label>
-</NativeTabs.Trigger>;
+</NativeTabs.Trigger>
 ```
 
 **Prefer SF Symbols + `md` prop over vector icons for native feel.**
@@ -291,7 +300,10 @@ import Stack from "expo-router/stack";
 export default function HomeStack() {
   return (
     <Stack>
-      <Stack.Screen name="index" options={{ title: "Home", headerLargeTitle: true }} />
+      <Stack.Screen
+        name="index"
+        options={{ title: "Home", headerLargeTitle: true }}
+      />
       <Stack.Screen name="details" options={{ title: "Details" }} />
     </Stack>
   );
@@ -387,7 +399,11 @@ Configure in app.json:
 7. **Header buttons flicker when navigating between tabs**: Make sure the app is wrapped in a `ThemeProvider`
 
 ```tsx
-import { ThemeProvider, DarkTheme, DefaultTheme } from "@react-navigation/native";
+import {
+  ThemeProvider,
+  DarkTheme,
+  DefaultTheme,
+} from "@react-navigation/native";
 import { useColorScheme } from "react-native";
 import { Stack } from "expo-router";
 

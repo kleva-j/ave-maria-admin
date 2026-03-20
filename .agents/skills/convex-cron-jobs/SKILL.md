@@ -41,10 +41,20 @@ import { internal } from "./_generated/api";
 const crons = cronJobs();
 
 // Run every hour
-crons.interval("cleanup expired sessions", { hours: 1 }, internal.tasks.cleanupExpiredSessions, {});
+crons.interval(
+  "cleanup expired sessions",
+  { hours: 1 },
+  internal.tasks.cleanupExpiredSessions,
+  {}
+);
 
 // Run every day at midnight UTC
-crons.cron("daily report", "0 0 * * *", internal.reports.generateDailyReport, {});
+crons.cron(
+  "daily report",
+  "0 0 * * *",
+  internal.reports.generateDailyReport,
+  {}
+);
 
 export default crons;
 ```
@@ -61,13 +71,28 @@ import { internal } from "./_generated/api";
 const crons = cronJobs();
 
 // Every 5 minutes
-crons.interval("sync external data", { minutes: 5 }, internal.sync.fetchExternalData, {});
+crons.interval(
+  "sync external data",
+  { minutes: 5 },
+  internal.sync.fetchExternalData,
+  {}
+);
 
 // Every 2 hours
-crons.interval("cleanup temp files", { hours: 2 }, internal.files.cleanupTempFiles, {});
+crons.interval(
+  "cleanup temp files",
+  { hours: 2 },
+  internal.files.cleanupTempFiles,
+  {}
+);
 
 // Every 30 seconds (minimum interval)
-crons.interval("health check", { seconds: 30 }, internal.monitoring.healthCheck, {});
+crons.interval(
+  "health check",
+  { seconds: 30 },
+  internal.monitoring.healthCheck,
+  {}
+);
 
 export default crons;
 ```
@@ -84,16 +109,36 @@ import { internal } from "./_generated/api";
 const crons = cronJobs();
 
 // Every day at 9 AM UTC
-crons.cron("morning notifications", "0 9 * * *", internal.notifications.sendMorningDigest, {});
+crons.cron(
+  "morning notifications",
+  "0 9 * * *",
+  internal.notifications.sendMorningDigest,
+  {}
+);
 
 // Every Monday at 8 AM UTC
-crons.cron("weekly summary", "0 8 * * 1", internal.reports.generateWeeklySummary, {});
+crons.cron(
+  "weekly summary",
+  "0 8 * * 1",
+  internal.reports.generateWeeklySummary,
+  {}
+);
 
 // First day of every month at midnight
-crons.cron("monthly billing", "0 0 1 * *", internal.billing.processMonthlyBilling, {});
+crons.cron(
+  "monthly billing",
+  "0 0 1 * *",
+  internal.billing.processMonthlyBilling,
+  {}
+);
 
 // Every 15 minutes
-crons.cron("frequent sync", "*/15 * * * *", internal.sync.syncData, {});
+crons.cron(
+  "frequent sync",
+  "*/15 * * * *",
+  internal.sync.syncData,
+  {}
+);
 
 export default crons;
 ```
@@ -111,7 +156,6 @@ export default crons;
 ```
 
 Common patterns:
-
 - `* * * * *` - Every minute
 - `0 * * * *` - Every hour
 - `0 0 * * *` - Every day at midnight
@@ -135,7 +179,7 @@ export const cleanupExpiredSessions = internalMutation({
   returns: v.number(),
   handler: async (ctx) => {
     const oneHourAgo = Date.now() - 60 * 60 * 1000;
-
+    
     const expiredSessions = await ctx.db
       .query("sessions")
       .withIndex("by_lastActive")
@@ -165,7 +209,7 @@ export const processPendingTasks = internalMutation({
         status: "processing",
         startedAt: Date.now(),
       });
-
+      
       // Schedule the actual processing
       await ctx.scheduler.runAfter(0, internal.tasks.processTask, {
         taskId: task._id,
@@ -189,15 +233,19 @@ import { internal } from "./_generated/api";
 const crons = cronJobs();
 
 // Different cleanup intervals for different types
-crons.interval("cleanup temp files", { hours: 1 }, internal.cleanup.cleanupByType, {
-  fileType: "temp",
-  maxAge: 3600000,
-});
+crons.interval(
+  "cleanup temp files",
+  { hours: 1 },
+  internal.cleanup.cleanupByType,
+  { fileType: "temp", maxAge: 3600000 }
+);
 
-crons.interval("cleanup cache files", { hours: 24 }, internal.cleanup.cleanupByType, {
-  fileType: "cache",
-  maxAge: 86400000,
-});
+crons.interval(
+  "cleanup cache files",
+  { hours: 24 },
+  internal.cleanup.cleanupByType,
+  { fileType: "cache", maxAge: 86400000 }
+);
 
 export default crons;
 ```
@@ -215,10 +263,12 @@ export const cleanupByType = internalMutation({
   returns: v.number(),
   handler: async (ctx, args) => {
     const cutoff = Date.now() - args.maxAge;
-
+    
     const oldFiles = await ctx.db
       .query("files")
-      .withIndex("by_type_and_created", (q) => q.eq("type", args.fileType).lt("createdAt", cutoff))
+      .withIndex("by_type_and_created", (q) => 
+        q.eq("type", args.fileType).lt("createdAt", cutoff)
+      )
       .collect();
 
     for (const file of oldFiles) {
@@ -399,7 +449,12 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
-crons.interval("sync external data", { minutes: 15 }, internal.sync.syncExternalData, {});
+crons.interval(
+  "sync external data",
+  { minutes: 15 },
+  internal.sync.syncExternalData,
+  {}
+);
 
 export default crons;
 ```
@@ -421,7 +476,11 @@ export default defineSchema({
     duration: v.number(),
     processedCount: v.number(),
     errorCount: v.number(),
-    status: v.union(v.literal("success"), v.literal("partial"), v.literal("failed")),
+    status: v.union(
+      v.literal("success"),
+      v.literal("partial"),
+      v.literal("failed")
+    ),
     error: v.optional(v.string()),
   })
     .index("by_job", ["jobName"])
@@ -444,7 +503,7 @@ export default defineSchema({
       v.literal("pending"),
       v.literal("processing"),
       v.literal("completed"),
-      v.literal("failed"),
+      v.literal("failed")
     ),
     data: v.any(),
     createdAt: v.number(),
@@ -466,20 +525,50 @@ import { internal } from "./_generated/api";
 const crons = cronJobs();
 
 // Cleanup jobs
-crons.interval("cleanup expired sessions", { hours: 1 }, internal.cleanup.expiredSessions, {});
+crons.interval(
+  "cleanup expired sessions",
+  { hours: 1 },
+  internal.cleanup.expiredSessions,
+  {}
+);
 
-crons.interval("cleanup old logs", { hours: 24 }, internal.cleanup.oldLogs, { maxAgeDays: 30 });
+crons.interval(
+  "cleanup old logs",
+  { hours: 24 },
+  internal.cleanup.oldLogs,
+  { maxAgeDays: 30 }
+);
 
 // Sync jobs
-crons.interval("sync user data", { minutes: 15 }, internal.sync.userData, {});
+crons.interval(
+  "sync user data",
+  { minutes: 15 },
+  internal.sync.userData,
+  {}
+);
 
 // Report jobs
-crons.cron("daily analytics", "0 1 * * *", internal.reports.dailyAnalytics, {});
+crons.cron(
+  "daily analytics",
+  "0 1 * * *",
+  internal.reports.dailyAnalytics,
+  {}
+);
 
-crons.cron("weekly summary", "0 9 * * 1", internal.reports.weeklySummary, {});
+crons.cron(
+  "weekly summary",
+  "0 9 * * 1",
+  internal.reports.weeklySummary,
+  {}
+);
 
 // Health checks
-crons.interval("service health check", { minutes: 5 }, internal.monitoring.healthCheck, {});
+crons.interval(
+  "service health check",
+  { minutes: 5 },
+  internal.monitoring.healthCheck,
+  {}
+);
 
 export default crons;
 ```

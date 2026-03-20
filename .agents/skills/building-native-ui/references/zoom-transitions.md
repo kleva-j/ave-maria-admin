@@ -135,20 +135,17 @@ Zoom transitions work alongside long-press previews:
 ## Best Practices
 
 **Good use cases:**
-
 - Thumbnail → full image (gallery, profile photos)
 - Card → detail screen with similar visual content
 - Source and destination with similar aspect ratios
 
 **Avoid:**
-
 - Skinny full-width list rows as zoom sources — the transition looks unnatural
 - Mismatched aspect ratios between source and destination without `alignmentRect`
 - Using zoom with sheets or popovers — only works in Stack navigator
 - Hiding the navigation bar — known issues with header visibility during transitions
 
 **Tips:**
-
 - Always provide a close or back button — dismissal gestures are not discoverable
 - If the destination has a zoomable scroll view, use `unstable_dismissalBoundsRect` to avoid gesture conflicts
 - Source view doesn't need to match the tap target — only the `Link.AppleZoom` wrapped element animates
