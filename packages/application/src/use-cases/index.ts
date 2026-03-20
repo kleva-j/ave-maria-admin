@@ -1,27 +1,43 @@
-import type { WithdrawalCapabilitiesDTO, RiskDecisionDTO } from "@/app/dto";
+import type {
+  WithdrawalCapabilitiesDTO,
+  PostTransactionOutput,
+  PostTransactionDTO,
+  RiskDecisionDTO,
+  TransactionDTO,
+} from "@/app/dto";
 
 import type {
   WithdrawalRiskEvaluationInput,
   WithdrawalMethod,
   WithdrawalStatus,
+  Transaction,
   AdminRole,
 } from "@avm-daily/domain";
 
 import type {
   BankAccountEventRepository,
+  TransactionWriteRepository,
+  TransactionReadRepository,
+  SavingsPlanRepository,
   WithdrawalRepository,
   RiskHoldRepository,
   RiskEventService,
   AuditLogService,
+  UserRepository,
 } from "@/app/ports";
 
 import {
   evaluateWithdrawalRiskDecision,
   buildWithdrawalCapabilities,
+  TransactionValidationError,
+  DuplicateReferenceError,
   WithdrawalBlockedError,
+  computeProjectionDelta,
   VELOCITY_WINDOW_MS,
+  assertValidAmount,
   RiskHoldScope,
   DomainError,
+  TxnType,
   DAY_MS,
 } from "@avm-daily/domain";
 
@@ -270,5 +286,178 @@ export function createReleaseRiskHoldUseCase(deps: {
       after: { status: "released", released_at: releasedAt },
       severity: "info",
     });
+  };
+}
+
+function transactionToDTO(tx: Transaction): TransactionDTO {
+  return {
+    id: tx._id,
+    userId: tx.user_id,
+    userPlanId: tx.user_plan_id,
+    type: tx.type as TransactionDTO["type"],
+    amountKobo: tx.amount_kobo,
+    reference: tx.reference,
+    reversalOfTransactionId: tx.reversal_of_transaction_id,
+    reversalOfReference: tx.reversal_of_reference,
+    reversalOfType: tx.reversal_of_type as TransactionDTO["reversalOfType"],
+    metadata: tx.metadata,
+    createdAt: tx.created_at,
+  };
+}
+
+function canonicalizeValue(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map(canonicalizeValue);
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.keys(value as Record<string, unknown>)
+      .sort()
+      .reduce<Record<string, unknown>>((acc, key) => {
+        acc[key] = canonicalizeValue((value as Record<string, unknown>)[key]);
+        return acc;
+      }, {});
+  }
+  return value;
+}
+
+function stableStringify(value: unknown): string {
+  return JSON.stringify(canonicalizeValue(value));
+}
+
+function buildComparablePayload(input: PostTransactionDTO) {
+  return {
+    user_id: input.userId,
+    user_plan_id: input.userPlanId,
+    type: input.type,
+    amount_kobo: input.amountKobo.toString(),
+    reference: input.reference,
+    reversal_of_transaction_id: input.reversalOfTransactionId,
+    metadata: input.metadata ?? {},
+  };
+}
+
+function buildComparablePayloadFromTx(tx: Transaction) {
+  return {
+    user_id: tx.user_id,
+    user_plan_id: tx.user_plan_id,
+    type: tx.type,
+    amount_kobo: tx.amount_kobo.toString(),
+    reference: tx.reference,
+    reversal_of_transaction_id: tx.reversal_of_transaction_id,
+    metadata: tx.metadata,
+  };
+}
+
+export type PostTransactionDeps = {
+  transactionReadRepository: TransactionReadRepository;
+  transactionWriteRepository: TransactionWriteRepository;
+  userRepository: UserRepository;
+  savingsPlanRepository: SavingsPlanRepository;
+};
+
+// 6.2: createPostTransactionUseCase — idempotency, conflict detection, balance projection
+export function createPostTransactionUseCase(deps: PostTransactionDeps) {
+  return async function postTransaction(
+    input: PostTransactionDTO,
+  ): Promise<PostTransactionOutput> {
+    // 1. Validate reference is non-empty
+    if (!input.reference || input.reference.trim().length === 0) {
+      throw new TransactionValidationError("reference is required");
+    }
+
+    // 2. Look up existing transaction with same reference
+    const existing = await deps.transactionReadRepository.findByReference(
+      input.reference,
+    );
+
+    if (existing) {
+      // 3. If found and payload matches → idempotent return
+      const existingPayload = buildComparablePayloadFromTx(existing);
+      const inputPayload = buildComparablePayload(input);
+
+      if (stableStringify(existingPayload) === stableStringify(inputPayload)) {
+        return { transaction: transactionToDTO(existing), idempotent: true };
+      }
+
+      // 4. If found and payload differs → throw DuplicateReferenceError
+      throw new DuplicateReferenceError(input.reference);
+    }
+
+    // 5. Validate amount sign
+    assertValidAmount(input.type, input.amountKobo);
+
+    // 6. Fetch user and savings plan concurrently
+    const [user, userPlan] = await Promise.all([
+      deps.userRepository.findById(input.userId),
+      input.userPlanId
+        ? deps.savingsPlanRepository.findById(input.userPlanId)
+        : Promise.resolve(undefined),
+    ]);
+
+    if (!user) {
+      throw new TransactionValidationError("User not found");
+    }
+
+    if (input.userPlanId && !userPlan) {
+      throw new TransactionValidationError("Savings plan not found");
+    }
+
+    // 7. Compute projection delta
+    const effectiveType =
+      input.type === TxnType.REVERSAL
+        ? (input.metadata?.original_type as string | undefined) ?? input.type
+        : input.type;
+
+    const delta = computeProjectionDelta(
+      effectiveType as Parameters<typeof computeProjectionDelta>[0],
+      input.amountKobo,
+      input.userPlanId,
+    );
+
+    const createdAt = input.createdAt ?? Date.now();
+
+    // 8. Write transaction
+    const newTx = await deps.transactionWriteRepository.create({
+      user_id: input.userId,
+      user_plan_id: input.userPlanId,
+      type: input.type,
+      amount_kobo: input.amountKobo,
+      reference: input.reference,
+      reversal_of_transaction_id: input.reversalOfTransactionId,
+      reversal_of_reference: undefined,
+      reversal_of_type: undefined,
+      metadata: input.metadata ?? {},
+      created_at: createdAt,
+    });
+
+    // 9. Update user balance and savings plan balance concurrently
+    const nextTotalBalance = user.total_balance_kobo + delta.totalBalanceKobo;
+    const nextSavingsBalance =
+      user.savings_balance_kobo + delta.savingsBalanceKobo;
+
+    const balanceUpdates: Promise<void>[] = [
+      deps.userRepository.updateBalance(
+        input.userId,
+        nextTotalBalance,
+        nextSavingsBalance,
+        createdAt,
+      ),
+    ];
+
+    if (userPlan && delta.planAmountKobo !== 0n) {
+      const nextPlanAmount =
+        userPlan.current_amount_kobo + delta.planAmountKobo;
+      balanceUpdates.push(
+        deps.savingsPlanRepository.updateAmount(
+          userPlan._id,
+          nextPlanAmount,
+          createdAt,
+        ),
+      );
+    }
+
+    await Promise.all(balanceUpdates);
+
+    return { transaction: transactionToDTO(newTx), idempotent: false };
   };
 }

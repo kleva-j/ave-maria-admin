@@ -111,3 +111,12 @@ export type RiskSummaryDTO = {
   blocked: boolean;
   blockReason?: string;
 };
+
+export type PostTransactionOutput = {
+  transaction: TransactionDTO;
+  idempotent: boolean;
+};
+
+export type ReverseTransactionOutput = {
+  transaction: TransactionDTO;
+};
