@@ -1,48 +1,45 @@
+import {
+  createCloseSavingsPlanUseCase,
+  createCreateSavingsPlanUseCase,
+  createPauseSavingsPlanUseCase,
+  createRecordSavingsPlanContributionUseCase,
+  createResumeSavingsPlanUseCase,
+  createUpdateSavingsPlanSettingsUseCase,
+} from "@avm-daily/application/use-cases";
+import { DomainError, TransactionSource, TxnType } from "@avm-daily/domain";
+
 import type { MutationCtx, QueryCtx } from "./_generated/server";
 import type {
-  UserSavingsPlanId,
-  UserSavingsPlan,
   AdminUserId,
+  TransactionId,
   UserId,
+  UserSavingsPlan,
+  UserSavingsPlanId,
 } from "./types";
 
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 
 import { internalMutation, mutation, query } from "./_generated/server";
-import { getAdminUser, getUser, getUserWithStatus } from "./utils";
-import { postTransactionEntry } from "./transactions";
-import { auditLog } from "./auditLog";
-
+import { createConvexAuditLogService } from "./adapters/auditLogAdapter";
+import {
+  createConvexSavingsPlanRepository,
+  createConvexSavingsPlanTemplateRepository,
+} from "./adapters/savingsPlanAdapters";
+import { createConvexUserRepository } from "./adapters/userAdapters";
 import {
   syncSavingsPlanInsert,
   syncSavingsPlanUpdate,
 } from "./aggregateHelpers";
-
+import { postTransactionEntry } from "./transactions";
 import {
-  TransactionSource,
-  RESOURCE_TYPE,
-  TABLE_NAMES,
-  UserStatus,
-  planStatus,
-  PlanStatus,
-  TxnType,
-  txnType,
-} from "./shared";
-
-import {
-  type SavingsPlanSummary,
-  type TemplateSnapshot,
-  assertPlanCanAcceptContribution,
-  normalizeOptionalString,
   buildSavingsPlanSummary,
-  createTemplateSnapshot,
-  determineClosedStatus,
-  assertPlanIsMutable,
-  validateTargetKobo,
-  resolvePlanDates,
+  normalizeOptionalString,
   todayIsoDate,
 } from "./savingsPlanRules";
+import { getAdminUser, getUser } from "./utils";
+
+import { TABLE_NAMES, planStatus, txnType } from "./shared";
 
 const templateSnapshotValidator = v.object({
   name: v.string(),
@@ -92,6 +89,14 @@ const contributionResultValidator = v.object({
   idempotent: v.boolean(),
 });
 
+function toConvexError(error: unknown): never {
+  if (error instanceof DomainError) {
+    throw new ConvexError(error.message);
+  }
+
+  throw error;
+}
+
 function asObject(value: unknown, fieldName = "metadata") {
   if (value === undefined) {
     return {};
@@ -104,22 +109,44 @@ function asObject(value: unknown, fieldName = "metadata") {
   return { ...value };
 }
 
-function serializePlanSummary(plan: SavingsPlanSummary) {
-  const templateSnapshot = plan.template_snapshot
-    ? ({
-        ...plan.template_snapshot,
-        default_target_kobo: plan.template_snapshot.default_target_kobo,
-      } satisfies TemplateSnapshot)
-    : undefined;
+function toDomainPlan(plan: UserSavingsPlan) {
+  return {
+    _id: String(plan._id),
+    user_id: String(plan.user_id),
+    template_id: String(plan.template_id),
+    custom_target_kobo: plan.custom_target_kobo,
+    current_amount_kobo: plan.current_amount_kobo,
+    start_date: plan.start_date,
+    end_date: plan.end_date,
+    status: plan.status,
+    automation_enabled: plan.automation_enabled,
+    metadata: plan.metadata,
+    created_at: plan.created_at,
+    updated_at: plan.updated_at,
+  };
+}
+
+function serializePlanSummary(plan: UserSavingsPlan, today = todayIsoDate()) {
+  const summary = buildSavingsPlanSummary(toDomainPlan(plan), today);
 
   return {
     ...plan,
-    template_snapshot: templateSnapshot,
+    template_snapshot: summary.template_snapshot
+      ? {
+          ...summary.template_snapshot,
+          default_target_kobo: summary.template_snapshot.default_target_kobo,
+        }
+      : undefined,
+    progress_percentage: summary.progress_percentage,
+    remaining_amount_kobo: summary.remaining_amount_kobo,
+    is_overdue: summary.is_overdue,
+    days_to_end: summary.days_to_end,
+    days_overdue: summary.days_overdue,
   };
 }
 
 function buildContributionResult(params: {
-  transactionId: UserSavingsPlanId | string;
+  transactionId: TransactionId | string;
   userId: UserId;
   planId: UserSavingsPlanId;
   amountKobo: bigint;
@@ -128,7 +155,7 @@ function buildContributionResult(params: {
   idempotent: boolean;
 }) {
   return {
-    transaction_id: params.transactionId as any,
+    transaction_id: params.transactionId as TransactionId,
     user_id: params.userId,
     user_plan_id: params.planId,
     type: TxnType.CONTRIBUTION,
@@ -149,32 +176,34 @@ function normalizeContributionMetadata(params: {
   reference: string;
 }) {
   const metadata = asObject(params.metadata);
+  const channel = normalizeOptionalString(params.channel);
+  const originReference = normalizeOptionalString(
+    params.originReference ?? params.reference,
+  );
+  const note = normalizeOptionalString(params.note);
 
   return {
     ...metadata,
     source: params.source,
     ...(params.actorId ? { actor_id: String(params.actorId) } : {}),
-    ...(normalizeOptionalString(params.channel)
-      ? { channel: normalizeOptionalString(params.channel) }
-      : {}),
-    ...(normalizeOptionalString(params.originReference ?? params.reference)
-      ? {
-          origin_reference: normalizeOptionalString(
-            params.originReference ?? params.reference,
-          ),
-        }
-      : {}),
-    ...(normalizeOptionalString(params.note)
-      ? { note: normalizeOptionalString(params.note) }
-      : {}),
+    ...(channel ? { channel } : {}),
+    ...(originReference ? { origin_reference: originReference } : {}),
+    ...(note ? { note } : {}),
   };
 }
 
-async function getPlanOrThrow(
+async function getPlanDoc(
   ctx: QueryCtx | MutationCtx,
   planId: UserSavingsPlanId,
 ) {
-  const plan = await ctx.db.get(planId);
+  return await ctx.db.get(planId);
+}
+
+async function getPlanDocOrThrow(
+  ctx: QueryCtx | MutationCtx,
+  planId: UserSavingsPlanId,
+) {
+  const plan = await getPlanDoc(ctx, planId);
   if (!plan) {
     throw new ConvexError("Savings plan not found");
   }
@@ -182,38 +211,36 @@ async function getPlanOrThrow(
   return plan;
 }
 
-async function getOwnedPlanOrThrow(
-  ctx: QueryCtx | MutationCtx,
-  planId: UserSavingsPlanId,
-  userId: UserId,
-) {
-  const plan = await getPlanOrThrow(ctx, planId);
-  if (plan.user_id !== userId) {
-    throw new ConvexError("Savings plan does not belong to the user");
-  }
-
-  return plan;
-}
-
-async function patchPlanAndSync(
+async function syncUpdatedPlanIfNeeded(
   ctx: MutationCtx,
-  existing: UserSavingsPlan,
-  patch: Partial<UserSavingsPlan>,
+  before: UserSavingsPlan | null,
+  planId: UserSavingsPlanId,
 ) {
-  await ctx.db.patch(existing._id, patch);
-  const updated = await ctx.db.get(existing._id);
-
-  if (!updated) {
-    throw new ConvexError("Savings plan not found after update");
+  if (!before) {
+    return;
   }
 
-  await syncSavingsPlanUpdate(ctx, existing, updated);
-  return updated;
+  const after = await ctx.db.get(planId);
+  if (!after) {
+    return;
+  }
+
+  const changed =
+    before.current_amount_kobo !== after.current_amount_kobo ||
+    before.status !== after.status ||
+    before.custom_target_kobo !== after.custom_target_kobo ||
+    before.end_date !== after.end_date ||
+    before.updated_at !== after.updated_at;
+
+  if (changed) {
+    await syncSavingsPlanUpdate(ctx, before, after);
+  }
 }
 
 function paginatePlans(
-  plans: SavingsPlanSummary[],
+  plans: UserSavingsPlan[],
   paginationOpts: { cursor: string | null; numItems: number },
+  today = todayIsoDate(),
 ) {
   const offset =
     paginationOpts.cursor === null
@@ -228,62 +255,92 @@ function paginatePlans(
   const nextOffset = offset + page.length;
 
   return {
-    page: page.map(serializePlanSummary),
+    page: page.map((plan) => serializePlanSummary(plan, today)),
     continueCursor: String(nextOffset),
     isDone: nextOffset >= plans.length,
   };
 }
 
-async function recordContributionEntry(
+async function recordContributionWorkflow(
   ctx: MutationCtx,
-  params: {
-    userId: UserId;
+  input: {
     planId: UserSavingsPlanId;
+    userId: UserId;
     amountKobo: bigint;
     reference: string;
-    metadata?: unknown;
+    metadata?: Record<string, unknown>;
     source: TransactionSource;
     actorId?: UserId | AdminUserId;
   },
 ) {
-  validateTargetKobo(params.amountKobo, "Contribution amount");
-  const plan = await getPlanOrThrow(ctx, params.planId);
+  const before = await getPlanDoc(ctx, input.planId);
 
-  if (plan.user_id !== params.userId) {
-    throw new ConvexError("Savings plan does not belong to the user");
+  try {
+    const recordSavingsPlanContribution =
+      createRecordSavingsPlanContributionUseCase({
+        savingsPlanRepository: createConvexSavingsPlanRepository(ctx),
+        postTransaction: async (args) => {
+          const result = await postTransactionEntry(ctx, {
+            userId: args.userId as UserId,
+            userPlanId: args.userPlanId as UserSavingsPlanId | undefined,
+            type: args.type,
+            amountKobo: args.amountKobo,
+            reference: args.reference,
+            metadata: args.metadata,
+            source: args.source as TransactionSource,
+            actorId: args.actorId as UserId | AdminUserId | undefined,
+            createdAt: args.createdAt,
+            reversalOfTransactionId: args.reversalOfTransactionId as
+              | TransactionId
+              | undefined,
+          });
+
+          return {
+            idempotent: result.idempotent,
+            transaction: {
+              _id: String(result.transaction._id),
+              user_id: String(result.transaction.user_id),
+              user_plan_id: result.transaction.user_plan_id
+                ? String(result.transaction.user_plan_id)
+                : undefined,
+              type: result.transaction.type,
+              amount_kobo: result.transaction.amount_kobo,
+              reference: result.transaction.reference,
+              reversal_of_transaction_id:
+                result.transaction.reversal_of_transaction_id
+                  ? String(result.transaction.reversal_of_transaction_id)
+                  : undefined,
+              reversal_of_reference: result.transaction.reversal_of_reference,
+              reversal_of_type: result.transaction.reversal_of_type,
+              metadata: asObject(result.transaction.metadata),
+              created_at: result.transaction.created_at,
+            },
+          };
+        },
+      });
+
+    const result = await recordSavingsPlanContribution({
+      ...input,
+      planId: String(input.planId),
+      userId: String(input.userId),
+      source: input.source,
+      actorId: input.actorId ? String(input.actorId) : undefined,
+    });
+
+    await syncUpdatedPlanIfNeeded(ctx, before, input.planId);
+
+    return buildContributionResult({
+      transactionId: result.transaction._id,
+      userId: input.userId,
+      planId: input.planId,
+      amountKobo: result.transaction.amount_kobo,
+      reference: result.transaction.reference,
+      createdAt: result.transaction.created_at,
+      idempotent: result.idempotent,
+    });
+  } catch (error) {
+    toConvexError(error);
   }
-
-  assertPlanCanAcceptContribution(plan);
-
-  const result = await postTransactionEntry(ctx, {
-    userId: params.userId,
-    userPlanId: params.planId,
-    type: TxnType.CONTRIBUTION,
-    amountKobo: params.amountKobo,
-    reference: params.reference,
-    metadata: params.metadata,
-    source: params.source,
-    actorId: params.actorId,
-  });
-
-  const updatedPlan = await ctx.db.get(plan._id);
-  if (!updatedPlan) {
-    throw new ConvexError("Savings plan not found after contribution");
-  }
-
-  if (updatedPlan.current_amount_kobo !== plan.current_amount_kobo) {
-    await syncSavingsPlanUpdate(ctx, plan, updatedPlan);
-  }
-
-  return buildContributionResult({
-    transactionId: result.transaction._id,
-    userId: params.userId,
-    planId: params.planId,
-    amountKobo: result.transaction.amount_kobo,
-    reference: result.transaction.reference,
-    createdAt: result.transaction.created_at,
-    idempotent: result.idempotent,
-  });
 }
 
 export const listMine = query({
@@ -299,9 +356,7 @@ export const listMine = query({
 
     return plans
       .sort((a, b) => b.created_at - a.created_at)
-      .map((plan) =>
-        serializePlanSummary(buildSavingsPlanSummary(plan, today)),
-      );
+      .map((plan) => serializePlanSummary(plan, today));
   },
 });
 
@@ -310,8 +365,13 @@ export const get = query({
   returns: savingsPlanSummaryValidator,
   handler: async (ctx, args) => {
     const user = await getUser(ctx);
-    const plan = await getOwnedPlanOrThrow(ctx, args.planId, user._id);
-    return serializePlanSummary(buildSavingsPlanSummary(plan));
+    const plan = await getPlanDocOrThrow(ctx, args.planId);
+
+    if (plan.user_id !== user._id) {
+      throw new ConvexError("Savings plan does not belong to the user");
+    }
+
+    return serializePlanSummary(plan);
   },
 });
 
@@ -324,67 +384,31 @@ export const create = mutation({
   },
   returns: savingsPlanSummaryValidator,
   handler: async (ctx, args) => {
-    const user = await getUserWithStatus(ctx, UserStatus.ACTIVE);
-    const template = await ctx.db.get(args.templateId);
+    const user = await getUser(ctx);
 
-    if (!template) {
-      throw new ConvexError("Savings plan template not found");
+    try {
+      const createSavingsPlan = createCreateSavingsPlanUseCase({
+        userRepository: createConvexUserRepository(ctx),
+        savingsPlanRepository: createConvexSavingsPlanRepository(ctx),
+        savingsPlanTemplateRepository:
+          createConvexSavingsPlanTemplateRepository(ctx),
+        auditLogService: createConvexAuditLogService(ctx),
+      });
+
+      const created = await createSavingsPlan({
+        userId: String(user._id),
+        templateId: String(args.templateId),
+        customTargetKobo: args.customTargetKobo,
+        startDate: args.startDate,
+        endDate: args.endDate,
+      });
+
+      const doc = await getPlanDocOrThrow(ctx, created._id as UserSavingsPlanId);
+      await syncSavingsPlanInsert(ctx, doc);
+      return serializePlanSummary(doc);
+    } catch (error) {
+      toConvexError(error);
     }
-
-    if (!template.is_active) {
-      throw new ConvexError("Savings plan template is not active");
-    }
-
-    const targetKobo = validateTargetKobo(
-      args.customTargetKobo ?? template.default_target_kobo,
-      "Savings plan target",
-    );
-    const { startDate, endDate } = resolvePlanDates({
-      durationDays: template.duration_days,
-      startDate: args.startDate,
-      endDate: args.endDate,
-    });
-    const now = Date.now();
-
-    const id = await ctx.db.insert(TABLE_NAMES.USER_SAVINGS_PLANS, {
-      user_id: user._id,
-      template_id: template._id,
-      custom_target_kobo: targetKobo,
-      current_amount_kobo: 0n,
-      start_date: startDate,
-      end_date: endDate,
-      status: PlanStatus.ACTIVE,
-      automation_enabled: false,
-      metadata: {
-        template_snapshot: createTemplateSnapshot(template),
-      },
-      created_at: now,
-      updated_at: now,
-    });
-    const plan = await ctx.db.get(id);
-
-    if (!plan) {
-      throw new ConvexError("Failed to create savings plan");
-    }
-
-    await syncSavingsPlanInsert(ctx, plan);
-    await auditLog.logChange(ctx, {
-      action: "savings_plan.created",
-      actorId: user._id,
-      resourceType: RESOURCE_TYPE.SAVINGS_PLANS,
-      resourceId: id,
-      before: {},
-      after: {
-        template_id: String(plan.template_id),
-        custom_target_kobo: plan.custom_target_kobo.toString(),
-        start_date: plan.start_date,
-        end_date: plan.end_date,
-        status: plan.status,
-      },
-      severity: "info",
-    });
-
-    return serializePlanSummary(buildSavingsPlanSummary(plan));
   },
 });
 
@@ -392,29 +416,27 @@ export const pause = mutation({
   args: { planId: v.id("user_savings_plans") },
   returns: savingsPlanSummaryValidator,
   handler: async (ctx, args) => {
-    const user = await getUserWithStatus(ctx, UserStatus.ACTIVE);
-    const plan = await getOwnedPlanOrThrow(ctx, args.planId, user._id);
+    const user = await getUser(ctx);
+    const before = await getPlanDoc(ctx, args.planId);
 
-    if (plan.status !== PlanStatus.ACTIVE) {
-      throw new ConvexError("Only active savings plans can be paused");
+    try {
+      const pauseSavingsPlan = createPauseSavingsPlanUseCase({
+        userRepository: createConvexUserRepository(ctx),
+        savingsPlanRepository: createConvexSavingsPlanRepository(ctx),
+        auditLogService: createConvexAuditLogService(ctx),
+      });
+
+      const updated = await pauseSavingsPlan({
+        planId: String(args.planId),
+        userId: String(user._id),
+      });
+
+      await syncUpdatedPlanIfNeeded(ctx, before, args.planId);
+      const doc = await getPlanDocOrThrow(ctx, updated._id as UserSavingsPlanId);
+      return serializePlanSummary(doc);
+    } catch (error) {
+      toConvexError(error);
     }
-
-    const updated = await patchPlanAndSync(ctx, plan, {
-      status: PlanStatus.PAUSED,
-      updated_at: Date.now(),
-    });
-
-    await auditLog.logChange(ctx, {
-      action: "savings_plan.paused",
-      actorId: user._id,
-      resourceType: RESOURCE_TYPE.SAVINGS_PLANS,
-      resourceId: plan._id,
-      before: { status: plan.status },
-      after: { status: updated.status },
-      severity: "info",
-    });
-
-    return serializePlanSummary(buildSavingsPlanSummary(updated));
   },
 });
 
@@ -422,29 +444,27 @@ export const resume = mutation({
   args: { planId: v.id("user_savings_plans") },
   returns: savingsPlanSummaryValidator,
   handler: async (ctx, args) => {
-    const user = await getUserWithStatus(ctx, UserStatus.ACTIVE);
-    const plan = await getOwnedPlanOrThrow(ctx, args.planId, user._id);
+    const user = await getUser(ctx);
+    const before = await getPlanDoc(ctx, args.planId);
 
-    if (plan.status !== PlanStatus.PAUSED) {
-      throw new ConvexError("Only paused savings plans can be resumed");
+    try {
+      const resumeSavingsPlan = createResumeSavingsPlanUseCase({
+        userRepository: createConvexUserRepository(ctx),
+        savingsPlanRepository: createConvexSavingsPlanRepository(ctx),
+        auditLogService: createConvexAuditLogService(ctx),
+      });
+
+      const updated = await resumeSavingsPlan({
+        planId: String(args.planId),
+        userId: String(user._id),
+      });
+
+      await syncUpdatedPlanIfNeeded(ctx, before, args.planId);
+      const doc = await getPlanDocOrThrow(ctx, updated._id as UserSavingsPlanId);
+      return serializePlanSummary(doc);
+    } catch (error) {
+      toConvexError(error);
     }
-
-    const updated = await patchPlanAndSync(ctx, plan, {
-      status: PlanStatus.ACTIVE,
-      updated_at: Date.now(),
-    });
-
-    await auditLog.logChange(ctx, {
-      action: "savings_plan.resumed",
-      actorId: user._id,
-      resourceType: RESOURCE_TYPE.SAVINGS_PLANS,
-      resourceId: plan._id,
-      before: { status: plan.status },
-      after: { status: updated.status },
-      severity: "info",
-    });
-
-    return serializePlanSummary(buildSavingsPlanSummary(updated));
   },
 });
 
@@ -456,56 +476,29 @@ export const updateSettings = mutation({
   },
   returns: savingsPlanSummaryValidator,
   handler: async (ctx, args) => {
-    const user = await getUserWithStatus(ctx, UserStatus.ACTIVE);
-    const plan = await getOwnedPlanOrThrow(ctx, args.planId, user._id);
-    assertPlanIsMutable(plan);
+    const user = await getUser(ctx);
+    const before = await getPlanDoc(ctx, args.planId);
 
-    if (args.customTargetKobo === undefined && args.endDate === undefined) {
-      throw new ConvexError("No savings plan changes provided");
+    try {
+      const updateSavingsPlanSettings = createUpdateSavingsPlanSettingsUseCase({
+        userRepository: createConvexUserRepository(ctx),
+        savingsPlanRepository: createConvexSavingsPlanRepository(ctx),
+        auditLogService: createConvexAuditLogService(ctx),
+      });
+
+      const updated = await updateSavingsPlanSettings({
+        planId: String(args.planId),
+        userId: String(user._id),
+        customTargetKobo: args.customTargetKobo,
+        endDate: args.endDate,
+      });
+
+      await syncUpdatedPlanIfNeeded(ctx, before, args.planId);
+      const doc = await getPlanDocOrThrow(ctx, updated._id as UserSavingsPlanId);
+      return serializePlanSummary(doc);
+    } catch (error) {
+      toConvexError(error);
     }
-
-    const nextTargetKobo =
-      args.customTargetKobo === undefined
-        ? plan.custom_target_kobo
-        : validateTargetKobo(args.customTargetKobo, "Savings plan target");
-
-    if (nextTargetKobo < plan.current_amount_kobo) {
-      throw new ConvexError(
-        "Savings plan target cannot be below the current saved amount",
-      );
-    }
-
-    const nextEndDate = args.endDate ?? plan.end_date;
-    resolvePlanDates({
-      durationDays: 1,
-      startDate: plan.start_date,
-      endDate: nextEndDate,
-      today: plan.start_date,
-    });
-
-    const updated = await patchPlanAndSync(ctx, plan, {
-      custom_target_kobo: nextTargetKobo,
-      end_date: nextEndDate,
-      updated_at: Date.now(),
-    });
-
-    await auditLog.logChange(ctx, {
-      action: "savings_plan.updated",
-      actorId: user._id,
-      resourceType: RESOURCE_TYPE.SAVINGS_PLANS,
-      resourceId: plan._id,
-      before: {
-        custom_target_kobo: plan.custom_target_kobo.toString(),
-        end_date: plan.end_date,
-      },
-      after: {
-        custom_target_kobo: updated.custom_target_kobo.toString(),
-        end_date: updated.end_date,
-      },
-      severity: "info",
-    });
-
-    return serializePlanSummary(buildSavingsPlanSummary(updated));
   },
 });
 
@@ -513,27 +506,27 @@ export const close = mutation({
   args: { planId: v.id("user_savings_plans") },
   returns: savingsPlanSummaryValidator,
   handler: async (ctx, args) => {
-    const user = await getUserWithStatus(ctx, UserStatus.ACTIVE);
-    const plan = await getOwnedPlanOrThrow(ctx, args.planId, user._id);
-    assertPlanIsMutable(plan);
+    const user = await getUser(ctx);
+    const before = await getPlanDoc(ctx, args.planId);
 
-    const nextStatus = determineClosedStatus(plan);
-    const updated = await patchPlanAndSync(ctx, plan, {
-      status: nextStatus,
-      updated_at: Date.now(),
-    });
+    try {
+      const closeSavingsPlan = createCloseSavingsPlanUseCase({
+        userRepository: createConvexUserRepository(ctx),
+        savingsPlanRepository: createConvexSavingsPlanRepository(ctx),
+        auditLogService: createConvexAuditLogService(ctx),
+      });
 
-    await auditLog.logChange(ctx, {
-      action: "savings_plan.closed",
-      actorId: user._id,
-      resourceType: RESOURCE_TYPE.SAVINGS_PLANS,
-      resourceId: plan._id,
-      before: { status: plan.status },
-      after: { status: updated.status },
-      severity: nextStatus === PlanStatus.COMPLETED ? "info" : "warning",
-    });
+      const updated = await closeSavingsPlan({
+        planId: String(args.planId),
+        userId: String(user._id),
+      });
 
-    return serializePlanSummary(buildSavingsPlanSummary(updated));
+      await syncUpdatedPlanIfNeeded(ctx, before, args.planId);
+      const doc = await getPlanDocOrThrow(ctx, updated._id as UserSavingsPlanId);
+      return serializePlanSummary(doc);
+    } catch (error) {
+      toConvexError(error);
+    }
   },
 });
 
@@ -557,11 +550,12 @@ export const listForAdmin = query({
         args.templateId ? plan.template_id === args.templateId : true,
       )
       .filter((plan) => (args.status ? plan.status === args.status : true))
-      .map((plan) => buildSavingsPlanSummary(plan, today))
-      .filter((plan) => (args.overdueOnly ? plan.is_overdue : true))
+      .filter((plan) =>
+        args.overdueOnly ? serializePlanSummary(plan, today).is_overdue : true,
+      )
       .sort((a, b) => b.created_at - a.created_at);
 
-    return paginatePlans(filtered, args.paginationOpts);
+    return paginatePlans(filtered, args.paginationOpts, today);
   },
 });
 
@@ -577,9 +571,9 @@ export const adminRecordContribution = mutation({
   returns: contributionResultValidator,
   handler: async (ctx, args) => {
     const admin = await getAdminUser(ctx);
-    const plan = await getPlanOrThrow(ctx, args.planId);
+    const plan = await getPlanDocOrThrow(ctx, args.planId);
 
-    return await recordContributionEntry(ctx, {
+    return await recordContributionWorkflow(ctx, {
       userId: plan.user_id,
       planId: plan._id,
       amountKobo: args.amountKobo,
@@ -608,7 +602,7 @@ export const recordContribution = internalMutation({
   },
   returns: contributionResultValidator,
   handler: async (ctx, args) => {
-    return await recordContributionEntry(ctx, {
+    return await recordContributionWorkflow(ctx, {
       userId: args.userId,
       planId: args.planId,
       amountKobo: args.amountKobo,

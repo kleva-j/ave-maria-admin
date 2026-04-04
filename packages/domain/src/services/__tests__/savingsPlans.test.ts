@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest";
 
-import { PlanStatus } from "./shared";
+import { PlanStatus } from "../../enums";
 import {
-  assertPlanCanAcceptContribution,
+  assertSavingsPlanCanAcceptContribution,
   buildSavingsPlanSummary,
-  createTemplateSnapshot,
-  determineClosedStatus,
-  extractTemplateSnapshot,
+  createSavingsPlanTemplateSnapshot,
+  determineSavingsPlanClosedStatus,
+  extractSavingsPlanTemplateSnapshot,
   resolvePlanDates,
-} from "./savingsPlanRules";
+} from "../savingsPlans";
 
-describe("savingsPlanRules", () => {
+describe("savings plan domain rules", () => {
   it("resolves default plan dates from start date and duration", () => {
     expect(
       resolvePlanDates({ durationDays: 30, startDate: "2026-04-04" }),
@@ -30,10 +30,9 @@ describe("savingsPlanRules", () => {
   it("builds overdue progress details from a persisted plan", () => {
     const summary = buildSavingsPlanSummary(
       {
-        _id: "plan-1" as never,
-        _creationTime: 1,
-        user_id: "user-1" as never,
-        template_id: "template-1" as never,
+        _id: "plan-1",
+        user_id: "user-1",
+        template_id: "template-1",
         custom_target_kobo: 100_000n,
         current_amount_kobo: 40_000n,
         start_date: "2026-01-01",
@@ -41,7 +40,7 @@ describe("savingsPlanRules", () => {
         status: PlanStatus.ACTIVE,
         automation_enabled: false,
         metadata: {
-          template_snapshot: createTemplateSnapshot({
+          template_snapshot: createSavingsPlanTemplateSnapshot({
             name: "Japa",
             description: "Relocation goal",
             duration_days: 30,
@@ -66,14 +65,14 @@ describe("savingsPlanRules", () => {
 
   it("derives completed versus expired close states from target progress", () => {
     expect(
-      determineClosedStatus({
+      determineSavingsPlanClosedStatus({
         current_amount_kobo: 100_000n,
         custom_target_kobo: 100_000n,
       }),
     ).toBe(PlanStatus.COMPLETED);
 
     expect(
-      determineClosedStatus({
+      determineSavingsPlanClosedStatus({
         current_amount_kobo: 80_000n,
         custom_target_kobo: 100_000n,
       }),
@@ -82,12 +81,12 @@ describe("savingsPlanRules", () => {
 
   it("rejects contributions for non-active plans", () => {
     expect(() =>
-      assertPlanCanAcceptContribution({ status: PlanStatus.PAUSED } as never),
+      assertSavingsPlanCanAcceptContribution({ status: PlanStatus.PAUSED }),
     ).toThrow("Only active savings plans can receive contributions");
   });
 
   it("tolerates legacy plan metadata with no template snapshot", () => {
-    expect(extractTemplateSnapshot(undefined)).toBeUndefined();
-    expect(extractTemplateSnapshot({})).toBeUndefined();
+    expect(extractSavingsPlanTemplateSnapshot(undefined)).toBeUndefined();
+    expect(extractSavingsPlanTemplateSnapshot({})).toBeUndefined();
   });
 });

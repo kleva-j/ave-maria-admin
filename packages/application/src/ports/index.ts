@@ -1,4 +1,9 @@
-import type { Transaction, User, UserSavingsPlan } from "@avm-daily/domain";
+import type {
+  SavingsPlanTemplate,
+  UserSavingsPlan,
+  Transaction,
+  User,
+} from "@avm-daily/domain";
 
 // --- Transaction Ports (ISP: split read vs write) ---
 
@@ -29,11 +34,28 @@ export interface UserRepository {
 export interface SavingsPlanRepository {
   findById(id: string): Promise<UserSavingsPlan | null>;
   findByUserId(userId: string): Promise<UserSavingsPlan[]>;
+  create(plan: Omit<UserSavingsPlan, "_id">): Promise<UserSavingsPlan>;
+  update(
+    id: string,
+    patch: Partial<Omit<UserSavingsPlan, "_id" | "user_id" | "created_at">>,
+  ): Promise<UserSavingsPlan>;
   updateAmount(
     id: string,
     currentAmountKobo: bigint,
     updatedAt: number,
   ): Promise<void>;
+}
+
+export interface SavingsPlanTemplateRepository {
+  findById(id: string): Promise<SavingsPlanTemplate | null>;
+  findByName(name: string): Promise<SavingsPlanTemplate | null>;
+  create(
+    template: Omit<SavingsPlanTemplate, "_id">,
+  ): Promise<SavingsPlanTemplate>;
+  update(
+    id: string,
+    patch: Partial<Omit<SavingsPlanTemplate, "_id" | "created_at">>,
+  ): Promise<SavingsPlanTemplate>;
 }
 
 // --- Withdrawal Port ---

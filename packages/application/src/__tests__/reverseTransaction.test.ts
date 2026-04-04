@@ -81,6 +81,12 @@ function makeInMemoryDeps(user: User, seedTransactions: Transaction[] = []) {
   const savingsPlanRepository: SavingsPlanRepository = {
     findById: async () => null,
     findByUserId: async () => [],
+    create: async () => {
+      throw new Error("create should not be called in reverseTransaction tests");
+    },
+    update: async () => {
+      throw new Error("update should not be called in reverseTransaction tests");
+    },
     updateAmount: async () => undefined,
   };
 

@@ -3,20 +3,26 @@ import { describe, expect, it, vi } from "vitest";
 import { DomainError, TxnType } from "@avm-daily/domain";
 
 import { createConvexTransactionWriteRepository } from "../adapters/transactionAdapters";
-import { createConvexSavingsPlanRepository } from "../adapters/savingsPlanAdapters";
 import { createConvexWithdrawalRepository } from "../adapters/withdrawalAdapter";
+
+import {
+  createConvexSavingsPlanTemplateRepository,
+  createConvexSavingsPlanRepository,
+} from "../adapters/savingsPlanAdapters";
+
 import {
   createConvexRiskEventRepository,
   createConvexRiskHoldRepository,
   createConvexRiskEventService,
 } from "../adapters/riskAdapters";
+
 import {
-  PlanStatus,
+  WithdrawalMethod,
+  RiskHoldStatus,
+  RiskHoldScope,
   RiskEventType,
   RiskSeverity,
-  RiskHoldScope,
-  RiskHoldStatus,
-  WithdrawalMethod,
+  PlanStatus,
   TABLE_NAMES,
 } from "../shared";
 
@@ -182,6 +188,152 @@ describe("Convex adapter repositories", () => {
       current_amount_kobo: 7_500n,
       updated_at: 999,
     });
+  });
+
+  it("creates and updates savings plans through the adapter", async () => {
+    const createdPlan = {
+      _id: "plan-1",
+      user_id: "user-1",
+      template_id: "template-1",
+      custom_target_kobo: 100_000n,
+      current_amount_kobo: 0n,
+      start_date: "2026-04-04",
+      end_date: "2026-05-04",
+      status: PlanStatus.ACTIVE,
+      automation_enabled: false,
+      metadata: { template_snapshot: { name: "Japa" } },
+      created_at: 1,
+      updated_at: 1,
+    };
+    const insert = vi.fn().mockResolvedValue("plan-1");
+    const get = vi
+      .fn()
+      .mockResolvedValueOnce(createdPlan)
+      .mockResolvedValueOnce(createdPlan)
+      .mockResolvedValueOnce({
+        ...createdPlan,
+        status: PlanStatus.PAUSED,
+        updated_at: 2,
+      });
+    const patch = vi.fn().mockResolvedValue(undefined);
+    const ctx = {
+      db: {
+        insert,
+        get,
+        patch,
+      },
+    } as any;
+
+    const repo = createConvexSavingsPlanRepository(ctx);
+
+    const created = await repo.create({
+      user_id: "user-1",
+      template_id: "template-1",
+      custom_target_kobo: 100_000n,
+      current_amount_kobo: 0n,
+      start_date: "2026-04-04",
+      end_date: "2026-05-04",
+      status: "active",
+      automation_enabled: false,
+      metadata: { template_snapshot: { name: "Japa" } },
+      created_at: 1,
+      updated_at: 1,
+    });
+    const updated = await repo.update("plan-1", {
+      status: "paused",
+      updated_at: 2,
+    });
+
+    expect(created.template_id).toBe("template-1");
+    expect(insert).toHaveBeenCalledWith(TABLE_NAMES.USER_SAVINGS_PLANS, {
+      user_id: "user-1",
+      template_id: "template-1",
+      custom_target_kobo: 100_000n,
+      current_amount_kobo: 0n,
+      start_date: "2026-04-04",
+      end_date: "2026-05-04",
+      status: "active",
+      automation_enabled: false,
+      metadata: { template_snapshot: { name: "Japa" } },
+      created_at: 1,
+      updated_at: 1,
+    });
+    expect(patch).toHaveBeenCalledWith("plan-1", {
+      status: "paused",
+      updated_at: 2,
+    });
+    expect(updated.status).toBe("paused");
+  });
+
+  it("finds, creates, and updates savings plan templates through the adapter", async () => {
+    const template = {
+      _id: "template-1",
+      name: "Japa",
+      description: "Relocation goal",
+      default_target_kobo: 100_000n,
+      duration_days: 30,
+      interest_rate: 0,
+      automation_type: "weekly",
+      is_active: true,
+      created_at: 1,
+    };
+    const withIndex = vi.fn(() => ({
+      take: vi.fn().mockResolvedValue([template]),
+    }));
+    const query = vi.fn(() => ({ withIndex }));
+    const insert = vi.fn().mockResolvedValue("template-2");
+    const get = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ...template,
+        _id: "template-2",
+        name: "School Fees",
+      })
+      .mockResolvedValueOnce(template)
+      .mockResolvedValueOnce({
+        ...template,
+        is_active: false,
+      });
+    const patch = vi.fn().mockResolvedValue(undefined);
+    const ctx = {
+      db: {
+        query,
+        insert,
+        get,
+        patch,
+      },
+    } as any;
+
+    const repo = createConvexSavingsPlanTemplateRepository(ctx);
+
+    const found = await repo.findByName("Japa");
+    const created = await repo.create({
+      name: "School Fees",
+      description: "Term savings",
+      default_target_kobo: 150_000n,
+      duration_days: 45,
+      interest_rate: 5,
+      automation_type: "weekly",
+      is_active: true,
+      created_at: 2,
+    });
+    const updated = await repo.update("template-1", { is_active: false });
+
+    expect(found?.name).toBe("Japa");
+    expect(query).toHaveBeenCalledWith(TABLE_NAMES.SAVINGS_PLAN_TEMPLATES);
+    expect(insert).toHaveBeenCalledWith(TABLE_NAMES.SAVINGS_PLAN_TEMPLATES, {
+      name: "School Fees",
+      description: "Term savings",
+      default_target_kobo: 150_000n,
+      duration_days: 45,
+      interest_rate: 5,
+      automation_type: "weekly",
+      is_active: true,
+      created_at: 2,
+    });
+    expect(created.name).toBe("School Fees");
+    expect(patch).toHaveBeenCalledWith("template-1", { is_active: false });
+    expect(updated.is_active).toBe(false);
   });
 
   it("throws when updateMetadata is called for a missing transaction", async () => {
