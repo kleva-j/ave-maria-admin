@@ -1,6 +1,7 @@
 import * as fc from "fast-check";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import * as ts from "typescript";
 
 import { describe, it, expect } from "vitest";
 
@@ -28,15 +29,58 @@ function collectTsFiles(dir: string): string[] {
 /** Extract all import/require paths from a file's content */
 function extractImportPaths(content: string): string[] {
   const importPaths: string[] = [];
-  // Match: import ... from "..."  or  import("...")  or  require("...")
-  const importRegex = /(?:import\s+(?:.*?\s+from\s+)?|require\s*\(\s*)["']([^"']+)["']/g;
-  let match = importRegex.exec(content);
-  while (match !== null) {
-    if (match[1]) {
-      importPaths.push(match[1]);
+
+  const sourceFile = ts.createSourceFile(
+    "inline.ts",
+    content,
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+
+  const readModuleSpecifier = (
+    node: ts.Expression | undefined,
+  ): string | undefined => {
+    if (node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))) {
+      return node.text;
     }
-    match = importRegex.exec(content);
-  }
+
+    return undefined;
+  };
+
+  const visit = (node: ts.Node) => {
+    if (ts.isImportDeclaration(node) || (ts.isExportDeclaration(node) && node.moduleSpecifier)) {
+      const moduleSpecifier = readModuleSpecifier((node as ts.ImportDeclaration | ts.ExportDeclaration).moduleSpecifier);
+      if (moduleSpecifier) {
+        importPaths.push(moduleSpecifier);
+      }
+    }
+
+    if (ts.isCallExpression(node)) {
+      if (
+        ts.isIdentifier(node.expression) &&
+        node.expression.text === "require" &&
+        node.arguments.length === 1
+      ) {
+        const moduleSpecifier = readModuleSpecifier(node.arguments[0]);
+        if (moduleSpecifier) {
+          importPaths.push(moduleSpecifier);
+        }
+      } else if (
+        node.expression.kind === ts.SyntaxKind.ImportKeyword &&
+        node.arguments.length >= 1
+      ) {
+        const moduleSpecifier = readModuleSpecifier(node.arguments[0]);
+        if (moduleSpecifier) {
+          importPaths.push(moduleSpecifier);
+        }
+      }
+    }
+
+    ts.forEachChild(node, visit);
+  };
+
+  visit(sourceFile);
   return importPaths;
 }
 
