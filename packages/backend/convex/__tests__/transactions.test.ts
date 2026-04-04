@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { TxnType } from "../shared";
-import { computeProjectionDelta } from "../transactions";
+import { TxnType, computeProjectionDelta } from "@avm-daily/domain";
 
 describe("transaction policy helpers", () => {
   it("computes positive projection deltas for plan-linked contributions", () => {

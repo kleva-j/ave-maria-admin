@@ -205,21 +205,6 @@ type TransactionReverseArgs = {
   createdAt?: number;
 };
 
-type PreparedPostArgs = {
-  user: User;
-  userPlan?: UserSavingsPlan;
-  type: TxnType;
-  effectiveType: TxnType;
-  amountKobo: bigint;
-  reference: string;
-  metadata: Record<string, unknown>;
-  source: TransactionSource;
-  actorId?: TransactionActorId;
-  createdAt: number;
-  reversalOfTransaction?: Transaction;
-  reversalOfReference?: string;
-  reversalOfType?: TxnType;
-};
 
 type PostTransactionResult = {
   transaction: Transaction;
@@ -231,11 +216,6 @@ type ProjectionTotals = {
   savingsBalanceKobo: bigint;
 };
 
-type ProjectionDelta = {
-  totalBalanceKobo: bigint;
-  savingsBalanceKobo: bigint;
-  planAmountKobo: bigint;
-};
 
 type TransactionListFilters = {
   type?: TxnType;
@@ -303,18 +283,6 @@ function asStringId(value: unknown) {
  * @returns The trimmed string value
  * @throws ConvexError if the field is missing, empty, or not a string
  */
-function getRequiredString(
-  object: Record<string, unknown>,
-  key: string,
-  message = `${key} is required`,
-) {
-  const value = object[key];
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new ConvexError(message);
-  }
-
-  return value.trim();
-}
 
 /**
  * Extracts an optional string field from a metadata object.
@@ -347,14 +315,6 @@ function getOptionalString(object: Record<string, unknown>, key: string) {
  * @returns The numeric value
  * @throws ConvexError if the field is missing or not a valid number
  */
-function getRequiredNumber(object: Record<string, unknown>, key: string) {
-  const value = object[key];
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new ConvexError(`${key} must be a valid number`);
-  }
-
-  return value;
-}
 
 /**
  * Type guard to validate transaction type values.
@@ -374,11 +334,6 @@ function isTxnTypeValue(value: unknown): value is TxnType {
  * @param reference - The transaction reference to validate
  * @throws ConvexError if the reference is empty or whitespace
  */
-function assertReference(reference: string) {
-  if (reference.trim().length === 0) {
-    throw new ConvexError("reference is required");
-  }
-}
 
 /**
  * Validates that positive-amount transactions have the correct amount sign.
@@ -388,11 +343,6 @@ function assertReference(reference: string) {
  * @param amountKobo - The amount in kobo (must be positive)
  * @throws ConvexError if amount is not positive
  */
-function assertPositiveAmount(type: TxnType, amountKobo: bigint) {
-  if (amountKobo <= 0n) {
-    throw new ConvexError(`${type} transactions must have a positive amount`);
-  }
-}
 
 /**
  * Validates that negative-amount transactions have the correct amount sign.
@@ -402,11 +352,6 @@ function assertPositiveAmount(type: TxnType, amountKobo: bigint) {
  * @param amountKobo - The amount in kobo (must be negative)
  * @throws ConvexError if amount is not negative
  */
-function assertNegativeAmount(type: TxnType, amountKobo: bigint) {
-  if (amountKobo >= 0n) {
-    throw new ConvexError(`${type} transactions must have a negative amount`);
-  }
-}
 
 /**
  * Canonicalizes a value for stable string comparison.
@@ -437,19 +382,6 @@ function assertNegativeAmount(type: TxnType, amountKobo: bigint) {
  * @returns Normalized metadata with standardized structure
  * @throws ConvexError if required fields are missing
  */
-function normalizeContributionMetadata(
-  metadata: Record<string, unknown>,
-  source: TransactionSource,
-  actorId?: TransactionActorId,
-) {
-  return {
-    source,
-    actor_id: actorId ? String(actorId) : undefined,
-    channel: getRequiredString(metadata, "channel"),
-    origin_reference: getRequiredString(metadata, "origin_reference"),
-    note: getOptionalString(metadata, "note"),
-  };
-}
 
 /**
  * Normalizes and validates accrual transaction metadata.
@@ -470,21 +402,6 @@ function normalizeContributionMetadata(
  * @returns Normalized metadata with standardized structure
  * @throws ConvexError if required fields are missing
  */
-function normalizeAccrualMetadata(
-  metadata: Record<string, unknown>,
-  source: TransactionSource,
-  actorId: TransactionActorId | undefined,
-) {
-  return {
-    source,
-    actor_id: actorId ? String(actorId) : undefined,
-    period_start: getRequiredString(metadata, "period_start"),
-    period_end: getRequiredString(metadata, "period_end"),
-    rate: getRequiredNumber(metadata, "rate"),
-    run_id: getRequiredString(metadata, "run_id"),
-    note: getOptionalString(metadata, "note"),
-  };
-}
 
 /**
  * Normalizes and validates referral bonus transaction metadata.
@@ -504,23 +421,6 @@ function normalizeAccrualMetadata(
  * @returns Normalized metadata with standardized structure
  * @throws ConvexError if required fields are missing
  */
-function normalizeReferralBonusMetadata(
-  metadata: Record<string, unknown>,
-  source: TransactionSource,
-  actorId: TransactionActorId | undefined,
-) {
-  return {
-    source,
-    actor_id: actorId ? String(actorId) : undefined,
-    referrer_user_id: getRequiredString(metadata, "referrer_user_id"),
-    referred_user_id: getRequiredString(metadata, "referred_user_id"),
-    trigger_transaction_reference: getRequiredString(
-      metadata,
-      "trigger_transaction_reference",
-    ),
-    note: getOptionalString(metadata, "note"),
-  };
-}
 
 /**
  * Normalizes and validates withdrawal transaction metadata.
@@ -541,104 +441,6 @@ function normalizeReferralBonusMetadata(
  * @returns Normalized metadata with standardized structure
  * @throws ConvexError if required fields are missing
  */
-function normalizeWithdrawalMetadata(
-  metadata: Record<string, unknown>,
-  source: TransactionSource,
-  actorId: TransactionActorId | undefined,
-) {
-  const method = getRequiredString(metadata, "method");
-  const withdrawalStatus = getRequiredString(metadata, "withdrawal_status");
-  const bankAccount = metadata.bank_account;
-  const cashDetails = metadata.cash_details;
-
-  if (method === WithdrawalMethod.BANK_TRANSFER && !isRecord(bankAccount)) {
-    throw new ConvexError(
-      "withdrawal metadata.bank_account is required for bank transfer withdrawals",
-    );
-  }
-
-  if (method === WithdrawalMethod.CASH && !isRecord(cashDetails)) {
-    throw new ConvexError(
-      "withdrawal metadata.cash_details is required for cash withdrawals",
-    );
-  }
-
-  return {
-    source,
-    actor_id: actorId ? String(actorId) : undefined,
-    method,
-    withdrawal_status: withdrawalStatus,
-    bank_account: isRecord(bankAccount) ? bankAccount : undefined,
-    cash_details: isRecord(cashDetails) ? cashDetails : undefined,
-    note: getOptionalString(metadata, "note"),
-  };
-}
-
-/**
- * Normalizes and validates reversal transaction metadata.
- * Reversals undo previous transactions.
- * 
- * Required fields:
- * - original_transaction_id: ID of the original transaction
- * - original_reference: Reference of the original transaction
- * - original_type: Type of the original transaction
- * - reason: Reason for the reversal
- * 
- * @param metadata - Raw metadata object
- * @param source - Transaction source (USER, ADMIN, SYSTEM)
- * @param actorId - ID of the user/admin performing the action
- * @returns Normalized metadata with standardized structure
- * @throws ConvexError if required fields are missing
- */
-function normalizeReversalMetadata(
-  metadata: Record<string, unknown>,
-  source: TransactionSource,
-  actorId: TransactionActorId | undefined,
-) {
-  const originalType = metadata.original_type;
-  if (!isTxnTypeValue(originalType)) {
-    throw new ConvexError("reversal metadata.original_type must be valid");
-  }
-
-  return {
-    source,
-    actor_id: actorId ? String(actorId) : undefined,
-    original_transaction_id: getRequiredString(
-      metadata,
-      "original_transaction_id",
-    ),
-    original_reference: getRequiredString(metadata, "original_reference"),
-    original_type: originalType,
-    reason: getRequiredString(metadata, "reason"),
-  };
-}
-
-/**
- * Validates and transforms raw metadata into a structured format based on the transaction type.
- * Each transaction type has specific required fields to ensure data integrity in the ledger.
- */
-function normalizeTransactionMetadata(
-  type: TxnType,
-  metadata: unknown,
-  source: TransactionSource,
-  actorId?: TransactionActorId,
-) {
-  const object = asObject(metadata);
-
-  switch (type) {
-    case TxnType.CONTRIBUTION:
-      return normalizeContributionMetadata(object, source, actorId);
-    case TxnType.INTEREST_ACCRUAL:
-    case TxnType.INVESTMENT_YIELD:
-      return normalizeAccrualMetadata(object, source, actorId);
-    case TxnType.REFERRAL_BONUS:
-      return normalizeReferralBonusMetadata(object, source, actorId);
-    case TxnType.WITHDRAWAL:
-      return normalizeWithdrawalMetadata(object, source, actorId);
-    case TxnType.REVERSAL:
-      return normalizeReversalMetadata(object, source, actorId);
-  }
-}
 
 /**
  * Strips sensitive or internal-only metadata fields to create a summary suitable for UI consumption.
@@ -753,43 +555,6 @@ function getEffectiveType(transaction: Transaction) {
  * It ensures that the projected balances never drop below zero, which would indicate
  * a violation of the system's financial constraints.
  */
-async function applyProjectionDelta(
-  ctx: MutationCtx,
-  user: User,
-  userPlan: UserSavingsPlan | undefined,
-  delta: ProjectionDelta,
-  updatedAt: number,
-) {
-  const nextTotalBalance = user.total_balance_kobo + delta.totalBalanceKobo;
-  const nextSavingsBalance =
-    user.savings_balance_kobo + delta.savingsBalanceKobo;
-
-  if (nextTotalBalance < 0n || nextSavingsBalance < 0n) {
-    throw new ConvexError(
-      "Transaction would result in a negative user balance",
-    );
-  }
-
-  if (userPlan) {
-    const nextPlanAmount = userPlan.current_amount_kobo + delta.planAmountKobo;
-    if (nextPlanAmount < 0n) {
-      throw new ConvexError(
-        "Transaction would result in a negative plan balance",
-      );
-    }
-
-    await ctx.db.patch(userPlan._id, {
-      current_amount_kobo: nextPlanAmount,
-      updated_at: updatedAt,
-    });
-  }
-
-  await ctx.db.patch(user._id, {
-    total_balance_kobo: nextTotalBalance,
-    savings_balance_kobo: nextSavingsBalance,
-    updated_at: updatedAt,
-  });
-}
 
 /**
  * Validates transaction arguments and prepares them for processing.
@@ -797,133 +562,6 @@ async function applyProjectionDelta(
  * Handles complex logic for Reversals (verifying original transactions and amounts)
  * and normalizes metadata before the transaction is committed to the database.
  */
-async function preparePostArgs(
-  ctx: MutationCtx,
-  args: TransactionPostArgs,
-): Promise<PreparedPostArgs> {
-  assertReference(args.reference);
-
-  const user = await ctx.db.get(args.userId);
-  if (!user) {
-    throw new ConvexError("User not found");
-  }
-
-  let userPlan = await getUserPlan(ctx, args.userId, args.userPlanId);
-  let reversalOfTransaction: Transaction | undefined;
-
-  if (args.type === TxnType.REVERSAL) {
-    if (!args.reversalOfTransactionId) {
-      throw new ConvexError(
-        "reversalOfTransactionId is required for reversal transactions",
-      );
-    }
-
-    const originalTransaction = await ctx.db.get(args.reversalOfTransactionId);
-    if (!originalTransaction) {
-      throw new ConvexError("Original transaction not found");
-    }
-    reversalOfTransaction = originalTransaction;
-
-    if (reversalOfTransaction.type === TxnType.REVERSAL) {
-      throw new ConvexError("Reversing a reversal is not supported");
-    }
-
-    if (reversalOfTransaction.user_id !== args.userId) {
-      throw new ConvexError(
-        "Reversal must target the original transaction user",
-      );
-    }
-
-    if (
-      args.amountKobo !== -reversalOfTransaction.amount_kobo ||
-      args.amountKobo === 0n
-    ) {
-      throw new ConvexError(
-        "Reversal amount must be the exact inverse of the original transaction amount",
-      );
-    }
-
-    if (
-      args.userPlanId &&
-      args.userPlanId !== reversalOfTransaction.user_plan_id
-    ) {
-      throw new ConvexError(
-        "Reversal savings plan must match the original transaction",
-      );
-    }
-
-    if (!userPlan && reversalOfTransaction.user_plan_id) {
-      userPlan = await getUserPlan(
-        ctx,
-        args.userId,
-        reversalOfTransaction.user_plan_id,
-      );
-    }
-  } else {
-    if (args.reversalOfTransactionId) {
-      throw new ConvexError(
-        "reversalOfTransactionId can only be used with reversal transactions",
-      );
-    }
-
-    switch (args.type) {
-      case TxnType.CONTRIBUTION:
-      case TxnType.INTEREST_ACCRUAL:
-      case TxnType.INVESTMENT_YIELD:
-      case TxnType.REFERRAL_BONUS:
-        assertPositiveAmount(args.type, args.amountKobo);
-        break;
-      case TxnType.WITHDRAWAL:
-        assertNegativeAmount(args.type, args.amountKobo);
-        break;
-    }
-
-    if (args.type === TxnType.REFERRAL_BONUS && userPlan) {
-      throw new ConvexError(
-        "Referral bonus transactions cannot be linked to a savings plan",
-      );
-    }
-  }
-
-  const metadata =
-    args.type === TxnType.REVERSAL && reversalOfTransaction
-      ? normalizeTransactionMetadata(
-          TxnType.REVERSAL,
-          {
-            ...asObject(args.metadata),
-            original_transaction_id: String(reversalOfTransaction._id),
-            original_reference: reversalOfTransaction.reference,
-            original_type: reversalOfTransaction.type,
-          },
-          args.source,
-          args.actorId,
-        )
-      : normalizeTransactionMetadata(
-          args.type,
-          args.metadata,
-          args.source,
-          args.actorId,
-        );
-
-  return {
-    user,
-    userPlan,
-    type: args.type,
-    effectiveType:
-      args.type === TxnType.REVERSAL && reversalOfTransaction
-        ? reversalOfTransaction.type
-        : args.type,
-    amountKobo: args.amountKobo,
-    reference: args.reference.trim(),
-    metadata,
-    source: args.source,
-    actorId: args.actorId,
-    createdAt: args.createdAt ?? Date.now(),
-    reversalOfTransaction,
-    reversalOfReference: reversalOfTransaction?.reference,
-    reversalOfType: reversalOfTransaction?.type,
-  };
-}
 
 
 function shouldAuditTransaction(source: TransactionSource) {
