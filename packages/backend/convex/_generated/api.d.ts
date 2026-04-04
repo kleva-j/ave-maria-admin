@@ -48,6 +48,7 @@ import type * as schemas_withdrawals from "../schemas/withdrawals.js";
 import type * as shared from "../shared.js";
 import type * as transactions from "../transactions.js";
 import type * as types from "../types.js";
+import type * as userAudit from "../userAudit.js";
 import type * as users from "../users.js";
 import type * as utils from "../utils.js";
 import type * as verificationQueue from "../verificationQueue.js";
@@ -101,6 +102,7 @@ declare const fullApi: ApiFromModules<{
   shared: typeof shared;
   transactions: typeof transactions;
   types: typeof types;
+  userAudit: typeof userAudit;
   users: typeof users;
   utils: typeof utils;
   verificationQueue: typeof verificationQueue;

@@ -10,10 +10,10 @@ import type {
   RiskEventService,
 } from "@avm-daily/application/ports";
 
-import type { MutationCtx, QueryCtx } from "../_generated/server";
+import type { MutationCtx } from "../_generated/server";
 import type { RiskEventType, RiskSeverity } from "../shared";
 import type {
-  Context as AnyCtx,
+  Context,
   UserRiskHoldId,
   UserRiskHold,
   AdminUserId,
@@ -29,10 +29,7 @@ import {
   TABLE_NAMES,
 } from "../shared";
 
-function activeWithdrawalHoldQuery(
-  ctx: QueryCtx | MutationCtx,
-  userId: UserId,
-) {
+function activeWithdrawalHoldQuery(ctx: Context, userId: UserId) {
   return ctx.db
     .query(TABLE_NAMES.USER_RISK_HOLDS)
     .withIndex("by_user_id_and_status", (q) =>
@@ -54,7 +51,7 @@ function assertSingleActiveWithdrawalHold(
 }
 
 export function createConvexRiskHoldRepository(
-  ctx: QueryCtx & MutationCtx,
+  ctx: Context,
 ): RiskHoldRepository {
   return {
     async findActiveWithdrawalHold(userId: UserId): Promise<{
@@ -70,7 +67,9 @@ export function createConvexRiskHoldRepository(
 
       if (!hold) return null;
 
-      const matchingHolds = await activeWithdrawalHoldQuery(ctx, userId).take(2);
+      const matchingHolds = await activeWithdrawalHoldQuery(ctx, userId).take(
+        2,
+      );
       assertSingleActiveWithdrawalHold(userId, matchingHolds);
 
       return {
@@ -92,6 +91,8 @@ export function createConvexRiskHoldRepository(
       placed_by_admin_id: AdminUserId;
       placed_at: number;
     }): Promise<{ _id: UserRiskHoldId }> {
+      const mutationCtx = ctx as MutationCtx;
+
       if (
         hold.status === RiskHoldStatus.ACTIVE &&
         hold.scope === RiskHoldScope.WITHDRAWALS
@@ -110,7 +111,7 @@ export function createConvexRiskHoldRepository(
         }
       }
 
-      const id = await ctx.db.insert(TABLE_NAMES.USER_RISK_HOLDS, {
+      const id = await mutationCtx.db.insert(TABLE_NAMES.USER_RISK_HOLDS, {
         user_id: hold.user_id,
         scope: hold.scope,
         status: hold.status,
@@ -126,7 +127,9 @@ export function createConvexRiskHoldRepository(
       releasedByAdminId: AdminUserId,
       releasedAt: number,
     ): Promise<void> {
-      await ctx.db.patch(id, {
+      const mutationCtx = ctx as MutationCtx;
+
+      await mutationCtx.db.patch(id, {
         status: RiskHoldStatus.RELEASED,
         released_by_admin_id: releasedByAdminId,
         released_at: releasedAt,
@@ -164,7 +167,7 @@ export function createConvexRiskEventService(
 }
 
 export function createConvexRiskEventRepository(
-  ctx: AnyCtx,
+  ctx: Context,
 ): RiskEventRepository {
   return {
     async findLatestByUserId(userId: UserId): Promise<{
@@ -192,7 +195,7 @@ export function createConvexRiskEventRepository(
 }
 
 export function createConvexBankAccountEventRepository(
-  ctx: AnyCtx,
+  ctx: Context,
 ): BankAccountEventRepository {
   return {
     async getLastBankAccountChangeAt(

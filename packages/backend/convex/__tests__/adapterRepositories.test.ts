@@ -2,13 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 
 import { DomainError, TxnType } from "@avm-daily/domain";
 
-import { createConvexRiskHoldRepository } from "../adapters/riskAdapters";
-import { createConvexSavingsPlanRepository } from "../adapters/savingsPlanAdapters";
 import { createConvexTransactionWriteRepository } from "../adapters/transactionAdapters";
+import { createConvexSavingsPlanRepository } from "../adapters/savingsPlanAdapters";
+import { createConvexWithdrawalRepository } from "../adapters/withdrawalAdapter";
+import { createConvexRiskHoldRepository } from "../adapters/riskAdapters";
 import {
   PlanStatus,
   RiskHoldScope,
   RiskHoldStatus,
+  WithdrawalMethod,
   TABLE_NAMES,
 } from "../shared";
 
@@ -169,6 +171,28 @@ describe("Convex adapter repositories", () => {
     expect(patch).toHaveBeenCalledWith("plan-1", {
       current_amount_kobo: 7_500n,
       updated_at: 999,
+    });
+  });
+
+  it("treats withdrawals with missing legacy method as bank transfer", async () => {
+    const get = vi.fn().mockResolvedValue({
+      _id: "withdrawal-1",
+      status: "pending",
+      method: undefined,
+    });
+    const ctx = {
+      db: {
+        get,
+      },
+    } as any;
+
+    const repo = createConvexWithdrawalRepository(ctx);
+    const result = await repo.findById("withdrawal-1" as never);
+
+    expect(result).toEqual({
+      _id: "withdrawal-1",
+      status: "pending",
+      method: WithdrawalMethod.BANK_TRANSFER,
     });
   });
 });

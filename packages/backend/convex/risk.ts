@@ -155,8 +155,8 @@ function summarizeRiskEvent(event: RiskEvent) {
  * Builds a comprehensive risk summary for UI display
  */
 export async function buildWithdrawalRiskSummary(ctx: Context, userId: UserId) {
-  const riskHoldRepository = createConvexRiskHoldRepository(ctx as any);
-  const riskEventRepository = createConvexRiskEventRepository(ctx as any);
+  const riskHoldRepository = createConvexRiskHoldRepository(ctx);
+  const riskEventRepository = createConvexRiskEventRepository(ctx);
 
   const [activeHold, latestEvent] = await Promise.all([
     riskHoldRepository.findActiveWithdrawalHold(userId),

@@ -32,7 +32,7 @@ export function createConvexWithdrawalRepository(
       return {
         _id: withdrawal._id,
         status: withdrawal.status,
-        method: withdrawal.method ?? WithdrawalMethod.CASH,
+        method: withdrawal.method ?? WithdrawalMethod.BANK_TRANSFER,
       };
     },
 
