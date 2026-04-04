@@ -337,7 +337,7 @@ export const releaseUserHold = mutation({
     }
 
     const releaseRiskHold = createReleaseRiskHoldUseCase({
-      riskHoldRepository: createConvexRiskHoldRepository(ctx),
+      riskHoldRepository,
       riskEventService: createConvexRiskEventService(ctx),
       auditLogService: createConvexAuditLogService(ctx),
     });
