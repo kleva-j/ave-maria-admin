@@ -65,11 +65,8 @@ export async function ensureUser(ctx: Context, userId: UserId) {
  * @throws ConvexError if not authenticated
  */
 export async function getAuthUserId(ctx: Context) {
-  const authUser = await authKit.getAuthUser(ctx);
-  if (!authUser) {
-    throw new ConvexError("Not authenticated");
-  }
-  return authUser.id;
+  const user = await getUser(ctx);
+  return user._id;
 }
 
 /**
