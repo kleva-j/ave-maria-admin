@@ -15,6 +15,10 @@ const arbitraryUserId = fc.string({ minLength: 1, maxLength: 36 });
 const arbitraryAdminId = fc.string({ minLength: 1, maxLength: 36 });
 const arbitraryReason = fc.string({ minLength: 1, maxLength: 200 });
 const arbitraryPlacedAt = fc.integer({ min: 0, max: Number.MAX_SAFE_INTEGER });
+const arbitraryBoundaryPlacedAt = fc.oneof(
+  fc.constantFrom(0, 1, Number.MAX_SAFE_INTEGER),
+  fc.constant(-1),
+);
 const arbitraryHoldId = fc.string({ minLength: 1, maxLength: 36 });
 
 // --- Spy implementations ---
@@ -52,9 +56,13 @@ function makeRiskEventServiceSpy(): RiskEventService & { callCount: number } {
 function makeAuditLogServiceSpy(): AuditLogService & {
   logCallCount: number;
   logChangeCallCount: number;
+  lastLogChangeArgs: Parameters<AuditLogService["logChange"]>[0] | undefined;
 } {
   let logCallCount = 0;
   let logChangeCallCount = 0;
+  let lastLogChangeArgs:
+    | Parameters<AuditLogService["logChange"]>[0]
+    | undefined;
   return {
     get logCallCount() {
       return logCallCount;
@@ -62,11 +70,15 @@ function makeAuditLogServiceSpy(): AuditLogService & {
     get logChangeCallCount() {
       return logChangeCallCount;
     },
+    get lastLogChangeArgs() {
+      return lastLogChangeArgs;
+    },
     log: async () => {
       logCallCount++;
     },
-    logChange: async () => {
+    logChange: async (args) => {
       logChangeCallCount++;
+      lastLogChangeArgs = args;
     },
   };
 }
@@ -101,6 +113,46 @@ describe("Property 6: releaseRiskHold calls audit log and risk event service exa
           expect(riskEventService.callCount).toBe(1);
           expect(auditLogService.logChangeCallCount).toBe(1);
           expect(auditLogService.logCallCount).toBe(0);
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it("preserves boundary placed_at values, including negative timestamps when provided", async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        arbitraryUserId,
+        arbitraryAdminId,
+        arbitraryHoldId,
+        arbitraryReason,
+        arbitraryBoundaryPlacedAt,
+        async (userId, adminId, holdId, reason, placedAt) => {
+          const riskEventService = makeRiskEventServiceSpy();
+          const auditLogService = makeAuditLogServiceSpy();
+
+          const releaseRiskHold = createReleaseRiskHoldUseCase({
+            riskHoldRepository: makeRiskHoldRepositoryWithActiveHold(
+              holdId,
+              reason,
+              placedAt,
+            ),
+            riskEventService,
+            auditLogService,
+          });
+
+          await releaseRiskHold({ userId, adminId });
+
+          expect(riskEventService.callCount).toBe(1);
+          expect(auditLogService.logChangeCallCount).toBe(1);
+          expect(auditLogService.lastLogChangeArgs?.before).toMatchObject({
+            status: "active",
+            reason,
+            placed_at: placedAt,
+          });
+          expect(auditLogService.lastLogChangeArgs?.after).toMatchObject({
+            status: "released",
+          });
         },
       ),
       { numRuns: 100 },
