@@ -230,8 +230,7 @@ describe("Property 9: Post transaction conflict detection", () => {
           TxnType.INVESTMENT_YIELD,
         ] as const;
         const differentType = allPositiveTypes.find((t) => t !== rawInput.type);
-        // If all types are the same (shouldn't happen with 4 options), skip
-        if (!differentType) return;
+        fc.pre(Boolean(differentType));
 
         const input: PostTransactionDTO = { ...rawInput };
         const user = makeUser(input.userId);
@@ -244,7 +243,7 @@ describe("Property 9: Post transaction conflict detection", () => {
         // Second call — same reference, different type
         const conflictingInput: PostTransactionDTO = {
           ...input,
-          type: differentType,
+          type: differentType!,
         };
 
         await expect(postTransaction(conflictingInput)).rejects.toThrow(
