@@ -1226,6 +1226,23 @@ export const post = internalMutation({
   returns: transactionSummaryValidator,
   handler: async (ctx, args) => {
     const result = await postTransactionEntry(ctx, args);
+
+    if (args.actorId) {
+      await auditLog.log(ctx, {
+        action: "transaction.posted",
+        actorId: args.actorId,
+        resourceType: RESOURCE_TYPE.TRANSACTIONS,
+        resourceId: result.transaction._id,
+        severity: "info",
+        metadata: {
+          user_id: args.userId,
+          type: args.type,
+          amount_kobo: args.amountKobo.toString(),
+          reference: args.reference,
+        },
+      });
+    }
+
     return buildTransactionSummary(result.transaction);
   },
 });
@@ -1235,6 +1252,22 @@ export const reverse = internalMutation({
   returns: transactionSummaryValidator,
   handler: async (ctx, args) => {
     const result = await reverseTransactionEntry(ctx, args);
+
+    if (args.actorId) {
+      await auditLog.log(ctx, {
+        action: "transaction.reversed",
+        actorId: args.actorId,
+        resourceType: RESOURCE_TYPE.TRANSACTIONS,
+        resourceId: result.transaction._id,
+        severity: "warning",
+        metadata: {
+          original_transaction_id: args.originalTransactionId,
+          reference: args.reference,
+          reason: args.reason,
+        },
+      });
+    }
+
     return buildTransactionSummary(result.transaction);
   },
 });
@@ -1253,17 +1286,35 @@ export const rebuildUserProjection = internalMutation({
     savings_balance_kobo: v.int64(),
   }),
   handler: async (ctx, args) => {
+    const admin = await getAdminUser(ctx);
     const user = await ctx.db.get(args.userId);
     if (!user) {
       throw new ConvexError("User not found");
     }
 
     const projected = await buildProjectedUserBalances(ctx, args.userId);
+    const now = Date.now();
+
+    await auditLog.logChange(ctx, {
+      action: "transaction.user_projection_rebuilt",
+      actorId: admin._id,
+      resourceType: RESOURCE_TYPE.USERS,
+      resourceId: args.userId,
+      before: {
+        total_balance_kobo: user.total_balance_kobo.toString(),
+        savings_balance_kobo: user.savings_balance_kobo.toString(),
+      },
+      after: {
+        total_balance_kobo: projected.totalBalanceKobo.toString(),
+        savings_balance_kobo: projected.savingsBalanceKobo.toString(),
+      },
+      severity: "warning",
+    });
 
     await ctx.db.patch(args.userId, {
       total_balance_kobo: projected.totalBalanceKobo,
       savings_balance_kobo: projected.savingsBalanceKobo,
-      updated_at: Date.now(),
+      updated_at: now,
     });
 
     return {
@@ -1283,16 +1334,28 @@ export const rebuildPlanProjection = internalMutation({
     current_amount_kobo: v.int64(),
   }),
   handler: async (ctx, args) => {
+    const admin = await getAdminUser(ctx);
     const plan = await ctx.db.get(args.userPlanId);
     if (!plan) {
       throw new ConvexError("Savings plan not found");
     }
 
     const projected = await buildProjectedPlanAmount(ctx, args.userPlanId);
+    const now = Date.now();
+
+    await auditLog.logChange(ctx, {
+      action: "transaction.plan_projection_rebuilt",
+      actorId: admin._id,
+      resourceType: RESOURCE_TYPE.SAVINGS_PLANS,
+      resourceId: args.userPlanId,
+      before: { current_amount_kobo: plan.current_amount_kobo.toString() },
+      after: { current_amount_kobo: projected.toString() },
+      severity: "warning",
+    });
 
     await ctx.db.patch(args.userPlanId, {
       current_amount_kobo: projected,
-      updated_at: Date.now(),
+      updated_at: now,
     });
 
     return {
@@ -1316,7 +1379,9 @@ export const runReconciliation = internalMutation({
   args: {},
   returns: reconciliationRunValidator,
   handler: async (ctx) => {
+    const admin = await getAdminUser(ctx);
     const startedAt = Date.now();
+
     const runId = await ctx.db.insert(
       TABLE_NAMES.TRANSACTION_RECONCILIATION_RUNS,
       {
@@ -1330,6 +1395,14 @@ export const runReconciliation = internalMutation({
         created_at: startedAt,
       },
     );
+
+    await auditLog.log(ctx, {
+      action: "transaction.reconciliation.started",
+      actorId: admin._id,
+      resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
+      resourceId: runId,
+      severity: "info",
+    });
 
     try {
       const previousOpenIssues = await ctx.db

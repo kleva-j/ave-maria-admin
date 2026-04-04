@@ -114,9 +114,32 @@ export const upsertFromWorkOS = internalMutation({
       });
 
       // Sync aggregates for user updates
-      const updatedUser = await ctx.db.get(existing._id);
-      if (updatedUser) {
-        await syncUserUpdate(ctx, oldUser, updatedUser);
+      const updatedUser = (await ctx.db.get(existing._id))!;
+      await syncUserUpdate(ctx, oldUser, updatedUser);
+
+      // Audit significant profile changes during external sync
+      if (
+        oldUser.email !== updatedUser.email ||
+        oldUser.first_name !== updatedUser.first_name ||
+        oldUser.last_name !== updatedUser.last_name
+      ) {
+        await auditLog.logChange(ctx, {
+          action: EVENT_TYPE.USER_PROFILE_SYNCED,
+          actorId: updatedUser._id,
+          resourceType: RESOURCE_TYPE.USERS,
+          resourceId: updatedUser._id,
+          before: {
+            email: oldUser.email,
+            first_name: oldUser.first_name,
+            last_name: oldUser.last_name,
+          },
+          after: {
+            email: updatedUser.email,
+            first_name: updatedUser.first_name,
+            last_name: updatedUser.last_name,
+          },
+          severity: "info",
+        });
       }
 
       return existing._id;

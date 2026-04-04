@@ -515,6 +515,7 @@ export const EVENT_TYPE = {
   // Document Review
   DOCUMENT_COMMENT_ADDED: "document_comment_added",
   DOCUMENT_ISSUE_RESOLVED: "document_issue_resolved",
+  USER_PROFILE_SYNCED: "user_profile_synced",
 } as const;
 
 export const eventType = v.union(
@@ -532,6 +533,7 @@ export const eventType = v.union(
   v.literal(EVENT_TYPE.KYC_VERIFICATION_FAILED),
   v.literal(EVENT_TYPE.DOCUMENT_COMMENT_ADDED),
   v.literal(EVENT_TYPE.DOCUMENT_ISSUE_RESOLVED),
+  v.literal(EVENT_TYPE.USER_PROFILE_SYNCED),
 );
 
 // Type aliases for validator types
