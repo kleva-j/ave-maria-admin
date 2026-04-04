@@ -279,6 +279,8 @@ export function createReleaseRiskHoldUseCase(deps: {
       createdAt: releasedAt,
     });
 
+    // Release operations use logChange to capture the active->released transition,
+    // whereas placeRiskHold uses auditLogService.log for the initial creation event.
     await deps.auditLogService.logChange({
       action: "risk.hold_released",
       actorId: input.adminId,
