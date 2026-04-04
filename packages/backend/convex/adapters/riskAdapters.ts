@@ -15,17 +15,43 @@ import type { RiskEventType, RiskSeverity } from "../shared";
 import type {
   Context as AnyCtx,
   UserRiskHoldId,
+  UserRiskHold,
   AdminUserId,
   RiskEventId,
   UserId,
 } from "../types";
 
+import { DomainError } from "@avm-daily/domain";
 import {
   BankAccountEventType,
   RiskHoldStatus,
   RiskHoldScope,
   TABLE_NAMES,
 } from "../shared";
+
+function activeWithdrawalHoldQuery(
+  ctx: QueryCtx | MutationCtx,
+  userId: UserId,
+) {
+  return ctx.db
+    .query(TABLE_NAMES.USER_RISK_HOLDS)
+    .withIndex("by_user_id_and_status", (q) =>
+      q.eq("user_id", userId).eq("status", RiskHoldStatus.ACTIVE),
+    )
+    .filter((q) => q.eq(q.field("scope"), RiskHoldScope.WITHDRAWALS));
+}
+
+function assertSingleActiveWithdrawalHold(
+  userId: UserId,
+  holds: UserRiskHold[],
+): void {
+  if (holds.length > 1) {
+    throw new DomainError(
+      `Multiple active withdrawal holds found for user ${String(userId)}`,
+      "risk_hold_invariant_violation",
+    );
+  }
+}
 
 export function createConvexRiskHoldRepository(
   ctx: QueryCtx & MutationCtx,
@@ -40,15 +66,12 @@ export function createConvexRiskHoldRepository(
       placed_by_admin_id: AdminUserId;
       placed_at: number;
     } | null> {
-      const hold = await ctx.db
-        .query(TABLE_NAMES.USER_RISK_HOLDS)
-        .withIndex("by_user_id_and_status", (q) =>
-          q.eq("user_id", userId).eq("status", RiskHoldStatus.ACTIVE),
-        )
-        .filter((q) => q.eq(q.field("scope"), RiskHoldScope.WITHDRAWALS))
-        .unique();
+      const hold = await activeWithdrawalHoldQuery(ctx, userId).first();
 
       if (!hold) return null;
+
+      const matchingHolds = await activeWithdrawalHoldQuery(ctx, userId).take(2);
+      assertSingleActiveWithdrawalHold(userId, matchingHolds);
 
       return {
         _id: hold._id,
@@ -69,6 +92,24 @@ export function createConvexRiskHoldRepository(
       placed_by_admin_id: AdminUserId;
       placed_at: number;
     }): Promise<{ _id: UserRiskHoldId }> {
+      if (
+        hold.status === RiskHoldStatus.ACTIVE &&
+        hold.scope === RiskHoldScope.WITHDRAWALS
+      ) {
+        const matchingHolds = await activeWithdrawalHoldQuery(
+          ctx,
+          hold.user_id,
+        ).take(2);
+        assertSingleActiveWithdrawalHold(hold.user_id, matchingHolds);
+
+        if (matchingHolds.length === 1) {
+          throw new DomainError(
+            `User already has an active withdrawal hold: ${String(hold.user_id)}`,
+            "hold_already_active",
+          );
+        }
+      }
+
       const id = await ctx.db.insert(TABLE_NAMES.USER_RISK_HOLDS, {
         user_id: hold.user_id,
         scope: hold.scope,

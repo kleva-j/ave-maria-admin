@@ -8,6 +8,7 @@ import type { SavingsPlanRepository } from "@avm-daily/application/ports";
 import type { UserId, UserSavingsPlan, UserSavingsPlanId } from "../types";
 import type { QueryCtx, MutationCtx } from "../_generated/server";
 
+import { DomainError } from "@avm-daily/domain";
 import { TABLE_NAMES } from "../shared";
 
 type AnyCtx = QueryCtx & MutationCtx;
@@ -46,6 +47,14 @@ export function createConvexSavingsPlanRepository(
       currentAmountKobo: bigint,
       updatedAt: number,
     ): Promise<void> {
+      const existingPlan = await ctx.db.get(id);
+      if (!existingPlan) {
+        throw new DomainError(
+          `UserSavingsPlan not found: ${String(id)}`,
+          "user_savings_plan_not_found",
+        );
+      }
+
       await ctx.db.patch(id, {
         current_amount_kobo: currentAmountKobo,
         updated_at: updatedAt,

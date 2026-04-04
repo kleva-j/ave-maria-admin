@@ -87,11 +87,9 @@ export function createConvexTransactionWriteRepository(
   ctx: MutationCtx,
 ): TransactionWriteRepository {
   return {
-    async create(transaction: Transaction): Promise<Transaction> {
-      const id = await ctx.db.insert(TABLE_NAMES.TRANSACTIONS, {
+    async create(transaction: Omit<Transaction, "_id">): Promise<Transaction> {
+      const insertPayload = {
         user_id: transaction.user_id as UserId,
-
-        user_plan_id: transaction.user_plan_id as UserSavingsPlanId,
         type: transaction.type,
         amount_kobo: transaction.amount_kobo,
         reference: transaction.reference,
@@ -102,7 +100,12 @@ export function createConvexTransactionWriteRepository(
         reversal_of_type: transaction.reversal_of_type,
         metadata: transaction.metadata,
         created_at: transaction.created_at,
-      });
+        ...(transaction.user_plan_id !== undefined
+          ? { user_plan_id: transaction.user_plan_id as UserSavingsPlanId }
+          : {}),
+      };
+
+      const id = await ctx.db.insert(TABLE_NAMES.TRANSACTIONS, insertPayload);
       const doc = await ctx.db.get(id);
       if (!doc) {
         throw new Error("Failed to create transaction");
