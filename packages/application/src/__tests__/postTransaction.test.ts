@@ -100,11 +100,12 @@ function makeInMemoryDeps(user: User, plan?: UserSavingsPlan) {
       currentPlan && currentPlan._id === id ? { ...currentPlan } : null,
     findByUserId: async (uid) =>
       currentPlan && currentPlan.user_id === uid ? [{ ...currentPlan }] : [],
-    updateAmount: async (id, currentAmountKobo) => {
+    updateAmount: async (id, currentAmountKobo, updatedAt) => {
       if (currentPlan && currentPlan._id === id) {
         currentPlan = {
           ...currentPlan,
           current_amount_kobo: currentAmountKobo,
+          updated_at: updatedAt,
         };
       }
     },
