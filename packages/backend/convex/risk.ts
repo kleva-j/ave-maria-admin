@@ -1,14 +1,15 @@
 /**
  * Risk Assessment & Fraud Prevention System
- * 
+ *
  * Provides real-time risk evaluation for withdrawal requests,
  * automated fraud detection, manual administrative controls,
  * and comprehensive risk event logging.
- * 
+ *
  * @module risk
  */
 
 import type { MutationCtx } from "./_generated/server";
+import type { WithdrawalMethod } from "./shared";
 import type {
   UserRiskHold,
   RiskEvent,
@@ -18,16 +19,19 @@ import type {
   User,
 } from "./types";
 
+import { DomainError, WithdrawalBlockedError } from "@avm-daily/domain";
 import { ConvexError, v } from "convex/values";
 
+import { createConvexWithdrawalRepository } from "./adapters/withdrawalAdapter";
+import { createConvexAuditLogService } from "./adapters/auditLogAdapter";
 import { mutation, query } from "./_generated/server";
 import { getAdminUser } from "./utils";
 
 import {
-  createPlaceRiskHoldUseCase,
-  createReleaseRiskHoldUseCase,
-  createEvaluateWithdrawalRiskUseCase,
   createAssertWithdrawalAllowedUseCase,
+  createEvaluateWithdrawalRiskUseCase,
+  createReleaseRiskHoldUseCase,
+  createPlaceRiskHoldUseCase,
 } from "@avm-daily/application/use-cases";
 
 import {
@@ -36,37 +40,23 @@ import {
   createConvexRiskHoldRepository,
 } from "./adapters/riskAdapters";
 
-import { createConvexWithdrawalRepository } from "./adapters/withdrawalAdapter";
-import { createConvexAuditLogService } from "./adapters/auditLogAdapter";
-
-import {
-  DomainError,
-  WithdrawalBlockedError,
-  WITHDRAWAL_DAILY_LIMIT_KOBO,
-  WITHDRAWAL_DAILY_COUNT_LIMIT,
-  WITHDRAWAL_VELOCITY_COUNT_LIMIT,
-  BANK_ACCOUNT_COOLDOWN_MS,
-} from "@avm-daily/domain";
-
-import type { WithdrawalMethod } from "./shared";
-
 import {
   RiskHoldStatus,
   riskHoldStatus,
   RiskHoldScope,
   riskEventType,
   riskHoldScope,
-  riskSeverity,
-  TABLE_NAMES,
   RiskEventType,
+  riskSeverity,
   RiskSeverity,
+  TABLE_NAMES,
 } from "./shared";
 
 // Re-export constants from domain (single source of truth)
 export {
-  WITHDRAWAL_DAILY_LIMIT_KOBO,
-  WITHDRAWAL_DAILY_COUNT_LIMIT,
   WITHDRAWAL_VELOCITY_COUNT_LIMIT,
+  WITHDRAWAL_DAILY_COUNT_LIMIT,
+  WITHDRAWAL_DAILY_LIMIT_KOBO,
   BANK_ACCOUNT_COOLDOWN_MS,
 } from "@avm-daily/domain";
 
@@ -224,7 +214,8 @@ export async function assertWithdrawalRequestAllowed(
 ) {
   const riskHoldRepository = createConvexRiskHoldRepository(ctx);
   const withdrawalRepository = createConvexWithdrawalRepository(ctx);
-  const bankAccountEventRepository = createConvexBankAccountEventRepository(ctx);
+  const bankAccountEventRepository =
+    createConvexBankAccountEventRepository(ctx);
   const riskEventService = createConvexRiskEventService(ctx);
 
   const evaluateWithdrawalRisk = createEvaluateWithdrawalRiskUseCase({
@@ -247,7 +238,9 @@ export async function assertWithdrawalRequestAllowed(
     });
   } catch (err) {
     if (err instanceof WithdrawalBlockedError) {
-      throw new ConvexError(buildWithdrawalRiskErrorData({ rule: err.rule, message: err.message }));
+      throw new ConvexError(
+        buildWithdrawalRiskErrorData({ rule: err.rule, message: err.message }),
+      );
     }
     if (err instanceof DomainError) {
       throw new ConvexError({ code: err.code, message: err.message });
@@ -289,10 +282,12 @@ export async function assertWithdrawalAdminActionAllowed(
     actorAdminId: String(args.actorAdminId),
   });
 
-  throw new ConvexError(buildWithdrawalRiskErrorData({
-    rule: "manual_hold",
-    message: `Withdrawals are currently blocked for this user: ${activeHold.reason}`,
-  }));
+  throw new ConvexError(
+    buildWithdrawalRiskErrorData({
+      rule: "manual_hold",
+      message: `Withdrawals are currently blocked for this user: ${activeHold.reason}`,
+    }),
+  );
 }
 
 /**
@@ -393,7 +388,7 @@ export const releaseUserHold = mutation({
 
 /**
  * Lists risk events for admin review
- * 
+ *
  * @query
  * @requires Admin authentication
  * @param userId - Optional filter by specific user
@@ -415,9 +410,7 @@ export const listEventsForAdmin = query({
       const userId = args.userId;
       const events = await ctx.db
         .query(TABLE_NAMES.RISK_EVENTS)
-        .withIndex("by_user_id_and_created_at", (q) =>
-          q.eq("user_id", userId),
-        )
+        .withIndex("by_user_id_and_created_at", (q) => q.eq("user_id", userId))
         .order("desc")
         .take(limit);
 
