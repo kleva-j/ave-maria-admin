@@ -18,6 +18,7 @@ export const user_savings_plans = defineTable({
 })
   .index("by_user_id", ["user_id"])
   .index("by_user_id_and_status", ["user_id", "status"])
+  .index("by_user_id_and_template_id", ["user_id", "template_id"])
   .index("by_template_id", ["template_id"])
   .index("by_status", ["status"])
   .index("by_end_date", ["end_date"]);
