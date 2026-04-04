@@ -12,7 +12,7 @@ import type {
 
 import type { PostTransactionDTO } from "../dto/index.js";
 import type { Transaction, User, UserSavingsPlan } from "@avm-daily/domain";
-import { TxnType, TransactionSource } from "@avm-daily/domain";
+import { TxnType, TransactionSource, DuplicateReferenceError, DomainError } from "@avm-daily/domain";
 
 // Feature: clean-architecture-refactor, Property 8: Post transaction idempotency
 
@@ -162,6 +162,121 @@ describe("Property 8: Post transaction idempotency", () => {
         expect(second.transaction.id).toBe(first.transaction.id);
         expect(second.transaction.reference).toBe(input.reference);
       }),
+      { numRuns: 100 },
+    );
+  });
+});
+
+// --- Property 9: Post transaction conflict detection ---
+
+describe("Property 9: Post transaction conflict detection", () => {
+  it("posting the same reference with a different amount throws DuplicateReferenceError", async () => {
+    // Feature: clean-architecture-refactor, Property 9: Post transaction conflict detection
+    await fc.assert(
+      fc.asyncProperty(
+        arbitraryPostTransactionInput,
+        // A different amount that is guaranteed to differ from the first
+        fc.bigInt({ min: 10_000_001n, max: 20_000_000n }),
+        async (rawInput, differentAmount) => {
+          const input: PostTransactionDTO = { ...rawInput };
+
+          const user = makeUser(input.userId);
+          const deps = makeInMemoryDeps(user);
+          const postTransaction = createPostTransactionUseCase(deps);
+
+          // First call — establishes the reference
+          await postTransaction(input);
+
+          // Second call — same reference, different amount
+          const conflictingInput: PostTransactionDTO = {
+            ...input,
+            amountKobo: differentAmount,
+          };
+
+          await expect(postTransaction(conflictingInput)).rejects.toThrow(
+            DuplicateReferenceError,
+          );
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it("posting the same reference with a different type throws DuplicateReferenceError", async () => {
+    // Feature: clean-architecture-refactor, Property 9: Post transaction conflict detection
+    await fc.assert(
+      fc.asyncProperty(
+        arbitraryPostTransactionInput,
+        async (rawInput) => {
+          // Pick a type that differs from the input type
+          const allPositiveTypes = [
+            TxnType.CONTRIBUTION,
+            TxnType.INTEREST_ACCRUAL,
+            TxnType.REFERRAL_BONUS,
+            TxnType.INVESTMENT_YIELD,
+          ] as const;
+          const differentType = allPositiveTypes.find(
+            (t) => t !== rawInput.type,
+          );
+          // If all types are the same (shouldn't happen with 4 options), skip
+          if (!differentType) return;
+
+          const input: PostTransactionDTO = { ...rawInput };
+          const user = makeUser(input.userId);
+          const deps = makeInMemoryDeps(user);
+          const postTransaction = createPostTransactionUseCase(deps);
+
+          // First call — establishes the reference
+          await postTransaction(input);
+
+          // Second call — same reference, different type
+          const conflictingInput: PostTransactionDTO = {
+            ...input,
+            type: differentType,
+          };
+
+          await expect(postTransaction(conflictingInput)).rejects.toThrow(
+            DuplicateReferenceError,
+          );
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it("the thrown error is a DomainError instance with code 'duplicate_reference'", async () => {
+    // Feature: clean-architecture-refactor, Property 9: Post transaction conflict detection
+    await fc.assert(
+      fc.asyncProperty(
+        arbitraryPostTransactionInput,
+        fc.bigInt({ min: 10_000_001n, max: 20_000_000n }),
+        async (rawInput, differentAmount) => {
+          const input: PostTransactionDTO = { ...rawInput };
+          const user = makeUser(input.userId);
+          const deps = makeInMemoryDeps(user);
+          const postTransaction = createPostTransactionUseCase(deps);
+
+          await postTransaction(input);
+
+          const conflictingInput: PostTransactionDTO = {
+            ...input,
+            amountKobo: differentAmount,
+          };
+
+          let caught: unknown;
+          try {
+            await postTransaction(conflictingInput);
+          } catch (err) {
+            caught = err;
+          }
+
+          expect(caught).toBeInstanceOf(DomainError);
+          expect(caught).toBeInstanceOf(DuplicateReferenceError);
+          expect((caught as DuplicateReferenceError).code).toBe(
+            "duplicate_reference",
+          );
+        },
+      ),
       { numRuns: 100 },
     );
   });
