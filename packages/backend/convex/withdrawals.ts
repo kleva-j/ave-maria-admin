@@ -44,9 +44,26 @@ import { getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
 
 import {
+  createEvaluateWithdrawalRiskUseCase,
+  createAssertWithdrawalAllowedUseCase,
+} from "@avm-daily/application/use-cases";
+
+import {
+  createConvexBankAccountEventRepository,
+  createConvexRiskEventService,
+  createConvexRiskHoldRepository,
+} from "./adapters/riskAdapters";
+
+import { createConvexWithdrawalRepository } from "./adapters/withdrawalAdapter";
+
+import {
+  DomainError,
+  WithdrawalBlockedError,
+} from "@avm-daily/domain";
+
+import {
   assertWithdrawalAdminActionAllowed,
   withdrawalRiskSummaryValidator,
-  assertWithdrawalRequestAllowed,
   buildWithdrawalRiskSummary,
 } from "./risk";
 
@@ -298,7 +315,12 @@ function assertAdminCanHandleCashWithdrawal(
     return;
   }
 
-  const capabilities = buildWithdrawalCapabilities(adminRole, withdrawal, {
+  const capabilities = buildWithdrawalCapabilities(adminRole, {
+    status: withdrawal.status,
+    method: (withdrawal as Withdrawal & { method?: unknown }).method === WithdrawalMethod.CASH
+      ? WithdrawalMethod.CASH
+      : WithdrawalMethod.BANK_TRANSFER,
+  }, {
     has_active_hold: false,
   });
   const capability = capabilities[action];
@@ -380,7 +402,12 @@ export const listForReview = query({
           risk,
           capabilities: buildWithdrawalCapabilities(
             admin.role,
-            withdrawal,
+            {
+              status: withdrawal.status,
+              method: (withdrawal as Withdrawal & { method?: unknown }).method === WithdrawalMethod.CASH
+                ? WithdrawalMethod.CASH
+                : WithdrawalMethod.BANK_TRANSFER,
+            },
             risk,
           ),
         };
@@ -450,12 +477,38 @@ export const request = mutation({
       cashDetails = buildCashDetails(user, args.pickup_note);
     }
 
-    await assertWithdrawalRequestAllowed(ctx, {
-      user,
-      method,
-      amountKobo: args.amount_kobo,
-      now,
-    });
+    await (async () => {
+      const evaluateWithdrawalRisk = createEvaluateWithdrawalRiskUseCase({
+        riskHoldRepository: createConvexRiskHoldRepository(ctx),
+        withdrawalRepository: createConvexWithdrawalRepository(ctx),
+        bankAccountEventRepository: createConvexBankAccountEventRepository(ctx),
+      });
+      const assertWithdrawalAllowed = createAssertWithdrawalAllowedUseCase({
+        evaluateWithdrawalRisk,
+        riskEventService: createConvexRiskEventService(ctx),
+      });
+      try {
+        await assertWithdrawalAllowed({
+          userId: String(user._id),
+          amountKobo: args.amount_kobo,
+          method,
+          now,
+        });
+      } catch (err) {
+        if (err instanceof WithdrawalBlockedError) {
+          throw new ConvexError({
+            code: err.code,
+            scope: err.scope,
+            rule: err.rule,
+            message: err.message,
+          });
+        }
+        if (err instanceof DomainError) {
+          throw new ConvexError({ code: err.code, message: err.message });
+        }
+        throw err;
+      }
+    })();
 
     const postedTransaction = await postTransactionEntry(ctx, {
       userId: user._id,

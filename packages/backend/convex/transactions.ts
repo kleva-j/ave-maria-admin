@@ -43,6 +43,27 @@ import { getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
 
 import {
+  createPostTransactionUseCase,
+  createReverseTransactionUseCase,
+} from "@avm-daily/application/use-cases";
+
+import {
+  createConvexTransactionReadRepository,
+  createConvexTransactionWriteRepository,
+} from "./adapters/transactionAdapters";
+
+import { createConvexUserRepository } from "./adapters/userAdapters";
+import { createConvexSavingsPlanRepository } from "./adapters/savingsPlanAdapters";
+
+import {
+  DomainError,
+  computeProjectionDelta,
+} from "@avm-daily/domain";
+
+// Re-export computeProjectionDelta from domain (single source of truth)
+export { computeProjectionDelta } from "@avm-daily/domain";
+
+import {
   syncReconciliationIssueInsert,
   syncReconciliationIssueUpdate,
   syncTransactionInsert,
@@ -790,42 +811,6 @@ function getEffectiveType(transaction: Transaction) {
   return transaction.reversal_of_type;
 }
 
-/**
- * Calculates the impact of a transaction on the user's total balance, savings balance,
- * and specific plan balance. This logic is used to maintain a projected view of the
- * user's financial state without needing to re-sum the entire transaction history.
- */
-export function computeProjectionDelta(
-  effectiveType: TxnType,
-  amountKobo: bigint,
-  userPlanId?: UserSavingsPlanId,
-): ProjectionDelta {
-  switch (effectiveType) {
-    case TxnType.CONTRIBUTION:
-    case TxnType.INTEREST_ACCRUAL:
-    case TxnType.INVESTMENT_YIELD:
-      return {
-        totalBalanceKobo: amountKobo,
-        savingsBalanceKobo: amountKobo,
-        planAmountKobo: userPlanId ? amountKobo : 0n,
-      };
-    case TxnType.REFERRAL_BONUS:
-      return {
-        totalBalanceKobo: amountKobo,
-        savingsBalanceKobo: amountKobo,
-        planAmountKobo: 0n,
-      };
-    case TxnType.WITHDRAWAL:
-      return {
-        totalBalanceKobo: amountKobo,
-        savingsBalanceKobo: amountKobo,
-        planAmountKobo: userPlanId ? amountKobo : 0n,
-      };
-    case TxnType.REVERSAL:
-      throw new ConvexError("effectiveType cannot be reversal");
-  }
-}
-
 export function areComparableTransactionPayloadsEqual(
   left: ReturnType<typeof buildComparableTransactionPayload>,
   right: ReturnType<typeof buildComparableTransactionPayload>,
@@ -1099,12 +1084,8 @@ async function auditPostedTransaction(
 /**
  * The primary entry point for recording any financial movement in the system.
  *
- * This function handles:
- * 1. Idempotency checks using the `reference` field (prevents double-posting).
- * 2. Balance projection updates for both the User and any linked Savings Plan.
- * 3. Metadata normalization and validation.
- * 4. Ledger entry insertion.
- * 5. Update of aggregate/denormalized tables for performant queries.
+ * Delegates core business logic to createPostTransactionUseCase, then handles
+ * Convex-specific concerns (aggregate sync, audit logging).
  *
  * @returns The created or existing transaction and an `idempotent` flag.
  */
@@ -1112,103 +1093,97 @@ export async function postTransactionEntry(
   ctx: MutationCtx,
   args: TransactionPostArgs,
 ): Promise<PostTransactionResult> {
-  const prepared = await preparePostArgs(ctx, args);
-  const existing = await resolveExistingReference(ctx, prepared);
-
-  if (existing) {
-    return { transaction: existing, idempotent: true };
-  }
-
-  if (prepared.reversalOfTransaction) {
-    const reversalTarget = prepared.reversalOfTransaction;
-    const existingReversals = await ctx.db
-      .query(TABLE_NAMES.TRANSACTIONS)
-      .withIndex("by_reversal_of_transaction_id", (q) =>
-        q.eq("reversal_of_transaction_id", reversalTarget._id),
-      )
-      .collect();
-
-    if (existingReversals.length > 0) {
-      throw new ConvexError("Original transaction has already been reversed");
-    }
-  }
-
-  const delta = computeProjectionDelta(
-    prepared.effectiveType,
-    prepared.amountKobo,
-    prepared.userPlan?._id,
-  );
-
-  await applyProjectionDelta(
-    ctx,
-    prepared.user,
-    prepared.userPlan,
-    delta,
-    prepared.createdAt,
-  );
-
-  const transactionId = await ctx.db.insert(TABLE_NAMES.TRANSACTIONS, {
-    user_id: prepared.user._id,
-    user_plan_id: prepared.userPlan?._id,
-    type: prepared.type,
-    amount_kobo: prepared.amountKobo,
-    reference: prepared.reference,
-    reversal_of_transaction_id: prepared.reversalOfTransaction?._id,
-    reversal_of_reference: prepared.reversalOfReference,
-    reversal_of_type: prepared.reversalOfType,
-    metadata: prepared.metadata,
-    created_at: prepared.createdAt,
+  const postTransaction = createPostTransactionUseCase({
+    transactionReadRepository: createConvexTransactionReadRepository(ctx),
+    transactionWriteRepository: createConvexTransactionWriteRepository(ctx),
+    userRepository: createConvexUserRepository(ctx),
+    savingsPlanRepository: createConvexSavingsPlanRepository(ctx),
   });
 
-  const transaction = await ctx.db.get(transactionId);
-  if (!transaction) {
-    throw new ConvexError("Failed to create transaction");
+  let result: PostTransactionResult;
+  try {
+    const ucResult = await postTransaction({
+      userId: String(args.userId),
+      userPlanId: args.userPlanId ? String(args.userPlanId) : undefined,
+      type: args.type,
+      amountKobo: args.amountKobo,
+      reference: args.reference,
+      reversalOfTransactionId: args.reversalOfTransactionId
+        ? String(args.reversalOfTransactionId)
+        : undefined,
+      metadata: asObject(args.metadata),
+      source: args.source,
+      actorId: args.actorId ? String(args.actorId) : undefined,
+      createdAt: args.createdAt,
+    });
+
+    // Map DTO back to the Transaction shape expected by callers
+    const transaction = await ctx.db.get(ucResult.transaction.id as TransactionId);
+    if (!transaction) {
+      throw new ConvexError("Failed to retrieve created transaction");
+    }
+    result = { transaction, idempotent: ucResult.idempotent };
+  } catch (err) {
+    if (err instanceof DomainError) {
+      throw new ConvexError(err.message);
+    }
+    throw err;
   }
 
-  // Sync with aggregate tables for O(log n) queries
-  await syncTransactionInsert(ctx, transaction);
+  if (!result.idempotent) {
+    // Sync with aggregate tables for O(log n) queries
+    await syncTransactionInsert(ctx, result.transaction);
+    await auditPostedTransaction(ctx, result.transaction, args.source, args.actorId);
+  }
 
-  await auditPostedTransaction(
-    ctx,
-    transaction,
-    prepared.source,
-    prepared.actorId,
-  );
-
-  return { transaction, idempotent: false };
+  return result;
 }
 
 /**
  * Reverses a previously posted transaction by creating an inverse entry.
  *
- * This is the safe way to "undo" a transaction. It ensures the ledger remains immutable
- * while correcting the balances. It requires a reason for the reversal and links
- * the new entry to the original one.
+ * Delegates to createReverseTransactionUseCase, then handles Convex-specific concerns.
  */
 export async function reverseTransactionEntry(
   ctx: MutationCtx,
   args: TransactionReverseArgs,
 ): Promise<PostTransactionResult> {
-  const originalTransaction = await ctx.db.get(args.originalTransactionId);
-  if (!originalTransaction) {
-    throw new ConvexError("Original transaction not found");
+  const reverseTransaction = createReverseTransactionUseCase({
+    transactionReadRepository: createConvexTransactionReadRepository(ctx),
+    transactionWriteRepository: createConvexTransactionWriteRepository(ctx),
+    userRepository: createConvexUserRepository(ctx),
+    savingsPlanRepository: createConvexSavingsPlanRepository(ctx),
+  });
+
+  let result: PostTransactionResult;
+  try {
+    const ucResult = await reverseTransaction({
+      originalTransactionId: String(args.originalTransactionId),
+      reference: args.reference,
+      reason: args.reason,
+      metadata: asObject(args.metadata),
+      source: args.source,
+      actorId: args.actorId ? String(args.actorId) : undefined,
+      createdAt: args.createdAt,
+    });
+
+    const transaction = await ctx.db.get(ucResult.transaction.id as TransactionId);
+    if (!transaction) {
+      throw new ConvexError("Failed to retrieve reversed transaction");
+    }
+    result = { transaction, idempotent: false };
+  } catch (err) {
+    if (err instanceof DomainError) {
+      throw new ConvexError(err.message);
+    }
+    throw err;
   }
 
-  return await postTransactionEntry(ctx, {
-    userId: originalTransaction.user_id,
-    userPlanId: originalTransaction.user_plan_id,
-    type: TxnType.REVERSAL,
-    amountKobo: -originalTransaction.amount_kobo,
-    reference: args.reference,
-    metadata: {
-      ...asObject(args.metadata),
-      reason: args.reason,
-    },
-    source: args.source,
-    actorId: args.actorId,
-    createdAt: args.createdAt,
-    reversalOfTransactionId: originalTransaction._id,
-  });
+  // Sync with aggregate tables
+  await syncTransactionInsert(ctx, result.transaction);
+  await auditPostedTransaction(ctx, result.transaction, args.source, args.actorId);
+
+  return result;
 }
 
 /**
