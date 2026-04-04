@@ -23,14 +23,14 @@ import { TABLE_NAMES } from "../shared";
 
 function docToTransaction(doc: ConvexTransaction): Transaction {
   return {
-    _id: String(doc._id),
-    user_id: String(doc.user_id),
-    user_plan_id: doc.user_plan_id ? String(doc.user_plan_id) : undefined,
+    _id: doc._id,
+    user_id: doc.user_id,
+    user_plan_id: doc.user_plan_id ? doc.user_plan_id : undefined,
     type: doc.type,
     amount_kobo: doc.amount_kobo,
     reference: doc.reference,
     reversal_of_transaction_id: doc.reversal_of_transaction_id
-      ? String(doc.reversal_of_transaction_id)
+      ? doc.reversal_of_transaction_id
       : undefined,
     reversal_of_reference: doc.reversal_of_reference,
     reversal_of_type: doc.reversal_of_type,

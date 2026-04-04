@@ -3,6 +3,13 @@
  * Implements RiskHoldRepository, RiskEventService, and BankAccountEventRepository
  * using Convex database context.
  */
+import type {
+  BankAccountEventRepository,
+  RiskEventRepository,
+  RiskHoldRepository,
+  RiskEventService,
+} from "@avm-daily/application/ports";
+
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 import type { RiskEventType, RiskSeverity } from "../shared";
 import type {
@@ -12,13 +19,6 @@ import type {
   RiskEventId,
   UserId,
 } from "../types";
-
-import type {
-  BankAccountEventRepository,
-  RiskEventRepository,
-  RiskHoldRepository,
-  RiskEventService,
-} from "@avm-daily/application/ports";
 
 import {
   BankAccountEventType,
@@ -50,7 +50,7 @@ export function createConvexRiskHoldRepository(
       if (!hold) return null;
 
       return {
-        _id: hold._id as UserRiskHoldId,
+        _id: hold._id,
         reason: hold.reason,
         placed_at: hold.placed_at,
       };
@@ -72,7 +72,7 @@ export function createConvexRiskHoldRepository(
         placed_by_admin_id: hold.placed_by_admin_id,
         placed_at: hold.placed_at,
       });
-      return { _id: id as UserRiskHoldId };
+      return { _id: id };
     },
 
     async release(

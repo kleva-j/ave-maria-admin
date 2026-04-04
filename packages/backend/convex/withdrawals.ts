@@ -337,13 +337,13 @@ export const listForReview = query({
     status: v.optional(withdrawalStatus),
   },
   returns: v.array(adminWithdrawalSummaryValidator),
-  handler: async (ctx, args) => {
+  handler: async (ctx, { status }) => {
     const admin = await getAdminUser(ctx);
 
-    const withdrawals = args.status
+    const withdrawals = status
       ? await ctx.db
           .query(TABLE_NAMES.WITHDRAWALS)
-          .withIndex("by_status", (q) => q.eq("status", args.status!))
+          .withIndex("by_status", (q) => q.eq("status", status))
           .collect()
       : await ctx.db.query(TABLE_NAMES.WITHDRAWALS).collect();
 
