@@ -15,7 +15,7 @@
  */
 
 import type { AdminUserId, UserBankAccountId, UserId } from "./types";
-import type { VerificationStatus, EventType } from "./shared";
+import type { VerificationStatus } from "./shared";
 import type { MutationCtx } from "./_generated/server";
 
 import { ConvexError, v } from "convex/values";
@@ -23,13 +23,13 @@ import { ConvexError, v } from "convex/values";
 import { sortAccounts, getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
 import {
+  BankAccountEventType,
+  bankAccountEventType,
   VERIFICATION_STATUS,
   verificationStatus,
   DOCUMENT_TYPES,
   RESOURCE_TYPE,
   TABLE_NAMES,
-  EVENT_TYPE,
-  eventType,
 } from "./shared";
 
 import {
@@ -76,7 +76,7 @@ const bankAccountEventValidator = v.object({
   _creationTime: v.number(),
   user_id: v.id("users"),
   account_id: v.id("user_bank_accounts"),
-  event_type: eventType,
+  event_type: bankAccountEventType,
   previous_values: v.optional(v.any()),
   new_values: v.optional(v.any()),
   actor_user_id: v.optional(v.id("users")),
@@ -168,7 +168,7 @@ async function logAccountEvent(
   params: {
     userId: UserId;
     accountId: UserBankAccountId;
-    eventType: EventType;
+    eventType: BankAccountEventType;
     previous?: Record<string, unknown> | null;
     next?: Record<string, unknown> | null;
     actorUserId?: UserId;
@@ -231,7 +231,7 @@ async function unsetOtherPrimaries(
     await logAccountEvent(ctx, {
       userId,
       accountId: account._id,
-      eventType: EVENT_TYPE.UPDATED,
+      eventType: BankAccountEventType.UPDATED,
       previous,
       next: { ...previous, is_primary: false },
       actorUserId,
@@ -438,7 +438,7 @@ export const create = mutation({
     await logAccountEvent(ctx, {
       userId: user._id,
       accountId: account._id,
-      eventType: EVENT_TYPE.CREATED,
+      eventType: BankAccountEventType.CREATED,
       next: accountSnapshot(account),
       actorUserId: user._id,
     });
@@ -508,7 +508,7 @@ export const updateDetails = mutation({
     await logAccountEvent(ctx, {
       userId: user._id,
       accountId: args.account_id,
-      eventType: EVENT_TYPE.UPDATED,
+      eventType: BankAccountEventType.UPDATED,
       previous,
       next: accountSnapshot(updated),
       actorUserId: user._id,
@@ -582,7 +582,7 @@ export const setPrimary = mutation({
     await logAccountEvent(ctx, {
       userId: user._id,
       accountId: account._id,
-      eventType: EVENT_TYPE.SET_PRIMARY,
+      eventType: BankAccountEventType.SET_PRIMARY,
       previous: accountSnapshot(account),
       next: accountSnapshot(updated),
       actorUserId: user._id,
@@ -640,7 +640,7 @@ export const remove = mutation({
     await logAccountEvent(ctx, {
       userId: user._id,
       accountId: account._id,
-      eventType: EVENT_TYPE.DELETED,
+      eventType: BankAccountEventType.DELETED,
       previous: snapshot,
       actorUserId: user._id,
     });
@@ -674,7 +674,7 @@ export const remove = mutation({
           await logAccountEvent(ctx, {
             userId: user._id,
             accountId: nextPrimary._id,
-            eventType: EVENT_TYPE.SET_PRIMARY,
+            eventType: BankAccountEventType.SET_PRIMARY,
             previous: accountSnapshot(nextPrimary),
             next: { ...accountSnapshot(nextPrimary), is_primary: true },
             actorUserId: user._id,
@@ -755,7 +755,7 @@ export const setVerificationStatus = internalMutation({
     await logAccountEvent(ctx, {
       userId: updated.user_id,
       accountId: updated._id,
-      eventType: EVENT_TYPE.VERIFICATION_STATUS_CHANGED,
+      eventType: BankAccountEventType.VERIFICATION_STATUS_CHANGED,
       previous,
       next: accountSnapshot(updated),
       actorAdminId: admin._id,
@@ -857,7 +857,7 @@ export const submitForVerification = mutation({
     await logAccountEvent(ctx, {
       userId: user._id,
       accountId: updated._id,
-      eventType: EVENT_TYPE.VERIFICATION_SUBMITTED,
+      eventType: BankAccountEventType.VERIFICATION_SUBMITTED,
       previous,
       next: {
         ...accountSnapshot(updated),

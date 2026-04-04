@@ -1,17 +1,15 @@
 import { describe, expect, it } from "vitest";
 
-import { RiskEventType, RiskSeverity, WithdrawalMethod } from "../shared";
-
-process.env.WORKOS_CLIENT_ID = "test_client_id";
-process.env.WORKOS_API_KEY = "test_api_key";
-process.env.WORKOS_WEBHOOK_SECRET = "test_webhook_secret";
-
 import {
   WITHDRAWAL_VELOCITY_COUNT_LIMIT,
   evaluateWithdrawalRiskDecision,
   WITHDRAWAL_DAILY_COUNT_LIMIT,
   WITHDRAWAL_DAILY_LIMIT_KOBO,
-} from "../risk";
+  WithdrawalMethod,
+  RiskEventType,
+  RiskSeverity,
+} from "@avm-daily/domain";
+
 
 describe("evaluateWithdrawalRiskDecision", () => {
   const now = Date.now();

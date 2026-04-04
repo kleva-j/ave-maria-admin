@@ -56,6 +56,7 @@ import {
 // Re-export constants from domain (single source of truth)
 export {
   WITHDRAWAL_VELOCITY_COUNT_LIMIT,
+  evaluateWithdrawalRiskDecision,
   WITHDRAWAL_DAILY_COUNT_LIMIT,
   WITHDRAWAL_DAILY_LIMIT_KOBO,
   BANK_ACCOUNT_COOLDOWN_MS,
