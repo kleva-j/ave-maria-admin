@@ -285,8 +285,9 @@ export const placeUserHold = mutation({
       throw new ConvexError("User not found");
     }
 
+    const riskHoldRepository = createConvexRiskHoldRepository(ctx);
     const placeRiskHold = createPlaceRiskHoldUseCase({
-      riskHoldRepository: createConvexRiskHoldRepository(ctx),
+      riskHoldRepository,
       riskEventService: createConvexRiskEventService(ctx),
       auditLogService: createConvexAuditLogService(ctx),
     });
@@ -305,7 +306,6 @@ export const placeUserHold = mutation({
     }
 
     // Fetch the newly created hold to return the summary
-    const riskHoldRepository = createConvexRiskHoldRepository(ctx);
     const activeHold = await riskHoldRepository.findActiveWithdrawalHold(args.userId);
     if (!activeHold) {
       throw new ConvexError("Failed to create risk hold");
