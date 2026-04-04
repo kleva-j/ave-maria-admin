@@ -15,8 +15,6 @@ import type {
 
 import type { WithdrawalMethod } from "@avm-daily/domain";
 
-// Feature: clean-architecture-refactor, Property 7: Assert withdrawal delegates to evaluate withdrawal
-
 // --- Arbitrary generators ---
 
 const arbitraryUserId = fc.string({ minLength: 1, maxLength: 36 });

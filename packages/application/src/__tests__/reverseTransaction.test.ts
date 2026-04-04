@@ -6,15 +6,15 @@ import { createReverseTransactionUseCase } from "../use-cases/index.js";
 import type {
   TransactionReadRepository,
   TransactionWriteRepository,
-  UserRepository,
   SavingsPlanRepository,
+  UserRepository,
 } from "../ports/index.js";
 
-import type { ReverseTransactionDTO } from "../dto/index.js";
 import type { Transaction, User } from "@avm-daily/domain";
-import { TxnType, TransactionSource, DomainError } from "@avm-daily/domain";
 
-// Feature: clean-architecture-refactor, Property 10: Reverse transaction rejects reversals of reversals
+import type { ReverseTransactionDTO } from "../dto/index.js";
+
+import { TxnType, TransactionSource, DomainError } from "@avm-daily/domain";
 
 // --- Arbitrary generators ---
 
@@ -97,7 +97,7 @@ function makeInMemoryDeps(user: User, seedTransactions: Transaction[] = []) {
 
 describe("Property 10: Reverse transaction rejects reversals of reversals", () => {
   it("throws a DomainError when attempting to reverse a REVERSAL transaction", async () => {
-    // Feature: clean-architecture-refactor, Property 10: Reverse transaction rejects reversals of reversals
+
     await fc.assert(
       fc.asyncProperty(
         arbitraryUserId,
@@ -137,7 +137,7 @@ describe("Property 10: Reverse transaction rejects reversals of reversals", () =
   });
 
   it("the thrown error is an instance of DomainError (not a plain Error)", async () => {
-    // Feature: clean-architecture-refactor, Property 10: Reverse transaction rejects reversals of reversals
+
     await fc.assert(
       fc.asyncProperty(
         arbitraryUserId,
@@ -186,7 +186,7 @@ describe("Property 10: Reverse transaction rejects reversals of reversals", () =
   });
 
   it("does NOT throw when reversing a non-REVERSAL transaction", async () => {
-    // Feature: clean-architecture-refactor, Property 10: Reverse transaction rejects reversals of reversals
+
     const nonReversalTypes = [
       TxnType.CONTRIBUTION,
       TxnType.INTEREST_ACCRUAL,
@@ -207,8 +207,7 @@ describe("Property 10: Reverse transaction rejects reversals of reversals", () =
           const user = makeUser(userId);
 
           // For WITHDRAWAL, amount is negative; for others, positive
-          const amountKobo =
-            txnType === TxnType.WITHDRAWAL ? -1000n : 1000n;
+          const amountKobo = txnType === TxnType.WITHDRAWAL ? -1000n : 1000n;
 
           const originalTx: Transaction = {
             _id: "tx-original-seed",
@@ -239,7 +238,7 @@ describe("Property 10: Reverse transaction rejects reversals of reversals", () =
   });
 
   it("throws a DomainError when the original transaction does not exist", async () => {
-    // Feature: clean-architecture-refactor, Property 10: Reverse transaction rejects reversals of reversals
+
     await fc.assert(
       fc.asyncProperty(
         arbitraryUserId,
@@ -268,7 +267,7 @@ describe("Property 10: Reverse transaction rejects reversals of reversals", () =
 
 describe("Property 16: Use-case errors are DomainError instances", () => {
   it("reversing a REVERSAL transaction throws an instance of DomainError (not a plain Error)", async () => {
-    // Feature: clean-architecture-refactor, Property 16: Use-case errors are DomainError instances
+
     await fc.assert(
       fc.asyncProperty(
         arbitraryUserId,
@@ -277,7 +276,10 @@ describe("Property 16: Use-case errors are DomainError instances", () => {
         fc.record({
           amountKobo: fc.bigInt({ min: -10_000_000n, max: -1n }),
           metadata: fc.option(
-            fc.dictionary(fc.string({ minLength: 1, maxLength: 16 }), fc.string()),
+            fc.dictionary(
+              fc.string({ minLength: 1, maxLength: 16 }),
+              fc.string(),
+            ),
             { nil: undefined },
           ),
         }),

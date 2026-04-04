@@ -191,7 +191,6 @@ describe("riskEvaluation", () => {
   });
 });
 
-// Feature: clean-architecture-refactor, Property 3: Risk evaluation is a pure function
 describe("Property 3: Risk evaluation is a pure function", () => {
   const arbitraryRiskInput = fc.record<WithdrawalRiskEvaluationInput>({
     amountKobo: fc.bigInt({ min: 1n, max: 100_000_000n }),

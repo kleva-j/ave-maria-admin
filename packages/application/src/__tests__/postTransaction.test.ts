@@ -6,15 +6,18 @@ import { createPostTransactionUseCase } from "../use-cases/index.js";
 import type {
   TransactionReadRepository,
   TransactionWriteRepository,
-  UserRepository,
   SavingsPlanRepository,
+  UserRepository,
 } from "../ports/index.js";
 
-import type { PostTransactionDTO } from "../dto/index.js";
 import type { Transaction, User, UserSavingsPlan } from "@avm-daily/domain";
-import { TxnType, TransactionSource, DuplicateReferenceError, DomainError } from "@avm-daily/domain";
-
-// Feature: clean-architecture-refactor, Property 8: Post transaction idempotency
+import type { PostTransactionDTO } from "../dto/index.js";
+import {
+  TxnType,
+  TransactionSource,
+  DuplicateReferenceError,
+  DomainError,
+} from "@avm-daily/domain";
 
 // --- Arbitrary generators ---
 
@@ -131,7 +134,7 @@ function makeUser(userId: string): User {
 
 describe("Property 8: Post transaction idempotency", () => {
   it("posting the same transaction twice returns idempotent: true on the second call and does not create a duplicate record", async () => {
-    // Feature: clean-architecture-refactor, Property 8: Post transaction idempotency
+
     await fc.assert(
       fc.asyncProperty(arbitraryPostTransactionInput, async (rawInput) => {
         const input: PostTransactionDTO = {
@@ -171,7 +174,7 @@ describe("Property 8: Post transaction idempotency", () => {
 
 describe("Property 9: Post transaction conflict detection", () => {
   it("posting the same reference with a different amount throws DuplicateReferenceError", async () => {
-    // Feature: clean-architecture-refactor, Property 9: Post transaction conflict detection
+
     await fc.assert(
       fc.asyncProperty(
         arbitraryPostTransactionInput,
@@ -203,49 +206,44 @@ describe("Property 9: Post transaction conflict detection", () => {
   });
 
   it("posting the same reference with a different type throws DuplicateReferenceError", async () => {
-    // Feature: clean-architecture-refactor, Property 9: Post transaction conflict detection
+
     await fc.assert(
-      fc.asyncProperty(
-        arbitraryPostTransactionInput,
-        async (rawInput) => {
-          // Pick a type that differs from the input type
-          const allPositiveTypes = [
-            TxnType.CONTRIBUTION,
-            TxnType.INTEREST_ACCRUAL,
-            TxnType.REFERRAL_BONUS,
-            TxnType.INVESTMENT_YIELD,
-          ] as const;
-          const differentType = allPositiveTypes.find(
-            (t) => t !== rawInput.type,
-          );
-          // If all types are the same (shouldn't happen with 4 options), skip
-          if (!differentType) return;
+      fc.asyncProperty(arbitraryPostTransactionInput, async (rawInput) => {
+        // Pick a type that differs from the input type
+        const allPositiveTypes = [
+          TxnType.CONTRIBUTION,
+          TxnType.INTEREST_ACCRUAL,
+          TxnType.REFERRAL_BONUS,
+          TxnType.INVESTMENT_YIELD,
+        ] as const;
+        const differentType = allPositiveTypes.find((t) => t !== rawInput.type);
+        // If all types are the same (shouldn't happen with 4 options), skip
+        if (!differentType) return;
 
-          const input: PostTransactionDTO = { ...rawInput };
-          const user = makeUser(input.userId);
-          const deps = makeInMemoryDeps(user);
-          const postTransaction = createPostTransactionUseCase(deps);
+        const input: PostTransactionDTO = { ...rawInput };
+        const user = makeUser(input.userId);
+        const deps = makeInMemoryDeps(user);
+        const postTransaction = createPostTransactionUseCase(deps);
 
-          // First call — establishes the reference
-          await postTransaction(input);
+        // First call — establishes the reference
+        await postTransaction(input);
 
-          // Second call — same reference, different type
-          const conflictingInput: PostTransactionDTO = {
-            ...input,
-            type: differentType,
-          };
+        // Second call — same reference, different type
+        const conflictingInput: PostTransactionDTO = {
+          ...input,
+          type: differentType,
+        };
 
-          await expect(postTransaction(conflictingInput)).rejects.toThrow(
-            DuplicateReferenceError,
-          );
-        },
-      ),
+        await expect(postTransaction(conflictingInput)).rejects.toThrow(
+          DuplicateReferenceError,
+        );
+      }),
       { numRuns: 100 },
     );
   });
 
   it("the thrown error is a DomainError instance with code 'duplicate_reference'", async () => {
-    // Feature: clean-architecture-refactor, Property 9: Post transaction conflict detection
+
     await fc.assert(
       fc.asyncProperty(
         arbitraryPostTransactionInput,
@@ -286,7 +284,7 @@ describe("Property 9: Post transaction conflict detection", () => {
 
 describe("Property 16: Use-case errors are DomainError instances", () => {
   it("duplicate reference with different payload throws an instance of DomainError (specifically DuplicateReferenceError)", async () => {
-    // Feature: clean-architecture-refactor, Property 16: Use-case errors are DomainError instances
+
     await fc.assert(
       fc.asyncProperty(
         arbitraryPostTransactionInput,

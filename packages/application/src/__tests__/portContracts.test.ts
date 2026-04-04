@@ -1,8 +1,49 @@
 import * as fc from "fast-check";
+import * as fs from "node:fs";
+import * as path from "node:path";
 
 import { describe, it, expect } from "vitest";
 
 import type { WithdrawalRepository, RiskHoldRepository } from "../ports";
+
+// ---------------------------------------------------------------------------
+// Helpers for static analysis tests
+// ---------------------------------------------------------------------------
+
+/** Recursively collect all .ts files under a directory (excluding .d.ts) */
+function collectTsFiles(dir: string): string[] {
+  if (!fs.existsSync(dir)) return [];
+  const results: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const fullPath = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      results.push(...collectTsFiles(fullPath));
+    } else if (entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts")) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+/** Extract all import/require paths from a file's content */
+function extractImportPaths(content: string): string[] {
+  const importPaths: string[] = [];
+  // Match: import ... from "..."  or  import("...")  or  require("...")
+  const importRegex = /(?:import\s+(?:.*?\s+from\s+)?|require\s*\(\s*)["']([^"']+)["']/g;
+  let match = importRegex.exec(content);
+  while (match !== null) {
+    if (match[1]) {
+      importPaths.push(match[1]);
+    }
+    match = importRegex.exec(content);
+  }
+  return importPaths;
+}
+
+// Resolve the monorepo root relative to this test file's location.
+// This file lives at packages/application/src/__tests__/portContracts.test.ts
+// so the monorepo root is 4 levels up.
+const MONOREPO_ROOT = path.resolve(__dirname, "../../../../");
 
 // ---------------------------------------------------------------------------
 // Arbitraries
@@ -127,5 +168,127 @@ describe("Property 15: WithdrawalRepository behavioral contract", () => {
       }),
       { numRuns: 100 },
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 1: Layer boundary — no upward imports
+// Feature: clean-architecture-refactor, Property 1: Layer boundary — no upward imports
+// Validates: Requirements 1.1, 1.2
+// ---------------------------------------------------------------------------
+
+describe("Property 1: Layer boundary — no upward imports", () => {
+  const domainSrc = path.join(MONOREPO_ROOT, "packages/domain/src");
+  const applicationSrc = path.join(MONOREPO_ROOT, "packages/application/src");
+
+  const DOMAIN_FORBIDDEN = [
+    "packages/application",
+    "packages/backend",
+    "apps/web",
+    "apps/native",
+    "@avm-daily/application",
+    "@avm-daily/backend",
+  ];
+
+  const APPLICATION_FORBIDDEN = [
+    "packages/backend",
+    "apps/web",
+    "apps/native",
+    "@avm-daily/backend",
+  ];
+
+  it("no file in packages/domain/src imports from application, backend, or presentation layers", () => {
+    const files = collectTsFiles(domainSrc);
+    const violations: string[] = [];
+
+    for (const file of files) {
+      const content = fs.readFileSync(file, "utf-8");
+      const imports = extractImportPaths(content);
+      for (const imp of imports) {
+        for (const forbidden of DOMAIN_FORBIDDEN) {
+          if (imp.includes(forbidden)) {
+            violations.push(`${path.relative(MONOREPO_ROOT, file)}: imports "${imp}"`);
+          }
+        }
+      }
+    }
+
+    expect(violations, `Layer boundary violations found:\n${violations.join("\n")}`).toEqual([]);
+  });
+
+  it("no file in packages/application/src imports from backend or presentation layers", () => {
+    const files = collectTsFiles(applicationSrc);
+    const violations: string[] = [];
+
+    for (const file of files) {
+      const content = fs.readFileSync(file, "utf-8");
+      const imports = extractImportPaths(content);
+      for (const imp of imports) {
+        for (const forbidden of APPLICATION_FORBIDDEN) {
+          if (imp.includes(forbidden)) {
+            violations.push(`${path.relative(MONOREPO_ROOT, file)}: imports "${imp}"`);
+          }
+        }
+      }
+    }
+
+    expect(violations, `Layer boundary violations found:\n${violations.join("\n")}`).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Property 2: No Convex SDK in domain or application
+// Feature: clean-architecture-refactor, Property 2: No Convex SDK in domain or application
+// Validates: Requirements 1.1, 1.2, 6.4, 6.5
+// ---------------------------------------------------------------------------
+
+describe("Property 2: No Convex SDK in domain or application", () => {
+  const domainSrc = path.join(MONOREPO_ROOT, "packages/domain/src");
+  const applicationSrc = path.join(MONOREPO_ROOT, "packages/application/src");
+
+  const CONVEX_FORBIDDEN_PATTERNS = [
+    /^convex\//,
+    /^convex$/,
+  ];
+
+  function hasConvexImport(imports: string[]): string | null {
+    for (const imp of imports) {
+      for (const pattern of CONVEX_FORBIDDEN_PATTERNS) {
+        if (pattern.test(imp)) return imp;
+      }
+    }
+    return null;
+  }
+
+  it("no file in packages/domain/src imports from convex/*", () => {
+    const files = collectTsFiles(domainSrc);
+    const violations: string[] = [];
+
+    for (const file of files) {
+      const content = fs.readFileSync(file, "utf-8");
+      const imports = extractImportPaths(content);
+      const hit = hasConvexImport(imports);
+      if (hit) {
+        violations.push(`${path.relative(MONOREPO_ROOT, file)}: imports "${hit}"`);
+      }
+    }
+
+    expect(violations, `Convex SDK imports found in domain layer:\n${violations.join("\n")}`).toEqual([]);
+  });
+
+  it("no file in packages/application/src imports from convex/*", () => {
+    const files = collectTsFiles(applicationSrc);
+    const violations: string[] = [];
+
+    for (const file of files) {
+      const content = fs.readFileSync(file, "utf-8");
+      const imports = extractImportPaths(content);
+      const hit = hasConvexImport(imports);
+      if (hit) {
+        violations.push(`${path.relative(MONOREPO_ROOT, file)}: imports "${hit}"`);
+      }
+    }
+
+    expect(violations, `Convex SDK imports found in application layer:\n${violations.join("\n")}`).toEqual([]);
   });
 });

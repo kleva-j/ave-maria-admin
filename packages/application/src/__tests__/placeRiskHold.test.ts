@@ -9,8 +9,6 @@ import type {
   AuditLogService,
 } from "../ports/index.js";
 
-// Feature: clean-architecture-refactor, Property 6: Audit log and risk event service are called on hold operations
-
 // --- Arbitrary generators ---
 
 const arbitraryUserId = fc.string({ minLength: 1, maxLength: 36 });

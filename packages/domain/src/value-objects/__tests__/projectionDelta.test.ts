@@ -39,7 +39,6 @@ const arbitraryPlanId = fc.option(fc.string({ minLength: 1, maxLength: 32 }), {
 const arbitraryPositiveAmount = fc.bigInt({ min: 1n, max: 1_000_000_000n });
 const arbitraryNegativeAmount = fc.bigInt({ min: -1_000_000_000n, max: -1n });
 
-// Feature: clean-architecture-refactor, Property 11: computeProjectionDelta correctness for all TxnTypes
 describe("Property 11: computeProjectionDelta correctness for all TxnTypes", () => {
   // Validates: Requirements 10.5, 13.3
 
@@ -170,7 +169,6 @@ describe("Property 11: computeProjectionDelta correctness for all TxnTypes", () 
   });
 });
 
-// Feature: clean-architecture-refactor, Property 12: assertValidAmount rejects wrong-sign amounts
 describe("Property 12: assertValidAmount rejects wrong-sign amounts", () => {
   // Validates: Requirements 13.4
 

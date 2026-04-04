@@ -196,7 +196,6 @@ const cashBlockedRoles = allAdminRoles.filter(
   (r) => !cashAllowedRoles.includes(r),
 );
 
-// Feature: clean-architecture-refactor, Property 13: buildWithdrawalCapabilities invariants
 describe("Property 13: buildWithdrawalCapabilities invariants", () => {
   // Validates: Requirements 13.2
 

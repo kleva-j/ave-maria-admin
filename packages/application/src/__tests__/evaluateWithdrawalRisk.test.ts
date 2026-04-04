@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it } from "vitest";
 import * as fc from "fast-check";
 
 import {
@@ -56,7 +56,6 @@ function makeAuditLogService(): AuditLogService {
 // --- Property 5: Use-case factories return async functions ---
 
 describe("Property 5: Use-case factories return async functions", () => {
-  // Feature: clean-architecture-refactor, Property 5: Use-case factories return async functions
 
   it("createEvaluateWithdrawalRiskUseCase returns a function", () => {
     fc.assert(
