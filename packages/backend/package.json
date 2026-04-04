@@ -26,6 +26,7 @@
   "devDependencies": {
     "@avm-daily/config": "workspace:*",
     "@types/node": "^24.3.0",
+    "@vitest/coverage-v8": "4.0.18",
     "typescript": "^5",
     "vitest": "^4.0.18"
   }

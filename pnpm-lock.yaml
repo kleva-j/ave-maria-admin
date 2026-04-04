@@ -324,6 +324,9 @@ importers:
       '@types/node':
         specifier: ^24.3.0
         version: 24.12.0
+      '@vitest/coverage-v8':
+        specifier: 4.0.18
+        version: 4.0.18(vitest@4.0.18(@types/node@24.12.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.12.10(@types/node@24.12.0)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
       fast-check:
         specifier: ^4.6.0
         version: 4.6.0
@@ -373,6 +376,9 @@ importers:
       '@types/node':
         specifier: ^24.3.0
         version: 24.12.0
+      '@vitest/coverage-v8':
+        specifier: 4.0.18
+        version: 4.0.18(vitest@4.0.18(@types/node@24.12.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.12.10(@types/node@24.12.0)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
       typescript:
         specifier: ^5
         version: 5.9.3
@@ -390,6 +396,9 @@ importers:
       '@types/node':
         specifier: ^24.3.0
         version: 24.12.0
+      '@vitest/coverage-v8':
+        specifier: 4.0.18
+        version: 4.0.18(vitest@4.0.18(@types/node@24.12.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.12.10(@types/node@24.12.0)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
       fast-check:
         specifier: ^4.6.0
         version: 4.6.0
