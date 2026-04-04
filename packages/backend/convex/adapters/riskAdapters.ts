@@ -50,6 +50,32 @@ function assertSingleActiveWithdrawalHold(
   }
 }
 
+function getInsertDb(ctx: Context): Pick<MutationCtx["db"], "insert"> {
+  const mutationDb = ctx.db as Partial<MutationCtx["db"]>;
+
+  if (typeof mutationDb.insert !== "function") {
+    throw new DomainError(
+      "Risk hold mutations require a mutation context",
+      "risk_hold_mutation_context_required",
+    );
+  }
+
+  return mutationDb as Pick<MutationCtx["db"], "insert">;
+}
+
+function getPatchDb(ctx: Context): Pick<MutationCtx["db"], "patch"> {
+  const mutationDb = ctx.db as Partial<MutationCtx["db"]>;
+
+  if (typeof mutationDb.patch !== "function") {
+    throw new DomainError(
+      "Risk hold mutations require a mutation context",
+      "risk_hold_mutation_context_required",
+    );
+  }
+
+  return mutationDb as Pick<MutationCtx["db"], "patch">;
+}
+
 export function createConvexRiskHoldRepository(
   ctx: Context,
 ): RiskHoldRepository {
@@ -91,7 +117,7 @@ export function createConvexRiskHoldRepository(
       placed_by_admin_id: AdminUserId;
       placed_at: number;
     }): Promise<{ _id: UserRiskHoldId }> {
-      const mutationCtx = ctx as MutationCtx;
+      const mutationDb = getInsertDb(ctx);
 
       if (
         hold.status === RiskHoldStatus.ACTIVE &&
@@ -111,7 +137,7 @@ export function createConvexRiskHoldRepository(
         }
       }
 
-      const id = await mutationCtx.db.insert(TABLE_NAMES.USER_RISK_HOLDS, {
+      const id = await mutationDb.insert(TABLE_NAMES.USER_RISK_HOLDS, {
         user_id: hold.user_id,
         scope: hold.scope,
         status: hold.status,
@@ -127,9 +153,9 @@ export function createConvexRiskHoldRepository(
       releasedByAdminId: AdminUserId,
       releasedAt: number,
     ): Promise<void> {
-      const mutationCtx = ctx as MutationCtx;
+      const mutationDb = getPatchDb(ctx);
 
-      await mutationCtx.db.patch(id, {
+      await mutationDb.patch(id, {
         status: RiskHoldStatus.RELEASED,
         released_by_admin_id: releasedByAdminId,
         released_at: releasedAt,
@@ -179,7 +205,9 @@ export function createConvexRiskEventRepository(
     } | null> {
       const events = await ctx.db
         .query(TABLE_NAMES.RISK_EVENTS)
-        .withIndex("by_user_id", (q) => q.eq("user_id", userId))
+        .withIndex("by_user_id_and_created_at", (q) =>
+          q.eq("user_id", userId),
+        )
         .order("desc")
         .take(1);
 

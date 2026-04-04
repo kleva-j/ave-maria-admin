@@ -6,8 +6,9 @@ import { createConvexTransactionWriteRepository } from "../adapters/transactionA
 import { createConvexSavingsPlanRepository } from "../adapters/savingsPlanAdapters";
 import { createConvexWithdrawalRepository } from "../adapters/withdrawalAdapter";
 import {
-  createConvexRiskEventService,
+  createConvexRiskEventRepository,
   createConvexRiskHoldRepository,
+  createConvexRiskEventService,
 } from "../adapters/riskAdapters";
 import {
   PlanStatus,
@@ -105,19 +106,22 @@ describe("Convex adapter repositories", () => {
 
     const repo = createConvexSavingsPlanRepository(ctx);
 
-    await expect(
-      repo.updateAmount("plan-1" as never, 10_000n, 123456),
-    ).rejects.toBeInstanceOf(DomainError);
-    await expect(
-      repo.updateAmount("plan-1" as never, 10_000n, 123456),
-    ).rejects.toMatchObject({
+    const updateAmountPromise = repo.updateAmount(
+      "plan-1" as never,
+      10_000n,
+      123456,
+    );
+
+    await expect(updateAmountPromise).rejects.toBeInstanceOf(DomainError);
+    await expect(updateAmountPromise).rejects.toMatchObject({
       code: "user_savings_plan_not_found",
     });
     expect(get).toHaveBeenCalledWith("plan-1");
+    expect(get).toHaveBeenCalledTimes(1);
     expect(patch).not.toHaveBeenCalled();
   });
 
-  it("omits user_plan_id when creating a transaction without a linked plan", async () => {
+  it("omits optional linked ids when creating a transaction without them", async () => {
     const insertedId = "tx-1";
     const insert = vi.fn().mockResolvedValue(insertedId);
     const get = vi.fn().mockResolvedValue({
@@ -150,6 +154,7 @@ describe("Convex adapter repositories", () => {
     const insertPayload = insert.mock.calls[0]?.[1];
     expect(insert.mock.calls[0]?.[0]).toBe(TABLE_NAMES.TRANSACTIONS);
     expect(insertPayload).not.toHaveProperty("user_plan_id");
+    expect(insertPayload).not.toHaveProperty("reversal_of_transaction_id");
   });
 
   it("patches savings plans only after confirming the document exists", async () => {
@@ -177,6 +182,29 @@ describe("Convex adapter repositories", () => {
       current_amount_kobo: 7_500n,
       updated_at: 999,
     });
+  });
+
+  it("throws when updateMetadata is called for a missing transaction", async () => {
+    const get = vi.fn().mockResolvedValue(null);
+    const patch = vi.fn();
+    const ctx = {
+      db: {
+        get,
+        patch,
+      },
+    } as any;
+
+    const repo = createConvexTransactionWriteRepository(ctx);
+    const updateMetadataPromise = repo.updateMetadata("tx-404" as never, {
+      source: "test",
+    });
+
+    await expect(updateMetadataPromise).rejects.toBeInstanceOf(DomainError);
+    await expect(updateMetadataPromise).rejects.toMatchObject({
+      code: "transaction_not_found",
+    });
+    expect(get).toHaveBeenCalledWith("tx-404");
+    expect(patch).not.toHaveBeenCalled();
   });
 
   it("treats withdrawals with missing legacy method as bank transfer", async () => {
@@ -230,6 +258,76 @@ describe("Convex adapter repositories", () => {
       details: undefined,
       actor_admin_id: "admin-1",
       created_at: 1234567890,
+    });
+  });
+
+  it("queries latest risk events by the user+created_at index", async () => {
+    const take = vi.fn().mockResolvedValue([
+      {
+        event_type: RiskEventType.HOLD_PLACED,
+        severity: RiskSeverity.WARNING,
+        message: "latest event",
+        created_at: 999,
+      },
+    ]);
+    const order = vi.fn(() => ({ take }));
+    const withIndex = vi.fn((_indexName: string, _predicate: unknown) => ({
+      order,
+    }));
+    const query = vi.fn((_tableName: string) => ({ withIndex }));
+    const ctx = {
+      db: {
+        query,
+      },
+    } as any;
+
+    const repo = createConvexRiskEventRepository(ctx);
+    const result = await repo.findLatestByUserId("user-1" as never);
+
+    expect(query).toHaveBeenCalledWith(TABLE_NAMES.RISK_EVENTS);
+    expect(withIndex).toHaveBeenCalledTimes(1);
+    expect(withIndex.mock.calls[0]?.[0]).toBe("by_user_id_and_created_at");
+    const eq = vi.fn().mockReturnValue("predicate");
+    const predicate = withIndex.mock.calls[0]?.[1] as
+      | ((q: { eq: (field: string, value: string) => string }) => string)
+      | undefined;
+    expect(predicate?.({ eq } as never)).toBe("predicate");
+    expect(eq).toHaveBeenCalledWith("user_id", "user-1");
+    expect(order).toHaveBeenCalledWith("desc");
+    expect(result).toEqual({
+      event_type: RiskEventType.HOLD_PLACED,
+      severity: RiskSeverity.WARNING,
+      message: "latest event",
+      created_at: 999,
+    });
+  });
+
+  it("rejects risk hold create and release without a mutation-capable context", async () => {
+    const ctx = {
+      db: {
+        query: vi.fn(),
+      },
+    } as any;
+
+    const repo = createConvexRiskHoldRepository(ctx);
+
+    await expect(
+      repo.create({
+        user_id: "user-1" as never,
+        scope: RiskHoldScope.WITHDRAWALS,
+        status: RiskHoldStatus.ACTIVE,
+        reason: "manual review",
+        placed_by_admin_id: "admin-1" as never,
+        placed_at: 1,
+      }),
+    ).rejects.toMatchObject({
+      code: "risk_hold_mutation_context_required",
+    });
+
+    await expect(
+      repo.release("hold-1" as never, "admin-1" as never, 2),
+    ).rejects.toMatchObject({
+      code: "risk_hold_mutation_context_required",
     });
   });
 });

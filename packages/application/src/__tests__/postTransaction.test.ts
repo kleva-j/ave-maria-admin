@@ -23,10 +23,22 @@ import {
 // --- Arbitrary generators ---
 
 const arbitraryUserId = fc.uuid();
+const arbitraryUserPlanId = fc.uuid();
+const arbitraryReversalTransactionId = fc.uuid();
 const arbitraryReference = fc
   .string({ minLength: 1, maxLength: 64 })
   .filter((s) => s.trim().length > 0);
 const arbitraryAmountKobo = fc.bigInt({ min: 1n, max: 10_000_000n });
+const arbitraryTxnType = fc.constantFrom<
+  (typeof TxnType)[keyof typeof TxnType]
+>(
+  TxnType.CONTRIBUTION,
+  TxnType.INTEREST_ACCRUAL,
+  TxnType.REFERRAL_BONUS,
+  TxnType.INVESTMENT_YIELD,
+  TxnType.WITHDRAWAL,
+  TxnType.REVERSAL,
+);
 const arbitraryPositiveTxnType = fc.constantFrom<
   (typeof TxnType)[keyof typeof TxnType]
 >(
@@ -38,9 +50,15 @@ const arbitraryPositiveTxnType = fc.constantFrom<
 
 const arbitraryPostTransactionInput = fc.record({
   userId: arbitraryUserId,
+  userPlanId: fc.option(arbitraryUserPlanId, { nil: undefined }),
   reference: arbitraryReference,
   amountKobo: arbitraryAmountKobo,
   type: arbitraryPositiveTxnType,
+  reversalOfTransactionId: fc.option(arbitraryReversalTransactionId, {
+    nil: undefined,
+  }),
+  reversalOfReference: fc.option(arbitraryReference, { nil: undefined }),
+  reversalOfType: fc.option(arbitraryTxnType, { nil: undefined }),
   source: fc.constantFrom<
     (typeof TransactionSource)[keyof typeof TransactionSource]
   >(TransactionSource.USER, TransactionSource.ADMIN, TransactionSource.SYSTEM),
@@ -82,13 +100,17 @@ function makeInMemoryDeps(user: User, plan?: UserSavingsPlan) {
     findById: async (id) =>
       id === currentUser._id ? { ...currentUser } : null,
     updateBalance: async (id, totalBalanceKobo, savingsBalanceKobo) => {
-      if (id === currentUser._id) {
-        currentUser = {
-          ...currentUser,
-          total_balance_kobo: totalBalanceKobo,
-          savings_balance_kobo: savingsBalanceKobo,
-        };
+      if (id !== currentUser._id) {
+        throw new Error(
+          `Unexpected user balance update for ${id}; expected ${currentUser._id}`,
+        );
       }
+
+      currentUser = {
+        ...currentUser,
+        total_balance_kobo: totalBalanceKobo,
+        savings_balance_kobo: savingsBalanceKobo,
+      };
     },
   };
 
@@ -101,13 +123,23 @@ function makeInMemoryDeps(user: User, plan?: UserSavingsPlan) {
     findByUserId: async (uid) =>
       currentPlan && currentPlan.user_id === uid ? [{ ...currentPlan }] : [],
     updateAmount: async (id, currentAmountKobo, updatedAt) => {
-      if (currentPlan && currentPlan._id === id) {
-        currentPlan = {
-          ...currentPlan,
-          current_amount_kobo: currentAmountKobo,
-          updated_at: updatedAt,
-        };
+      if (!currentPlan) {
+        throw new Error(
+          `Unexpected savings plan update for ${id}; no current plan seeded`,
+        );
       }
+
+      if (currentPlan._id !== id) {
+        throw new Error(
+          `Unexpected savings plan update for ${id}; expected ${currentPlan._id}`,
+        );
+      }
+
+      currentPlan = {
+        ...currentPlan,
+        current_amount_kobo: currentAmountKobo,
+        updated_at: updatedAt,
+      };
     },
   };
 
@@ -144,6 +176,15 @@ function makePlan(userId: string, planId: string): UserSavingsPlan {
   };
 }
 
+function makeDepsForInput(input: PostTransactionDTO) {
+  const user = makeUser(input.userId);
+  const plan = input.userPlanId
+    ? makePlan(input.userId, input.userPlanId)
+    : undefined;
+
+  return makeInMemoryDeps(user, plan);
+}
+
 // --- Property 8: Post transaction idempotency ---
 
 describe("Property 8: Post transaction idempotency", () => {
@@ -156,24 +197,28 @@ describe("Property 8: Post transaction idempotency", () => {
           userId: rawInput.userId,
         };
 
-        const user = makeUser(input.userId);
-        const deps = makeInMemoryDeps(user);
+        const deps = makeDepsForInput(input);
         const postTransaction = createPostTransactionUseCase(deps);
 
         // First call — should succeed and create a record
         const first = await postTransaction(input);
         expect(first.idempotent).toBe(false);
 
-        const afterFirst = deps.getTransactions();
-        expect(afterFirst).toHaveLength(1);
+        const afterFirstTransactions = deps.getTransactions();
+        const afterFirstUser = deps.getUser();
+        const afterFirstPlan = deps.getPlan();
+        expect(afterFirstTransactions).toHaveLength(1);
 
         // Second call with identical payload — should be idempotent
         const second = await postTransaction(input);
         expect(second.idempotent).toBe(true);
 
         // No second record should be created
-        const afterSecond = deps.getTransactions();
-        expect(afterSecond).toHaveLength(1);
+        const afterSecondTransactions = deps.getTransactions();
+        expect(afterSecondTransactions).toHaveLength(1);
+        expect(afterSecondTransactions).toEqual(afterFirstTransactions);
+        expect(deps.getUser()).toEqual(afterFirstUser);
+        expect(deps.getPlan()).toEqual(afterFirstPlan);
 
         // The returned transaction should be the same record
         expect(second.transaction._id).toBe(first.transaction._id);
@@ -197,12 +242,14 @@ describe("Property 9: Post transaction conflict detection", () => {
         async (rawInput, differentAmount) => {
           const input: PostTransactionDTO = { ...rawInput };
 
-          const user = makeUser(input.userId);
-          const deps = makeInMemoryDeps(user);
+          const deps = makeDepsForInput(input);
           const postTransaction = createPostTransactionUseCase(deps);
 
           // First call — establishes the reference
           await postTransaction(input);
+          const afterFirstTransactions = deps.getTransactions();
+          const afterFirstUser = deps.getUser();
+          const afterFirstPlan = deps.getPlan();
 
           // Second call — same reference, different amount
           const conflictingInput: PostTransactionDTO = {
@@ -213,6 +260,9 @@ describe("Property 9: Post transaction conflict detection", () => {
           await expect(postTransaction(conflictingInput)).rejects.toThrow(
             DuplicateReferenceError,
           );
+          expect(deps.getTransactions()).toEqual(afterFirstTransactions);
+          expect(deps.getUser()).toEqual(afterFirstUser);
+          expect(deps.getPlan()).toEqual(afterFirstPlan);
         },
       ),
       { numRuns: 100 },
@@ -234,12 +284,14 @@ describe("Property 9: Post transaction conflict detection", () => {
         fc.pre(Boolean(differentType));
 
         const input: PostTransactionDTO = { ...rawInput };
-        const user = makeUser(input.userId);
-        const deps = makeInMemoryDeps(user);
+        const deps = makeDepsForInput(input);
         const postTransaction = createPostTransactionUseCase(deps);
 
         // First call — establishes the reference
         await postTransaction(input);
+        const afterFirstTransactions = deps.getTransactions();
+        const afterFirstUser = deps.getUser();
+        const afterFirstPlan = deps.getPlan();
 
         // Second call — same reference, different type
         const conflictingInput: PostTransactionDTO = {
@@ -250,6 +302,9 @@ describe("Property 9: Post transaction conflict detection", () => {
         await expect(postTransaction(conflictingInput)).rejects.toThrow(
           DuplicateReferenceError,
         );
+        expect(deps.getTransactions()).toEqual(afterFirstTransactions);
+        expect(deps.getUser()).toEqual(afterFirstUser);
+        expect(deps.getPlan()).toEqual(afterFirstPlan);
       }),
       { numRuns: 100 },
     );
@@ -263,11 +318,13 @@ describe("Property 9: Post transaction conflict detection", () => {
         fc.bigInt({ min: 10_000_001n, max: 20_000_000n }),
         async (rawInput, differentAmount) => {
           const input: PostTransactionDTO = { ...rawInput };
-          const user = makeUser(input.userId);
-          const deps = makeInMemoryDeps(user);
+          const deps = makeDepsForInput(input);
           const postTransaction = createPostTransactionUseCase(deps);
 
           await postTransaction(input);
+          const afterFirstTransactions = deps.getTransactions();
+          const afterFirstUser = deps.getUser();
+          const afterFirstPlan = deps.getPlan();
 
           const conflictingInput: PostTransactionDTO = {
             ...input,
@@ -286,6 +343,9 @@ describe("Property 9: Post transaction conflict detection", () => {
           expect((caught as DuplicateReferenceError).code).toBe(
             "duplicate_reference",
           );
+          expect(deps.getTransactions()).toEqual(afterFirstTransactions);
+          expect(deps.getUser()).toEqual(afterFirstUser);
+          expect(deps.getPlan()).toEqual(afterFirstPlan);
         },
       ),
       { numRuns: 100 },
@@ -315,6 +375,9 @@ describe("Post transaction reversal audit fields", () => {
       metadata: { original_type: TxnType.CONTRIBUTION },
       source: TransactionSource.ADMIN,
     });
+    const afterFirstTransactions = deps.getTransactions();
+    const afterFirstUser = deps.getUser();
+    const afterFirstPlan = deps.getPlan();
 
     await expect(
       postTransaction({
@@ -329,6 +392,9 @@ describe("Post transaction reversal audit fields", () => {
         source: TransactionSource.ADMIN,
       }),
     ).rejects.toThrow(DuplicateReferenceError);
+    expect(deps.getTransactions()).toEqual(afterFirstTransactions);
+    expect(deps.getUser()).toEqual(afterFirstUser);
+    expect(deps.getPlan()).toEqual(afterFirstPlan);
   });
 });
 

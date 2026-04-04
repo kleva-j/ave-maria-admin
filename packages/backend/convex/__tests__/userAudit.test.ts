@@ -16,6 +16,7 @@ describe("buildUserProfileSyncAuditChange", () => {
         last_name: "Byron",
       },
     );
+    const serializedAuditChange = JSON.stringify(auditChange);
 
     expect(auditChange.changedFields).toEqual(["email", "last_name"]);
     expect(auditChange.before).toEqual({
@@ -30,9 +31,38 @@ describe("buildUserProfileSyncAuditChange", () => {
       changed_fields: ["email", "last_name"],
     });
 
-    expect(JSON.stringify(auditChange)).not.toContain("old@example.com");
-    expect(JSON.stringify(auditChange)).not.toContain("new@example.com");
-    expect(JSON.stringify(auditChange)).not.toContain("Lovelace");
-    expect(JSON.stringify(auditChange)).not.toContain("Byron");
+    expect(serializedAuditChange).not.toContain("old@example.com");
+    expect(serializedAuditChange).not.toContain("new@example.com");
+    expect(serializedAuditChange).not.toContain("Ada");
+    expect(serializedAuditChange).not.toContain("Lovelace");
+    expect(serializedAuditChange).not.toContain("Byron");
+  });
+
+  it("treats undefined, null, and empty strings as the same absent profile value", () => {
+    const auditChange = buildUserProfileSyncAuditChange(
+      {
+        email: undefined,
+        first_name: "",
+        last_name: null,
+      },
+      {
+        email: null,
+        first_name: undefined,
+        last_name: "",
+      },
+    );
+
+    expect(auditChange.changedFields).toEqual([]);
+    expect(auditChange.before).toEqual({
+      email_present: false,
+      first_name_present: false,
+      last_name_present: false,
+    });
+    expect(auditChange.after).toEqual({
+      email_present: false,
+      first_name_present: false,
+      last_name_present: false,
+      changed_fields: [],
+    });
   });
 });

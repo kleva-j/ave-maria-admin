@@ -3,6 +3,7 @@
  * Implements TransactionReadRepository and TransactionWriteRepository
  * using Convex database context.
  */
+import { DomainError } from "@avm-daily/domain";
 import type { Transaction } from "@avm-daily/domain";
 
 import type { MutationCtx, QueryCtx } from "../_generated/server";
@@ -93,9 +94,12 @@ export function createConvexTransactionWriteRepository(
         type: transaction.type,
         amount_kobo: transaction.amount_kobo,
         reference: transaction.reference,
-
-        reversal_of_transaction_id:
-          transaction.reversal_of_transaction_id as TransactionId,
+        ...(transaction.reversal_of_transaction_id !== undefined
+          ? {
+              reversal_of_transaction_id:
+                transaction.reversal_of_transaction_id as TransactionId,
+            }
+          : {}),
         reversal_of_reference: transaction.reversal_of_reference,
         reversal_of_type: transaction.reversal_of_type,
         metadata: transaction.metadata,
@@ -117,6 +121,14 @@ export function createConvexTransactionWriteRepository(
       id: TransactionId,
       metadata: Record<string, unknown>,
     ): Promise<void> {
+      const existingTransaction = await ctx.db.get(id);
+      if (!existingTransaction) {
+        throw new DomainError(
+          `Transaction not found: ${String(id)}`,
+          "transaction_not_found",
+        );
+      }
+
       await ctx.db.patch(id, { metadata });
     },
   };
