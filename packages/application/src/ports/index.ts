@@ -98,6 +98,7 @@ export interface RiskEventService {
     message: string;
     details?: Record<string, unknown>;
     actorAdminId?: string;
+    createdAt?: number;
   }): Promise<{ id: string }>;
 }
 

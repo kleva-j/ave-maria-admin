@@ -5,9 +5,14 @@ import { DomainError, TxnType } from "@avm-daily/domain";
 import { createConvexTransactionWriteRepository } from "../adapters/transactionAdapters";
 import { createConvexSavingsPlanRepository } from "../adapters/savingsPlanAdapters";
 import { createConvexWithdrawalRepository } from "../adapters/withdrawalAdapter";
-import { createConvexRiskHoldRepository } from "../adapters/riskAdapters";
+import {
+  createConvexRiskEventService,
+  createConvexRiskHoldRepository,
+} from "../adapters/riskAdapters";
 import {
   PlanStatus,
+  RiskEventType,
+  RiskSeverity,
   RiskHoldScope,
   RiskHoldStatus,
   WithdrawalMethod,
@@ -193,6 +198,38 @@ describe("Convex adapter repositories", () => {
       _id: "withdrawal-1",
       status: "pending",
       method: WithdrawalMethod.BANK_TRANSFER,
+    });
+  });
+
+  it("uses an explicit createdAt when recording risk events", async () => {
+    const insert = vi.fn().mockResolvedValue("event-1");
+    const ctx = {
+      db: {
+        insert,
+      },
+    } as any;
+
+    const service = createConvexRiskEventService(ctx);
+
+    await service.record({
+      userId: "user-1" as never,
+      scope: RiskHoldScope.WITHDRAWALS,
+      eventType: RiskEventType.HOLD_PLACED,
+      severity: RiskSeverity.WARNING,
+      message: "hold placed",
+      actorAdminId: "admin-1" as never,
+      createdAt: 1234567890,
+    });
+
+    expect(insert).toHaveBeenCalledWith(TABLE_NAMES.RISK_EVENTS, {
+      user_id: "user-1",
+      scope: RiskHoldScope.WITHDRAWALS,
+      event_type: RiskEventType.HOLD_PLACED,
+      severity: RiskSeverity.WARNING,
+      message: "hold placed",
+      details: undefined,
+      actor_admin_id: "admin-1",
+      created_at: 1234567890,
     });
   });
 });

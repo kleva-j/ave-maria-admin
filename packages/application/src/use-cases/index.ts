@@ -142,6 +142,7 @@ export function createAssertWithdrawalAllowedUseCase(deps: {
       message: blockedDecision.message,
       details: blockedDecision.details,
       actorAdminId: input.actorAdminId,
+      createdAt: input.now,
     });
 
     throw new WithdrawalBlockedError(
@@ -219,6 +220,7 @@ export function createPlaceRiskHoldUseCase(deps: {
       message: `Withdrawal hold placed: ${input.reason.trim()}`,
       details: { hold_id: hold._id },
       actorAdminId: input.adminId,
+      createdAt: placedAt,
     });
 
     await deps.auditLogService.log({
@@ -274,6 +276,7 @@ export function createReleaseRiskHoldUseCase(deps: {
       message: "Withdrawal hold released.",
       details: { hold_id: activeHold._id },
       actorAdminId: input.adminId,
+      createdAt: releasedAt,
     });
 
     await deps.auditLogService.logChange({

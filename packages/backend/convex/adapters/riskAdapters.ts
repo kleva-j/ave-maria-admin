@@ -150,6 +150,7 @@ export function createConvexRiskEventService(
       message: string;
       details?: Record<string, unknown>;
       actorAdminId?: AdminUserId;
+      createdAt?: number;
     }): Promise<{ id: RiskEventId }> {
       const id = await ctx.db.insert(TABLE_NAMES.RISK_EVENTS, {
         user_id: event.userId,
@@ -159,7 +160,7 @@ export function createConvexRiskEventService(
         message: event.message,
         details: event.details,
         actor_admin_id: event.actorAdminId,
-        created_at: Date.now(),
+        created_at: event.createdAt ?? Date.now(),
       });
       return { id };
     },
