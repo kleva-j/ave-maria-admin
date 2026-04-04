@@ -51,7 +51,25 @@ export type EvaluateWithdrawalRiskInput = {
   now?: number;
 };
 
-// 4.1: replaced riskEventRepository with bankAccountEventRepository; replaced inline constants with domain imports
+/**
+ * createEvaluateWithdrawalRiskUseCase composes `RiskHoldRepository`,
+ * `WithdrawalRepository`, and `BankAccountEventRepository` to produce a
+ * withdrawal risk decision from the user's current hold state, recent
+ * withdrawal activity, and latest bank-account change timestamp.
+ *
+ * `BankAccountEventRepository` intentionally replaced the older generic
+ * risk-event dependency because bank-account changes are account-level events
+ * with their own sourcing and aggregation concerns, while system-wide
+ * `RiskEventService` records operational outcomes after a decision is made.
+ * Keeping those responsibilities separate prevents this read-path use case from
+ * depending on write-side risk event history that is broader than the bank
+ * account freshness signal it actually needs.
+ *
+ * Consumers should pass a valid application `userId`, the requested withdrawal
+ * amount, and method. The returned `RiskDecisionDTO` is derived only from those
+ * repositories, so callers can rely on the invariant that bank-account-change
+ * checks come from `BankAccountEventRepository` rather than generic risk events.
+ */
 export function createEvaluateWithdrawalRiskUseCase(deps: {
   riskHoldRepository: RiskHoldRepository;
   withdrawalRepository: WithdrawalRepository;
