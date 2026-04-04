@@ -865,22 +865,6 @@ export const post = internalMutation({
   handler: async (ctx, args) => {
     const result = await postTransactionEntry(ctx, args);
 
-    if (args.actorId) {
-      await auditLog.log(ctx, {
-        action: "transaction.posted",
-        actorId: args.actorId,
-        resourceType: RESOURCE_TYPE.TRANSACTIONS,
-        resourceId: result.transaction._id,
-        severity: "info",
-        metadata: {
-          user_id: args.userId,
-          type: args.type,
-          amount_kobo: args.amountKobo.toString(),
-          reference: args.reference,
-        },
-      });
-    }
-
     return buildTransactionSummary(result.transaction);
   },
 });
@@ -890,21 +874,6 @@ export const reverse = internalMutation({
   returns: transactionSummaryValidator,
   handler: async (ctx, args) => {
     const result = await reverseTransactionEntry(ctx, args);
-
-    if (args.actorId) {
-      await auditLog.log(ctx, {
-        action: "transaction.reversed",
-        actorId: args.actorId,
-        resourceType: RESOURCE_TYPE.TRANSACTIONS,
-        resourceId: result.transaction._id,
-        severity: "warning",
-        metadata: {
-          original_transaction_id: args.originalTransactionId,
-          reference: args.reference,
-          reason: args.reason,
-        },
-      });
-    }
 
     return buildTransactionSummary(result.transaction);
   },
