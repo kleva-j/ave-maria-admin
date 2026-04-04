@@ -44,25 +44,8 @@ import { getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
 
 import {
-  createEvaluateWithdrawalRiskUseCase,
-  createAssertWithdrawalAllowedUseCase,
-} from "@avm-daily/application/use-cases";
-
-import {
-  createConvexBankAccountEventRepository,
-  createConvexRiskEventService,
-  createConvexRiskHoldRepository,
-} from "./adapters/riskAdapters";
-
-import { createConvexWithdrawalRepository } from "./adapters/withdrawalAdapter";
-
-import {
-  DomainError,
-  WithdrawalBlockedError,
-} from "@avm-daily/domain";
-
-import {
   assertWithdrawalAdminActionAllowed,
+  assertWithdrawalRequestAllowed,
   withdrawalRiskSummaryValidator,
   buildWithdrawalRiskSummary,
 } from "./risk";
@@ -477,38 +460,12 @@ export const request = mutation({
       cashDetails = buildCashDetails(user, args.pickup_note);
     }
 
-    await (async () => {
-      const evaluateWithdrawalRisk = createEvaluateWithdrawalRiskUseCase({
-        riskHoldRepository: createConvexRiskHoldRepository(ctx),
-        withdrawalRepository: createConvexWithdrawalRepository(ctx),
-        bankAccountEventRepository: createConvexBankAccountEventRepository(ctx),
-      });
-      const assertWithdrawalAllowed = createAssertWithdrawalAllowedUseCase({
-        evaluateWithdrawalRisk,
-        riskEventService: createConvexRiskEventService(ctx),
-      });
-      try {
-        await assertWithdrawalAllowed({
-          userId: String(user._id),
-          amountKobo: args.amount_kobo,
-          method,
-          now,
-        });
-      } catch (err) {
-        if (err instanceof WithdrawalBlockedError) {
-          throw new ConvexError({
-            code: err.code,
-            scope: err.scope,
-            rule: err.rule,
-            message: err.message,
-          });
-        }
-        if (err instanceof DomainError) {
-          throw new ConvexError({ code: err.code, message: err.message });
-        }
-        throw err;
-      }
-    })();
+    await assertWithdrawalRequestAllowed(ctx, {
+      user,
+      method,
+      amountKobo: args.amount_kobo,
+      now,
+    });
 
     const postedTransaction = await postTransactionEntry(ctx, {
       userId: user._id,

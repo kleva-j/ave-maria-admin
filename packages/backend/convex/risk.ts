@@ -11,6 +11,7 @@
 import type { MutationCtx } from "./_generated/server";
 import type { WithdrawalMethod } from "./shared";
 import type {
+  UserRiskHoldId,
   UserRiskHold,
   RiskEvent,
   AdminUser,
@@ -36,12 +37,12 @@ import {
 
 import {
   createConvexBankAccountEventRepository,
-  createConvexRiskEventService,
+  createConvexRiskEventRepository,
   createConvexRiskHoldRepository,
+  createConvexRiskEventService,
 } from "./adapters/riskAdapters";
 
 import {
-  RiskHoldStatus,
   riskHoldStatus,
   RiskHoldScope,
   riskEventType,
@@ -113,24 +114,6 @@ function buildWithdrawalRiskErrorData(decision: {
   };
 }
 
-/**
- * Fetches the active withdrawal hold for a user, if any
- */
-async function getActiveWithdrawalHold(
-  ctx: Context,
-  userId: UserId,
-): Promise<UserRiskHold | null> {
-  const activeHolds = await ctx.db
-    .query(TABLE_NAMES.USER_RISK_HOLDS)
-    .withIndex("by_user_id_and_status", (q) =>
-      q.eq("user_id", userId).eq("status", RiskHoldStatus.ACTIVE),
-    )
-    .collect();
-
-  return (
-    activeHolds.find((hold) => hold.scope === RiskHoldScope.WITHDRAWALS) ?? null
-  );
-}
 
 /**
  * Converts a UserRiskHold to a summary object for client response
@@ -166,34 +149,25 @@ function summarizeRiskEvent(event: RiskEvent) {
   };
 }
 
-/**
- * Fetches the most recent risk event for a user
- */
-async function getLatestRiskEvent(ctx: Context, userId: UserId) {
-  const events = await ctx.db
-    .query(TABLE_NAMES.RISK_EVENTS)
-    .withIndex("by_user_id_and_created_at", (q) => q.eq("user_id", userId))
-    .order("desc")
-    .take(1);
-
-  return events[0] ?? null;
-}
 
 /**
  * Builds a comprehensive risk summary for UI display
  */
 export async function buildWithdrawalRiskSummary(ctx: Context, userId: UserId) {
+  const riskHoldRepository = createConvexRiskHoldRepository(ctx as any);
+  const riskEventRepository = createConvexRiskEventRepository(ctx as any);
+
   const [activeHold, latestEvent] = await Promise.all([
-    getActiveWithdrawalHold(ctx, userId),
-    getLatestRiskEvent(ctx, userId),
+    riskHoldRepository.findActiveWithdrawalHold(userId),
+    riskEventRepository.findLatestByUserId(userId),
   ]);
 
   return {
     has_active_hold: activeHold !== null,
     blocked: activeHold !== null,
     block_reason: activeHold?.reason,
-    active_hold: activeHold ? summarizeRiskHold(activeHold) : undefined,
-    latest_event: latestEvent ? summarizeRiskEvent(latestEvent) : undefined,
+    active_hold: activeHold ? summarizeRiskHold(activeHold as UserRiskHold) : undefined,
+    latest_event: latestEvent ? summarizeRiskEvent(latestEvent as RiskEvent) : undefined,
   };
 }
 
@@ -262,7 +236,8 @@ export async function assertWithdrawalAdminActionAllowed(
     actorAdminId: AdminUser["_id"];
   },
 ) {
-  const activeHold = await getActiveWithdrawalHold(ctx, args.userId);
+  const riskHoldRepository = createConvexRiskHoldRepository(ctx);
+  const activeHold = await riskHoldRepository.findActiveWithdrawalHold(args.userId);
   if (!activeHold) {
     return;
   }
@@ -329,12 +304,13 @@ export const placeUserHold = mutation({
     }
 
     // Fetch the newly created hold to return the summary
-    const activeHold = await getActiveWithdrawalHold(ctx, args.userId);
+    const riskHoldRepository = createConvexRiskHoldRepository(ctx);
+    const activeHold = await riskHoldRepository.findActiveWithdrawalHold(args.userId);
     if (!activeHold) {
       throw new ConvexError("Failed to create risk hold");
     }
 
-    return summarizeRiskHold(activeHold);
+    return summarizeRiskHold(activeHold as UserRiskHold);
   },
 });
 
@@ -353,7 +329,8 @@ export const releaseUserHold = mutation({
     const admin = await getAdminUser(ctx);
 
     // Capture the hold before releasing so we can return it
-    const activeHold = await getActiveWithdrawalHold(ctx, args.userId);
+    const riskHoldRepository = createConvexRiskHoldRepository(ctx);
+    const activeHold = await riskHoldRepository.findActiveWithdrawalHold(args.userId);
     if (!activeHold) {
       throw new ConvexError("User does not have an active withdrawal hold");
     }
@@ -377,7 +354,7 @@ export const releaseUserHold = mutation({
     }
 
     // Fetch the updated hold to return the summary
-    const updated = await ctx.db.get(activeHold._id);
+    const updated = (await ctx.db.get(activeHold._id as UserRiskHoldId)) as UserRiskHold | null;
     if (!updated) {
       throw new ConvexError("Failed to release risk hold");
     }

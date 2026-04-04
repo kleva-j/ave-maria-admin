@@ -49,11 +49,10 @@ export function createConvexTransactionReadRepository(
 ): TransactionReadRepository {
   return {
     async findByReference(reference: string): Promise<Transaction | null> {
-      const docs = await ctx.db
+      const doc = await ctx.db
         .query(TABLE_NAMES.TRANSACTIONS)
         .withIndex("by_reference", (q) => q.eq("reference", reference))
-        .collect();
-      const doc = docs[0];
+        .unique();
       return doc ? docToTransaction(doc) : null;
     },
 

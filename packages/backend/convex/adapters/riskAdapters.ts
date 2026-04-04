@@ -33,25 +33,30 @@ export function createConvexRiskHoldRepository(
   return {
     async findActiveWithdrawalHold(userId: UserId): Promise<{
       _id: UserRiskHoldId;
+      user_id: UserId;
+      scope: RiskHoldScope;
+      status: RiskHoldStatus;
       reason: string;
+      placed_by_admin_id: AdminUserId;
       placed_at: number;
     } | null> {
-      const activeHolds = await ctx.db
+      const hold = await ctx.db
         .query(TABLE_NAMES.USER_RISK_HOLDS)
         .withIndex("by_user_id_and_status", (q) =>
           q.eq("user_id", userId).eq("status", RiskHoldStatus.ACTIVE),
         )
-        .collect();
-
-      const hold = activeHolds.find(
-        (h) => h.scope === RiskHoldScope.WITHDRAWALS,
-      );
+        .filter((q) => q.eq(q.field("scope"), RiskHoldScope.WITHDRAWALS))
+        .unique();
 
       if (!hold) return null;
 
       return {
         _id: hold._id,
+        user_id: hold.user_id,
+        scope: hold.scope,
+        status: hold.status,
         reason: hold.reason,
+        placed_by_admin_id: hold.placed_by_admin_id,
         placed_at: hold.placed_at,
       };
     },
@@ -152,22 +157,20 @@ export function createConvexBankAccountEventRepository(
     async getLastBankAccountChangeAt(
       userId: UserId,
     ): Promise<number | undefined> {
-      const events = await ctx.db
+      const latestEvent = await ctx.db
         .query(TABLE_NAMES.USER_BANK_ACCOUNT_EVENTS)
         .withIndex("by_user_id", (q) => q.eq("user_id", userId))
-        .collect();
+        .order("desc")
+        .filter((q) =>
+          q.or(
+            q.eq(q.field("event_type"), BankAccountEventType.CREATED),
+            q.eq(q.field("event_type"), BankAccountEventType.UPDATED),
+            q.eq(q.field("event_type"), BankAccountEventType.SET_PRIMARY),
+          ),
+        )
+        .first();
 
-      const relevantEvents = events.filter(
-        (e) =>
-          e.event_type === BankAccountEventType.CREATED ||
-          e.event_type === BankAccountEventType.UPDATED ||
-          e.event_type === BankAccountEventType.SET_PRIMARY,
-      );
-
-      if (relevantEvents.length === 0) return undefined;
-
-      return relevantEvents.sort((a, b) => b.created_at - a.created_at)[0]
-        ?.created_at;
+      return latestEvent?.created_at;
     },
   };
 }
