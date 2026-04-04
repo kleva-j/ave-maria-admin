@@ -23,7 +23,7 @@ import type {
   UserId,
 } from "./types";
 
-import {
+import type {
   WithdrawalStatus,
   TABLE_NAMES,
   UserStatus,

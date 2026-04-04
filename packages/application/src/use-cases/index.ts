@@ -6,7 +6,22 @@ import type {
   PostTransactionDTO,
   RiskDecisionDTO,
   TransactionDTO,
-} from "@/app/dto";
+} from "../dto";
+
+import {
+  evaluateWithdrawalRiskDecision,
+  buildWithdrawalCapabilities,
+  TransactionValidationError,
+  DuplicateReferenceError,
+  WithdrawalBlockedError,
+  computeProjectionDelta,
+  VELOCITY_WINDOW_MS,
+  assertValidAmount,
+  RiskHoldScope,
+  DomainError,
+  TxnType,
+  DAY_MS,
+} from "@avm-daily/domain";
 
 import type {
   WithdrawalRiskEvaluationInput,
@@ -26,22 +41,7 @@ import type {
   RiskEventService,
   AuditLogService,
   UserRepository,
-} from "@/app/ports";
-
-import {
-  evaluateWithdrawalRiskDecision,
-  buildWithdrawalCapabilities,
-  TransactionValidationError,
-  DuplicateReferenceError,
-  WithdrawalBlockedError,
-  computeProjectionDelta,
-  VELOCITY_WINDOW_MS,
-  assertValidAmount,
-  RiskHoldScope,
-  DomainError,
-  TxnType,
-  DAY_MS,
-} from "@avm-daily/domain";
+} from "../ports";
 
 export type EvaluateWithdrawalRiskInput = {
   userId: string;
@@ -407,7 +407,7 @@ export function createPostTransactionUseCase(deps: PostTransactionDeps) {
     // 7. Compute projection delta
     const effectiveType =
       input.type === TxnType.REVERSAL
-        ? (input.metadata?.original_type as string | undefined) ?? input.type
+        ? ((input.metadata?.original_type as string | undefined) ?? input.type)
         : input.type;
 
     const delta = computeProjectionDelta(

@@ -8,6 +8,12 @@
  * @module
  */
 
+import type * as adapters_auditLogAdapter from "../adapters/auditLogAdapter.js";
+import type * as adapters_riskAdapters from "../adapters/riskAdapters.js";
+import type * as adapters_savingsPlanAdapters from "../adapters/savingsPlanAdapters.js";
+import type * as adapters_transactionAdapters from "../adapters/transactionAdapters.js";
+import type * as adapters_userAdapters from "../adapters/userAdapters.js";
+import type * as adapters_withdrawalAdapter from "../adapters/withdrawalAdapter.js";
 import type * as admin from "../admin.js";
 import type * as aggregateHelpers from "../aggregateHelpers.js";
 import type * as aggregates from "../aggregates.js";
@@ -55,6 +61,12 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "adapters/auditLogAdapter": typeof adapters_auditLogAdapter;
+  "adapters/riskAdapters": typeof adapters_riskAdapters;
+  "adapters/savingsPlanAdapters": typeof adapters_savingsPlanAdapters;
+  "adapters/transactionAdapters": typeof adapters_transactionAdapters;
+  "adapters/userAdapters": typeof adapters_userAdapters;
+  "adapters/withdrawalAdapter": typeof adapters_withdrawalAdapter;
   admin: typeof admin;
   aggregateHelpers: typeof aggregateHelpers;
   aggregates: typeof aggregates;

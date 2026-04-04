@@ -1,4 +1,4 @@
-import type { TxnType } from "@/domain/enums";
+import type { TxnType } from "../enums";
 
 export type ProjectionDelta = {
   totalBalanceKobo: bigint;

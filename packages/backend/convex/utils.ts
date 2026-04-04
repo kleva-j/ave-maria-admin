@@ -57,6 +57,27 @@ export async function ensureUser(ctx: Context, userId: UserId) {
   return user;
 }
 
+/**
+ * Retrieves the authenticated user's ID from the database
+ *
+ * @param ctx - Query or mutation context
+ * @returns User ID from database
+ * @throws ConvexError if not authenticated
+ */
+export async function getAuthUserId(ctx: Context) {
+  const authUser = await authKit.getAuthUser(ctx);
+  if (!authUser) {
+    throw new ConvexError("Not authenticated");
+  }
+  return authUser.id;
+}
+
+/**
+ * Ensures that an authenticated user exists in the database
+ *
+ * @param ctx - Query or mutation context
+ * @throws ConvexError if the user does not exist
+ */
 export async function ensureAuthedUser(ctx: Context) {
   const authUser = await authKit.getAuthUser(ctx);
   if (!authUser) throw new ConvexError("Not authenticated");

@@ -1,7 +1,11 @@
+import type { Auth } from "convex/server";
+
 import type { QueryCtx, MutationCtx } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
 
+// Context
 export type Context = QueryCtx | MutationCtx;
+export type AuthContext = Context & { auth: Auth };
 
 // Users
 export type AdminUserId = Id<"admin_users">;
