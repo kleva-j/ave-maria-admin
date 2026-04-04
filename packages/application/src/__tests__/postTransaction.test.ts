@@ -281,3 +281,46 @@ describe("Property 9: Post transaction conflict detection", () => {
     );
   });
 });
+
+// --- Property 16: Use-case errors are DomainError instances ---
+
+describe("Property 16: Use-case errors are DomainError instances", () => {
+  it("duplicate reference with different payload throws an instance of DomainError (specifically DuplicateReferenceError)", async () => {
+    // Feature: clean-architecture-refactor, Property 16: Use-case errors are DomainError instances
+    await fc.assert(
+      fc.asyncProperty(
+        arbitraryPostTransactionInput,
+        // Generate a different amount guaranteed to differ from the first (which is max 10_000_000n)
+        fc.bigInt({ min: 10_000_001n, max: 20_000_000n }),
+        async (rawInput, differentAmount) => {
+          const input: PostTransactionDTO = { ...rawInput };
+          const user = makeUser(input.userId);
+          const deps = makeInMemoryDeps(user);
+          const postTransaction = createPostTransactionUseCase(deps);
+
+          // First call — establishes the reference
+          await postTransaction(input);
+
+          // Second call — same reference, different amount (conflict)
+          const conflictingInput: PostTransactionDTO = {
+            ...input,
+            amountKobo: differentAmount,
+          };
+
+          let caught: unknown;
+          try {
+            await postTransaction(conflictingInput);
+          } catch (err) {
+            caught = err;
+          }
+
+          // The error MUST be a DomainError subclass, not a plain Error
+          expect(caught).toBeInstanceOf(DomainError);
+          expect(caught).toBeInstanceOf(DuplicateReferenceError);
+          expect((caught as DomainError).code).toBe("duplicate_reference");
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+});

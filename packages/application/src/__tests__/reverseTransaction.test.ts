@@ -263,3 +263,64 @@ describe("Property 10: Reverse transaction rejects reversals of reversals", () =
     );
   });
 });
+
+// --- Property 16: Use-case errors are DomainError instances ---
+
+describe("Property 16: Use-case errors are DomainError instances", () => {
+  it("reversing a REVERSAL transaction throws an instance of DomainError (not a plain Error)", async () => {
+    // Feature: clean-architecture-refactor, Property 16: Use-case errors are DomainError instances
+    await fc.assert(
+      fc.asyncProperty(
+        arbitraryUserId,
+        arbitraryReference,
+        arbitraryReverseReference,
+        fc.record({
+          amountKobo: fc.bigInt({ min: -10_000_000n, max: -1n }),
+          metadata: fc.option(
+            fc.dictionary(fc.string({ minLength: 1, maxLength: 16 }), fc.string()),
+            { nil: undefined },
+          ),
+        }),
+        async (userId, originalRef, reverseRef, extra) => {
+          fc.pre(originalRef !== reverseRef);
+
+          const user = makeUser(userId);
+
+          // Seed a REVERSAL transaction — this is the "reversing a reversal" scenario
+          const reversalTx: Transaction = {
+            _id: "tx-reversal-p16",
+            user_id: userId,
+            type: TxnType.REVERSAL,
+            amount_kobo: extra.amountKobo,
+            reference: originalRef,
+            metadata: extra.metadata ?? {},
+            created_at: Date.now(),
+          };
+
+          const deps = makeInMemoryDeps(user, [reversalTx]);
+          const reverseTransaction = createReverseTransactionUseCase(deps);
+
+          const input: ReverseTransactionDTO = {
+            originalTransactionId: "tx-reversal-p16",
+            reference: reverseRef,
+            reason: "property 16 test",
+            source: TransactionSource.ADMIN,
+          };
+
+          let caught: unknown;
+          try {
+            await reverseTransaction(input);
+          } catch (err) {
+            caught = err;
+          }
+
+          // The error MUST be a DomainError subclass, not a plain Error
+          expect(caught).toBeInstanceOf(DomainError);
+          expect((caught as DomainError).code).toBeDefined();
+          expect(typeof (caught as DomainError).code).toBe("string");
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+});
