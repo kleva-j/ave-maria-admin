@@ -419,33 +419,6 @@ function assertNegativeAmount(type: TxnType, amountKobo: bigint) {
  * @param value - The value to canonicalize
  * @returns A canonically ordered version of the value
  */
-function canonicalizeValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => canonicalizeValue(item));
-  }
-
-  if (isRecord(value)) {
-    return Object.keys(value)
-      .sort()
-      .reduce<Record<string, unknown>>((result, key) => {
-        result[key] = canonicalizeValue(value[key]);
-        return result;
-      }, {});
-  }
-
-  return value;
-}
-
-/**
- * Creates a stable JSON string representation of a value.
- * Used for comparing metadata objects and detecting duplicates.
- * 
- * @param value - The value to stringify
- * @returns A deterministic JSON string representation
- */
-function stableStringify(value: unknown) {
-  return JSON.stringify(canonicalizeValue(value));
-}
 
 /**
  * Normalizes and validates contribution transaction metadata.
@@ -757,45 +730,6 @@ async function getTransactionsByReference(ctx: Context, reference: string) {
     .collect();
 }
 
-export function buildComparableTransactionPayload(input: {
-  userId: UserId;
-  userPlanId?: UserSavingsPlanId;
-  type: TxnType;
-  amountKobo: bigint;
-  reference: string;
-  reversalOfTransactionId?: TransactionId;
-  reversalOfReference?: string;
-  reversalOfType?: TxnType;
-  metadata: Record<string, unknown>;
-}) {
-  return {
-    user_id: String(input.userId),
-    user_plan_id: input.userPlanId ? String(input.userPlanId) : undefined,
-    type: input.type,
-    amount_kobo: input.amountKobo.toString(),
-    reference: input.reference,
-    reversal_of_transaction_id: input.reversalOfTransactionId
-      ? String(input.reversalOfTransactionId)
-      : undefined,
-    reversal_of_reference: input.reversalOfReference,
-    reversal_of_type: input.reversalOfType,
-    metadata: input.metadata,
-  };
-}
-
-function comparableTransactionFromDoc(transaction: Transaction) {
-  return buildComparableTransactionPayload({
-    userId: transaction.user_id,
-    userPlanId: transaction.user_plan_id,
-    type: transaction.type,
-    amountKobo: transaction.amount_kobo,
-    reference: transaction.reference,
-    reversalOfTransactionId: transaction.reversal_of_transaction_id,
-    reversalOfReference: transaction.reversal_of_reference,
-    reversalOfType: transaction.reversal_of_type,
-    metadata: asObject(transaction.metadata),
-  });
-}
 
 function getEffectiveType(transaction: Transaction) {
   if (transaction.type !== TxnType.REVERSAL) {
@@ -811,12 +745,6 @@ function getEffectiveType(transaction: Transaction) {
   return transaction.reversal_of_type;
 }
 
-export function areComparableTransactionPayloadsEqual(
-  left: ReturnType<typeof buildComparableTransactionPayload>,
-  right: ReturnType<typeof buildComparableTransactionPayload>,
-) {
-  return stableStringify(left) === stableStringify(right);
-}
 
 /**
  * Updates the denormalized balances for a user and their savings plan.
@@ -997,55 +925,6 @@ async function preparePostArgs(
   };
 }
 
-/**
- * Performs a deep comparison between an existing transaction and a new request.
- * Used for idempotency to ensure that the same reference isn't used for different financial data.
- */
-function matchesIdempotentPayload(
-  transaction: Transaction,
-  prepared: PreparedPostArgs,
-) {
-  return areComparableTransactionPayloadsEqual(
-    comparableTransactionFromDoc(transaction),
-    buildComparableTransactionPayload({
-      userId: prepared.user._id,
-      userPlanId: prepared.userPlan?._id,
-      type: prepared.type,
-      amountKobo: prepared.amountKobo,
-      reference: prepared.reference,
-      reversalOfTransactionId: prepared.reversalOfTransaction?._id,
-      reversalOfReference: prepared.reversalOfReference,
-      reversalOfType: prepared.reversalOfType,
-      metadata: prepared.metadata,
-    }),
-  );
-}
-
-/**
- * Resolves a transaction reference during a posting attempt.
- * If the reference exists, it verifies idempotency; otherwise, it allows a new entry.
- */
-async function resolveExistingReference(
-  ctx: MutationCtx,
-  prepared: PreparedPostArgs,
-) {
-  const existing = await getTransactionsByReference(ctx, prepared.reference);
-  if (existing.length === 0) {
-    return null;
-  }
-
-  if (existing.length > 1) {
-    throw new ConvexError("Multiple transactions share the same reference");
-  }
-
-  if (!matchesIdempotentPayload(existing[0], prepared)) {
-    throw new ConvexError(
-      "Transaction reference already exists with different payload",
-    );
-  }
-
-  return existing[0];
-}
 
 function shouldAuditTransaction(source: TransactionSource) {
   return (
