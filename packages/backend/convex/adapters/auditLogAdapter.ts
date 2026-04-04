@@ -2,7 +2,11 @@
  * Convex adapter factory for AuditLogService port interface.
  * Implements AuditLogService using the convex-audit-log component.
  */
-import type { AuditLogService } from "@avm-daily/application/ports";
+import type {
+  AuditLogChangeParams,
+  AuditLogChangeSnapshot,
+  AuditLogService,
+} from "@avm-daily/application/ports";
 
 import type { MutationCtx } from "../_generated/server";
 
@@ -30,15 +34,9 @@ export function createConvexAuditLogService(ctx: MutationCtx): AuditLogService {
       });
     },
 
-    async logChange(params: {
-      action: string;
-      actorId?: string;
-      resourceType: string;
-      resourceId: string;
-      before: unknown;
-      after: unknown;
-      severity: string;
-    }): Promise<void> {
+    async logChange<
+      T extends AuditLogChangeSnapshot = AuditLogChangeSnapshot,
+    >(params: AuditLogChangeParams<T>): Promise<void> {
       await auditLog.logChange(ctx, {
         action: params.action,
         actorId: params.actorId,

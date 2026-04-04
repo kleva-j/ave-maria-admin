@@ -104,6 +104,20 @@ export interface RiskEventService {
 
 // --- Audit Log Port ---
 
+export type AuditLogChangeSnapshot = Record<string, unknown>;
+
+export interface AuditLogChangeParams<
+  T extends AuditLogChangeSnapshot = AuditLogChangeSnapshot,
+> {
+  action: string;
+  actorId?: string;
+  resourceType: string;
+  resourceId: string;
+  before: T;
+  after: T;
+  severity: string;
+}
+
 export interface AuditLogService {
   log(params: {
     action: string;
@@ -113,13 +127,7 @@ export interface AuditLogService {
     severity: string;
     metadata?: Record<string, unknown>;
   }): Promise<void>;
-  logChange(params: {
-    action: string;
-    actorId?: string;
-    resourceType: string;
-    resourceId: string;
-    before: unknown;
-    after: unknown;
-    severity: string;
-  }): Promise<void>;
+  logChange<
+    T extends AuditLogChangeSnapshot = AuditLogChangeSnapshot,
+  >(params: AuditLogChangeParams<T>): Promise<void>;
 }
