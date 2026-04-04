@@ -1,6 +1,14 @@
 import type { SavingsPlanTemplate, UserSavingsPlan } from "../entities";
 import type { PlanStatus } from "../enums";
 
+import {
+  differenceInCalendarDays,
+  parseISO,
+  addDays,
+  isValid,
+  format,
+} from "date-fns";
+
 import { PlanStatus as PS } from "../enums";
 import { DomainError } from "../errors";
 
@@ -79,7 +87,7 @@ export function validateInterestRate(value: number) {
 }
 
 export function todayIsoDate(now = new Date()) {
-  return now.toISOString().slice(0, 10);
+  return format(now, "yyyy-MM-dd");
 }
 
 export function parseIsoDate(value: string, fieldName = "date") {
@@ -90,14 +98,9 @@ export function parseIsoDate(value: string, fieldName = "date") {
     );
   }
 
-  const [year, month, day] = value.split("-").map((part) => Number(part));
-  const date = new Date(Date.UTC(year, month - 1, day));
+  const date = parseISO(value);
 
-  if (
-    date.getUTCFullYear() !== year ||
-    date.getUTCMonth() !== month - 1 ||
-    date.getUTCDate() !== day
-  ) {
+  if (!isValid(date)) {
     throw new DomainError(
       `${fieldName} must be a valid calendar date`,
       "invalid_calendar_date",
@@ -109,16 +112,15 @@ export function parseIsoDate(value: string, fieldName = "date") {
 
 export function addDaysToIsoDate(value: string, days: number) {
   const date = parseIsoDate(value, "startDate");
-  date.setUTCDate(date.getUTCDate() + days);
-  return todayIsoDate(date);
+  const result = addDays(date, days);
+  return todayIsoDate(result);
 }
 
 export function diffCalendarDays(fromIso: string, toIso: string) {
   const from = parseIsoDate(fromIso, "fromDate");
   const to = parseIsoDate(toIso, "toDate");
-  const differenceMs = to.getTime() - from.getTime();
 
-  return Math.round(differenceMs / 86_400_000);
+  return differenceInCalendarDays(to, from);
 }
 
 export function resolvePlanDates(params: {

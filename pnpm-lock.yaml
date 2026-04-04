@@ -389,6 +389,10 @@ importers:
   packages/config: {}
 
   packages/domain:
+    dependencies:
+      date-fns:
+        specifier: 'catalog:'
+        version: 4.1.0
     devDependencies:
       '@avm-daily/config':
         specifier: workspace:*
