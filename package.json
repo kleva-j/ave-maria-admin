@@ -14,6 +14,8 @@
     "dev:web": "turbo -F web dev",
     "dev:server": "turbo -F @avm-daily/backend dev",
     "dev:setup": "turbo -F @avm-daily/backend dev:setup",
+    "test": "turbo test",
+    "test:coverage": "turbo test:coverage",
     "check": "oxlint && oxfmt --write"
   },
   "dependencies": {

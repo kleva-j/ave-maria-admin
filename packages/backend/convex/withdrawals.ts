@@ -26,6 +26,7 @@
  * @module withdrawals
  */
 import type { MutationCtx } from "./_generated/server";
+import type { AdminRole } from "./shared";
 import type {
   UserBankAccountId,
   UserBankAccount,
@@ -44,8 +45,8 @@ import { auditLog } from "./auditLog";
 
 import {
   assertWithdrawalAdminActionAllowed,
-  withdrawalRiskSummaryValidator,
   assertWithdrawalRequestAllowed,
+  withdrawalRiskSummaryValidator,
   buildWithdrawalRiskSummary,
 } from "./risk";
 
@@ -65,7 +66,6 @@ import {
   RESOURCE_TYPE,
   TABLE_NAMES,
   UserStatus,
-  AdminRole,
   TxnType,
 } from "./shared";
 
@@ -298,7 +298,12 @@ function assertAdminCanHandleCashWithdrawal(
     return;
   }
 
-  const capabilities = buildWithdrawalCapabilities(adminRole, withdrawal, {
+  const capabilities = buildWithdrawalCapabilities(adminRole, {
+    status: withdrawal.status,
+    method: (withdrawal as Withdrawal & { method?: unknown }).method === WithdrawalMethod.CASH
+      ? WithdrawalMethod.CASH
+      : WithdrawalMethod.BANK_TRANSFER,
+  }, {
     has_active_hold: false,
   });
   const capability = capabilities[action];
@@ -337,13 +342,13 @@ export const listForReview = query({
     status: v.optional(withdrawalStatus),
   },
   returns: v.array(adminWithdrawalSummaryValidator),
-  handler: async (ctx, args) => {
+  handler: async (ctx, { status }) => {
     const admin = await getAdminUser(ctx);
 
-    const withdrawals = args.status
+    const withdrawals = status
       ? await ctx.db
           .query(TABLE_NAMES.WITHDRAWALS)
-          .withIndex("by_status", (q) => q.eq("status", args.status!))
+          .withIndex("by_status", (q) => q.eq("status", status))
           .collect()
       : await ctx.db.query(TABLE_NAMES.WITHDRAWALS).collect();
 
@@ -380,7 +385,12 @@ export const listForReview = query({
           risk,
           capabilities: buildWithdrawalCapabilities(
             admin.role,
-            withdrawal,
+            {
+              status: withdrawal.status,
+              method: (withdrawal as Withdrawal & { method?: unknown }).method === WithdrawalMethod.CASH
+                ? WithdrawalMethod.CASH
+                : WithdrawalMethod.BANK_TRANSFER,
+            },
             risk,
           ),
         };

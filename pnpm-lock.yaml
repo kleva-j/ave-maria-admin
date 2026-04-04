@@ -324,6 +324,12 @@ importers:
       '@types/node':
         specifier: ^24.3.0
         version: 24.12.0
+      '@vitest/coverage-v8':
+        specifier: 4.0.18
+        version: 4.0.18(vitest@4.0.18(@types/node@24.12.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.12.10(@types/node@24.12.0)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
+      fast-check:
+        specifier: ^4.6.0
+        version: 4.6.0
       typescript:
         specifier: ^5
         version: 5.9.3
@@ -333,6 +339,12 @@ importers:
 
   packages/backend:
     dependencies:
+      '@avm-daily/application':
+        specifier: workspace:*
+        version: link:../application
+      '@avm-daily/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@convex-dev/aggregate':
         specifier: ^0.2.1
         version: 0.2.1(convex@1.33.1(react@19.2.4))
@@ -364,6 +376,9 @@ importers:
       '@types/node':
         specifier: ^24.3.0
         version: 24.12.0
+      '@vitest/coverage-v8':
+        specifier: 4.0.18
+        version: 4.0.18(vitest@4.0.18(@types/node@24.12.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.12.10(@types/node@24.12.0)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
       typescript:
         specifier: ^5
         version: 5.9.3
@@ -381,6 +396,12 @@ importers:
       '@types/node':
         specifier: ^24.3.0
         version: 24.12.0
+      '@vitest/coverage-v8':
+        specifier: 4.0.18
+        version: 4.0.18(vitest@4.0.18(@types/node@24.12.0)(jiti@2.6.1)(jsdom@26.1.0)(lightningcss@1.32.0)(msw@2.12.10(@types/node@24.12.0)(typescript@5.9.3))(terser@5.46.0)(tsx@4.21.0)(yaml@2.8.2))
+      fast-check:
+        specifier: ^4.6.0
+        version: 4.6.0
       typescript:
         specifier: ^5
         version: 5.9.3
@@ -4267,6 +4288,10 @@ packages:
   exsolve@1.0.8:
     resolution: {integrity: sha512-LmDxfWXwcTArk8fUEnOfSZpHOJ6zOMUJKOtFLFqJLoKJetuQG874Uc7/Kki7zFLzYybmZhp1M7+98pfMqeX8yA==}
 
+  fast-check@4.6.0:
+    resolution: {integrity: sha512-h7H6Dm0Fy+H4ciQYFxFjXnXkzR2kr9Fb22c0UBpHnm59K2zpr2t13aPTHlltFiNT6zuxp6HMPAVVvgur4BLdpA==}
+    engines: {node: '>=12.17.0'}
+
   fast-deep-equal@3.1.3:
     resolution: {integrity: sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==}
 
@@ -5789,6 +5814,9 @@ packages:
   punycode@2.3.1:
     resolution: {integrity: sha512-vYt7UD1U9Wg6138shLtLOvdAu+8DsC/ilFtEVHcH+wydcSpNE20AfSOduf6MkRFahL5FY7X1oU7nKVZFtfq8Fg==}
     engines: {node: '>=6'}
+
+  pure-rand@8.3.0:
+    resolution: {integrity: sha512-1ws1Ab8fnsf4bvpL+SujgBnr3KFs5abgCLVzavBp+f2n8Ld5YTOZlkv/ccYPhu3X9s+MEeqPRMqKlJz/kWDK8A==}
 
   pvtsutils@1.3.6:
     resolution: {integrity: sha512-PLgQXQ6H2FWCaeRak8vvk1GW462lMxB5s3Jm673N82zI4vqtVUPuZdffdZbPDFRoU8kAhItWFtPCWiPpp4/EDg==}
@@ -11270,6 +11298,10 @@ snapshots:
 
   exsolve@1.0.8: {}
 
+  fast-check@4.6.0:
+    dependencies:
+      pure-rand: 8.3.0
+
   fast-deep-equal@3.1.3: {}
 
   fast-glob@3.3.3:
@@ -12894,6 +12926,8 @@ snapshots:
       ipaddr.js: 1.9.1
 
   punycode@2.3.1: {}
+
+  pure-rand@8.3.0: {}
 
   pvtsutils@1.3.6:
     dependencies:

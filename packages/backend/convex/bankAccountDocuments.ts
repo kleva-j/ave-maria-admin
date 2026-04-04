@@ -281,10 +281,12 @@ export const uploadDocument = mutation({
       resourceId: document._id,
       severity: "info",
       metadata: {
+        user_id: user._id,
         account_id: args.accountId,
         document_type: args.documentType,
         file_name: args.fileName,
         file_size: args.fileSize,
+        storage_id: args.storageId,
       },
     });
 
@@ -357,9 +359,12 @@ export const deleteDocument = mutation({
       resourceId: args.documentId,
       severity: "warning",
       metadata: {
+        user_id: user._id,
+        account_id: document.account_id,
         document_type: document.document_type,
         file_name: document.file_name,
         previous_status: document.status,
+        storage_id: document.storage_id,
       },
     });
 

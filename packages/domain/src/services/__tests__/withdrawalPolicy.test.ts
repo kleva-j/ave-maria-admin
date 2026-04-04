@@ -1,4 +1,8 @@
+import * as fc from "fast-check";
+
 import { describe, it, expect } from "vitest";
+
+import { AdminRole, WithdrawalMethod, WithdrawalStatus } from "../../enums";
 import {
   getCashWithdrawalRoleBlockedReason,
   getWithdrawalStatusBlockedReason,
@@ -176,5 +180,155 @@ describe("withdrawalPolicy", () => {
       expect(data.allowed_roles).toContain("operations");
       expect(data.allowed_roles).toContain("super_admin");
     });
+  });
+});
+
+const allAdminRoles = Object.values(AdminRole);
+const allWithdrawalStatuses = Object.values(WithdrawalStatus);
+const allWithdrawalMethods = Object.values(WithdrawalMethod);
+
+const cashAllowedRoles: AdminRole[] = [
+  AdminRole.SUPER_ADMIN,
+  AdminRole.OPERATIONS,
+  AdminRole.FINANCE,
+];
+const cashBlockedRoles = allAdminRoles.filter(
+  (r) => !cashAllowedRoles.includes(r),
+);
+
+describe("Property 13: buildWithdrawalCapabilities invariants", () => {
+  // Validates: Requirements 13.2
+
+  it("approve.allowed and reject.allowed are false when status is not PENDING", () => {
+    const nonPendingStatuses = allWithdrawalStatuses.filter(
+      (s) => s !== WithdrawalStatus.PENDING,
+    );
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...allAdminRoles),
+        fc.constantFrom(...nonPendingStatuses),
+        fc.constantFrom(...allWithdrawalMethods),
+        fc.boolean(),
+        (role, status, method, hasHold) => {
+          const caps = buildWithdrawalCapabilities(
+            role,
+            { status, method },
+            { has_active_hold: hasHold },
+          );
+          return (
+            caps.approve.allowed === false && caps.reject.allowed === false
+          );
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it("process.allowed is false when status is not APPROVED", () => {
+    const nonApprovedStatuses = allWithdrawalStatuses.filter(
+      (s) => s !== WithdrawalStatus.APPROVED,
+    );
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...allAdminRoles),
+        fc.constantFrom(...nonApprovedStatuses),
+        fc.constantFrom(...allWithdrawalMethods),
+        fc.boolean(),
+        (role, status, method, hasHold) => {
+          const caps = buildWithdrawalCapabilities(
+            role,
+            { status, method },
+            { has_active_hold: hasHold },
+          );
+          return caps.process.allowed === false;
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it("approve.allowed and process.allowed are false when has_active_hold is true", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...allAdminRoles),
+        fc.constantFrom(...allWithdrawalStatuses),
+        fc.constantFrom(...allWithdrawalMethods),
+        fc.string({ minLength: 0, maxLength: 64 }),
+        (role, status, method, blockReason) => {
+          const caps = buildWithdrawalCapabilities(
+            role,
+            { status, method },
+            { has_active_hold: true, block_reason: blockReason || undefined },
+          );
+          return (
+            caps.approve.allowed === false && caps.process.allowed === false
+          );
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it("approve, reject, and process are all false for CASH method with non-privileged roles", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...cashBlockedRoles),
+        fc.constantFrom(...allWithdrawalStatuses),
+        fc.boolean(),
+        (role, status, hasHold) => {
+          const caps = buildWithdrawalCapabilities(
+            role,
+            { status, method: WithdrawalMethod.CASH },
+            { has_active_hold: hasHold },
+          );
+          return (
+            caps.approve.allowed === false &&
+            caps.reject.allowed === false &&
+            caps.process.allowed === false
+          );
+        },
+      ),
+      { numRuns: 100 },
+    );
+  });
+
+  it("privileged roles can approve/reject PENDING CASH withdrawals without a hold", () => {
+    fc.assert(
+      fc.property(fc.constantFrom(...cashAllowedRoles), (role) => {
+        const caps = buildWithdrawalCapabilities(
+          role,
+          { status: WithdrawalStatus.PENDING, method: WithdrawalMethod.CASH },
+          { has_active_hold: false },
+        );
+        return caps.approve.allowed === true && caps.reject.allowed === true;
+      }),
+      { numRuns: 100 },
+    );
+  });
+
+  it("result always has exactly the three keys: approve, reject, process", () => {
+    fc.assert(
+      fc.property(
+        fc.constantFrom(...allAdminRoles),
+        fc.constantFrom(...allWithdrawalStatuses),
+        fc.constantFrom(...allWithdrawalMethods),
+        fc.boolean(),
+        (role, status, method, hasHold) => {
+          const caps = buildWithdrawalCapabilities(
+            role,
+            { status, method },
+            { has_active_hold: hasHold },
+          );
+          const keys = Object.keys(caps).sort();
+          return (
+            keys.length === 3 &&
+            keys[0] === "approve" &&
+            keys[1] === "process" &&
+            keys[2] === "reject"
+          );
+        },
+      ),
+      { numRuns: 100 },
+    );
   });
 });

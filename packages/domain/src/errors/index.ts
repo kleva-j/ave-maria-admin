@@ -59,3 +59,10 @@ export class InsufficientBalanceError extends DomainError {
     this.name = "InsufficientBalanceError";
   }
 }
+
+export class DuplicateReferenceError extends DomainError {
+  constructor(reference: string) {
+    super(`Transaction reference already exists with different payload: ${reference}`, "duplicate_reference");
+    this.name = "DuplicateReferenceError";
+  }
+}

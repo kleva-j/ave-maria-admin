@@ -35,5 +35,71 @@
     "builtin": true
   },
   "globals": {},
-  "ignorePatterns": []
+  "ignorePatterns": [],
+  "overrides": [
+    {
+      "files": ["packages/domain/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^@avm-daily/(application|backend)",
+                "message": "Domain layer must not import from Application or Infrastructure layers (Clean Architecture)."
+              },
+              {
+                "regex": "^(apps/web|apps/native)",
+                "message": "Domain layer must not import from Presentation layer (Clean Architecture)."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/application/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^@avm-daily/backend",
+                "message": "Application layer must not import from Infrastructure layer (Clean Architecture)."
+              },
+              {
+                "regex": "^(apps/web|apps/native)",
+                "message": "Application layer must not import from Presentation layer (Clean Architecture)."
+              },
+              {
+                "regex": "^convex/",
+                "message": "Application layer must not import Convex SDK. Define port interfaces instead and let the Infrastructure layer implement them."
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "files": ["packages/backend/**/*.ts"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^@avm-daily/domain/services",
+                "message": "Infrastructure layer must not import domain services directly. Call them through Application layer use-cases instead."
+              },
+              {
+                "regex": "^@avm-daily/domain/value-objects",
+                "message": "Infrastructure layer must not import domain value-object functions directly. Call them through Application layer use-cases instead."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
 }

@@ -23,9 +23,9 @@ import type {
   UserId,
 } from "./types";
 
-import {
+import { TABLE_NAMES } from "./shared";
+import type {
   WithdrawalStatus,
-  TABLE_NAMES,
   UserStatus,
   PlanStatus,
   TxnType,

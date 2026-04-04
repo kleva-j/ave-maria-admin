@@ -1,13 +1,14 @@
 /**
  * KYC Identity Verification Pipeline
- * 
+ *
  * Implements automated identity verification through simulated third-party providers
  * and manual admin review workflows. Handles user status transitions based on
  * KYC results with comprehensive audit logging and aggregate synchronization.
- * 
+ *
  * @module kyc
  */
 import type { KycData, KycDocument, KycDocumentId, UserId } from "./types";
+import type { KycDocumentType } from "./shared";
 
 import { ConvexError, v } from "convex/values";
 
@@ -16,7 +17,6 @@ import { getAdminUser, getUser } from "./utils";
 import { internal } from "./_generated/api";
 import { auditLog } from "./auditLog";
 import {
-  KycDocumentType,
   DOCUMENT_TYPES,
   RESOURCE_TYPE,
   TABLE_NAMES,
@@ -40,14 +40,14 @@ const REQUIRED_KYC_DOCUMENTS = [
 
 /**
  * Main action to trigger the complete KYC identity verification process
- * 
+ *
  * Workflow:
  * 1. Fetch user data and pending documents
  * 2. Validate document requirements (government ID + selfie with ID)
  * 3. Call external KYC provider (simulated)
  * 4. Process verification result
  * 5. Update user status and sync aggregates
- * 
+ *
  * @action
  * @requires User authentication
  * @returns Verification result with approval status and reason
@@ -111,12 +111,12 @@ export const verifyIdentity = action({
 
 /**
  * Simulates a third-party KYC provider API call (e.g., Smile Identity, Dojah)
- * 
+ *
  * Simulation characteristics:
  * - 2 second network latency simulation
  * - 80% automatic approval rate
  * - Random rejection reasons for denials
- * 
+ *
  * @internalAction
  * @param userId - User being verified
  * @param documentTypes - Array of document types submitted
@@ -157,7 +157,7 @@ export const simulateKycProvider = internalAction({
 
 /**
  * Internal query to fetch authenticated user's KYC data safely for actions
- * 
+ *
  * @internalQuery
  * @returns User record and pending KYC documents
  */
@@ -180,10 +180,10 @@ export const getViewerKycData = internalQuery({
 
 /**
  * Admin query to list all users awaiting KYC review
- * 
+ *
  * Returns users grouped by their pending documents, sorted by
  * oldest submission first (first-come-first-serve queue).
- * 
+ *
  * @query
  * @requires Admin authentication
  * @returns Array of users with their pending document details
@@ -288,7 +288,7 @@ export const adminListPendingKyc = query({
 
 /**
  * Admin mutation to manually review and approve/reject KYC submissions
- * 
+ *
  * Workflow:
  * 1. Validate admin authentication
  * 2. Verify user is in PENDING_KYC status
@@ -296,7 +296,7 @@ export const adminListPendingKyc = query({
  * 4. Process KYC result (updates user status)
  * 5. Sync user aggregates for analytics
  * 6. Log comprehensive audit trail
- * 
+ *
  * @mutation
  * @requires Admin authentication
  * @param userId - User being reviewed

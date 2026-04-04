@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { AuditActions } from "convex-audit-log";
 
 import { internalMutation, mutation, query } from "./_generated/server";
+import { buildUserProfileSyncAuditChange } from "./userAudit";
 import { ensureUser, getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
 
@@ -114,9 +115,24 @@ export const upsertFromWorkOS = internalMutation({
       });
 
       // Sync aggregates for user updates
-      const updatedUser = await ctx.db.get(existing._id);
-      if (updatedUser) {
-        await syncUserUpdate(ctx, oldUser, updatedUser);
+      const updatedUser = (await ctx.db.get(existing._id))!;
+      await syncUserUpdate(ctx, oldUser, updatedUser);
+
+      // Audit significant profile changes during external sync
+      const profileSyncAuditChange = buildUserProfileSyncAuditChange(
+        oldUser,
+        updatedUser,
+      );
+      if (profileSyncAuditChange.changedFields.length > 0) {
+        await auditLog.logChange(ctx, {
+          action: EVENT_TYPE.USER_PROFILE_SYNCED,
+          actorId: updatedUser._id,
+          resourceType: RESOURCE_TYPE.USERS,
+          resourceId: updatedUser._id,
+          before: profileSyncAuditChange.before,
+          after: profileSyncAuditChange.after,
+          severity: "info",
+        });
       }
 
       return existing._id;

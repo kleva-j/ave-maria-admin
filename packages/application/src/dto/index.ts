@@ -6,6 +6,7 @@ import type {
   RiskEventType,
   RiskHoldScope,
   RiskSeverity,
+  Transaction,
   TxnType,
 } from "@avm-daily/domain";
 
@@ -34,6 +35,8 @@ export type PostTransactionDTO = {
   actorId?: string;
   createdAt?: number;
   reversalOfTransactionId?: string;
+  reversalOfReference?: string;
+  reversalOfType?: TxnType;
 };
 
 export type ReverseTransactionDTO = {
@@ -110,4 +113,13 @@ export type RiskSummaryDTO = {
   hasActiveHold: boolean;
   blocked: boolean;
   blockReason?: string;
+};
+
+export type PostTransactionOutput = {
+  transaction: Transaction;
+  idempotent: boolean;
+};
+
+export type ReverseTransactionOutput = {
+  transaction: Transaction;
 };

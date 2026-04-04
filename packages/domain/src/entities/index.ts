@@ -1,16 +1,32 @@
+import type {
+  TransactionReconciliationIssueStatus,
+  TransactionReconciliationIssueType,
+  WithdrawalStatus,
+  WithdrawalMethod,
+  RiskHoldStatus,
+  RiskHoldScope,
+  RiskEventType,
+  RiskSeverity,
+  PlanStatus,
+  UserStatus,
+  AdminRole,
+  TxnType,
+} from "../enums";
+
 export interface User {
   _id: string;
   email: string;
   phone: string;
   total_balance_kobo: bigint;
   savings_balance_kobo: bigint;
+  status: UserStatus;
   updated_at: number;
 }
 
 export interface AdminUser {
   _id: string;
   email: string;
-  role: string;
+  role: AdminRole;
   created_at: number;
 }
 
@@ -18,6 +34,7 @@ export interface UserSavingsPlan {
   _id: string;
   user_id: string;
   current_amount_kobo: bigint;
+  status: PlanStatus;
   updated_at: number;
 }
 
@@ -25,12 +42,12 @@ export interface Transaction {
   _id: string;
   user_id: string;
   user_plan_id?: string;
-  type: string;
+  type: TxnType;
   amount_kobo: bigint;
   reference: string;
   reversal_of_transaction_id?: string;
   reversal_of_reference?: string;
-  reversal_of_type?: string;
+  reversal_of_type?: TxnType;
   metadata: Record<string, unknown>;
   created_at: number;
 }
@@ -39,8 +56,8 @@ export interface Withdrawal {
   _id: string;
   requested_by: string;
   requested_amount_kobo: bigint;
-  method: string;
-  status: string;
+  method: WithdrawalMethod;
+  status: WithdrawalStatus;
   requested_at: number;
   processed_at?: number;
   approved_by?: string;
@@ -51,8 +68,8 @@ export interface Withdrawal {
 export interface UserRiskHold {
   _id: string;
   user_id: string;
-  scope: string;
-  status: string;
+  scope: RiskHoldScope;
+  status: RiskHoldStatus;
   reason: string;
   placed_by_admin_id: string;
   placed_at: number;
@@ -63,9 +80,9 @@ export interface UserRiskHold {
 export interface RiskEvent {
   _id: string;
   user_id: string;
-  scope: string;
-  event_type: string;
-  severity: string;
+  scope: RiskHoldScope;
+  event_type: RiskEventType;
+  severity: RiskSeverity;
   message: string;
   details?: Record<string, unknown>;
   actor_admin_id?: string;
@@ -75,8 +92,8 @@ export interface RiskEvent {
 export interface TransactionReconciliationIssue {
   _id: string;
   run_id: string;
-  issue_type: string;
-  issue_status: string;
+  issue_type: TransactionReconciliationIssueType;
+  issue_status: TransactionReconciliationIssueStatus;
   user_id?: string;
   user_plan_id?: string;
   transaction_id?: string;

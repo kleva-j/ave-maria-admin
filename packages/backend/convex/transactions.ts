@@ -1,10 +1,10 @@
 /**
  * Transaction Ledger Module
- * 
+ *
  * Core financial transaction processing system for the savings platform.
  * Handles all monetary movements including contributions, withdrawals, interest accrual,
  * investment yields, referral bonuses, and reversals.
- * 
+ *
  * Key Features:
  * - Idempotent transaction posting (prevents duplicate entries)
  * - Automatic balance projection updates (user & plan levels)
@@ -12,7 +12,7 @@
  * - Reversal mechanism with full traceability
  * - Real-time reconciliation issue detection
  * - Aggregate table synchronization for O(log n) analytics queries
- * 
+ *
  * Transaction Types:
  * - CONTRIBUTION: User deposits into savings
  * - WITHDRAWAL: User withdrawals from savings
@@ -20,7 +20,7 @@
  * - INVESTMENT_YIELD: Investment returns credited
  * - REFERRAL_BONUS: Bonus for referring new users
  * - REVERSAL: Undoing a previous transaction
- * 
+ *
  * @module transactions
  */
 import type { MutationCtx } from "./_generated/server";
@@ -41,6 +41,24 @@ import { ConvexError, v } from "convex/values";
 import { internalMutation, query } from "./_generated/server";
 import { getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
+
+import {
+  createPostTransactionUseCase,
+  createReverseTransactionUseCase,
+} from "@avm-daily/application/use-cases";
+
+import {
+  createConvexTransactionReadRepository,
+  createConvexTransactionWriteRepository,
+} from "./adapters/transactionAdapters";
+
+import { createConvexUserRepository } from "./adapters/userAdapters";
+import { createConvexSavingsPlanRepository } from "./adapters/savingsPlanAdapters";
+
+import { DomainError, computeProjectionDelta } from "@avm-daily/domain";
+
+// Re-export computeProjectionDelta from domain (single source of truth)
+export { computeProjectionDelta } from "@avm-daily/domain";
 
 import {
   syncReconciliationIssueInsert,
@@ -184,22 +202,6 @@ type TransactionReverseArgs = {
   createdAt?: number;
 };
 
-type PreparedPostArgs = {
-  user: User;
-  userPlan?: UserSavingsPlan;
-  type: TxnType;
-  effectiveType: TxnType;
-  amountKobo: bigint;
-  reference: string;
-  metadata: Record<string, unknown>;
-  source: TransactionSource;
-  actorId?: TransactionActorId;
-  createdAt: number;
-  reversalOfTransaction?: Transaction;
-  reversalOfReference?: string;
-  reversalOfType?: TxnType;
-};
-
 type PostTransactionResult = {
   transaction: Transaction;
   idempotent: boolean;
@@ -208,12 +210,6 @@ type PostTransactionResult = {
 type ProjectionTotals = {
   totalBalanceKobo: bigint;
   savingsBalanceKobo: bigint;
-};
-
-type ProjectionDelta = {
-  totalBalanceKobo: bigint;
-  savingsBalanceKobo: bigint;
-  planAmountKobo: bigint;
 };
 
 type TransactionListFilters = {
@@ -228,7 +224,7 @@ type TransactionListFilters = {
 /**
  * Type guard to check if a value is a record object.
  * Used for safe metadata parsing and validation.
- * 
+ *
  * @param value - The value to check
  * @returns True if the value is a non-null object (not an array)
  */
@@ -239,7 +235,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * Safely extracts and validates metadata as a record object.
  * Throws ConvexError if the value is not a valid object.
- * 
+ *
  * @param value - The value to validate (default: undefined)
  * @param fieldName - Name of the field for error messages (default: "metadata")
  * @returns The validated record object or empty object if undefined
@@ -260,7 +256,7 @@ function asObject(value: unknown, fieldName = "metadata") {
 /**
  * Converts a value to a string ID representation.
  * Handles null, undefined, and converts to string safely.
- * 
+ *
  * @param value - The value to convert
  * @returns String representation or undefined if null/undefined
  */
@@ -275,30 +271,18 @@ function asStringId(value: unknown) {
 /**
  * Extracts a required string field from a metadata object.
  * Validates presence and trims whitespace.
- * 
+ *
  * @param object - The metadata object to extract from
  * @param key - The key to look up
  * @param message - Custom error message (default: "{key} is required")
  * @returns The trimmed string value
  * @throws ConvexError if the field is missing, empty, or not a string
  */
-function getRequiredString(
-  object: Record<string, unknown>,
-  key: string,
-  message = `${key} is required`,
-) {
-  const value = object[key];
-  if (typeof value !== "string" || value.trim().length === 0) {
-    throw new ConvexError(message);
-  }
-
-  return value.trim();
-}
 
 /**
  * Extracts an optional string field from a metadata object.
  * Returns undefined for missing/null/empty values.
- * 
+ *
  * @param object - The metadata object to extract from
  * @param key - The key to look up
  * @returns The trimmed string value or undefined
@@ -320,25 +304,17 @@ function getOptionalString(object: Record<string, unknown>, key: string) {
 /**
  * Extracts a required number field from a metadata object.
  * Validates that the value is a finite number.
- * 
+ *
  * @param object - The metadata object to extract from
  * @param key - The key to look up
  * @returns The numeric value
  * @throws ConvexError if the field is missing or not a valid number
  */
-function getRequiredNumber(object: Record<string, unknown>, key: string) {
-  const value = object[key];
-  if (typeof value !== "number" || !Number.isFinite(value)) {
-    throw new ConvexError(`${key} must be a valid number`);
-  }
-
-  return value;
-}
 
 /**
  * Type guard to validate transaction type values.
  * Ensures the value matches one of the defined TxnType enum values.
- * 
+ *
  * @param value - The value to validate
  * @returns True if the value is a valid TxnType
  */
@@ -349,302 +325,117 @@ function isTxnTypeValue(value: unknown): value is TxnType {
 /**
  * Validates that a transaction reference is provided and non-empty.
  * References are critical for idempotency and audit trails.
- * 
+ *
  * @param reference - The transaction reference to validate
  * @throws ConvexError if the reference is empty or whitespace
  */
-function assertReference(reference: string) {
-  if (reference.trim().length === 0) {
-    throw new ConvexError("reference is required");
-  }
-}
 
 /**
  * Validates that positive-amount transactions have the correct amount sign.
  * Applied to: CONTRIBUTION, INTEREST_ACCRUAL, INVESTMENT_YIELD, REFERRAL_BONUS
- * 
+ *
  * @param type - The transaction type
  * @param amountKobo - The amount in kobo (must be positive)
  * @throws ConvexError if amount is not positive
  */
-function assertPositiveAmount(type: TxnType, amountKobo: bigint) {
-  if (amountKobo <= 0n) {
-    throw new ConvexError(`${type} transactions must have a positive amount`);
-  }
-}
 
 /**
  * Validates that negative-amount transactions have the correct amount sign.
  * Applied to: WITHDRAWAL
- * 
+ *
  * @param type - The transaction type
  * @param amountKobo - The amount in kobo (must be negative)
  * @throws ConvexError if amount is not negative
  */
-function assertNegativeAmount(type: TxnType, amountKobo: bigint) {
-  if (amountKobo >= 0n) {
-    throw new ConvexError(`${type} transactions must have a negative amount`);
-  }
-}
 
 /**
  * Canonicalizes a value for stable string comparison.
  * Recursively sorts object keys and processes arrays to ensure
  * consistent ordering regardless of input order.
- * 
+ *
  * This is critical for idempotency checks - two identical payloads
  * must produce the same canonical form even if keys were in different order.
- * 
+ *
  * @param value - The value to canonicalize
  * @returns A canonically ordered version of the value
  */
-function canonicalizeValue(value: unknown): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => canonicalizeValue(item));
-  }
-
-  if (isRecord(value)) {
-    return Object.keys(value)
-      .sort()
-      .reduce<Record<string, unknown>>((result, key) => {
-        result[key] = canonicalizeValue(value[key]);
-        return result;
-      }, {});
-  }
-
-  return value;
-}
-
-/**
- * Creates a stable JSON string representation of a value.
- * Used for comparing metadata objects and detecting duplicates.
- * 
- * @param value - The value to stringify
- * @returns A deterministic JSON string representation
- */
-function stableStringify(value: unknown) {
-  return JSON.stringify(canonicalizeValue(value));
-}
 
 /**
  * Normalizes and validates contribution transaction metadata.
  * Contributions represent user deposits into their savings plans.
- * 
+ *
  * Required fields:
  * - channel: Where the contribution originated (e.g., "mobile_app", "web")
  * - origin_reference: External system reference for tracing
- * 
+ *
  * Optional fields:
  * - note: Additional context or memo
- * 
+ *
  * @param metadata - Raw metadata object
  * @param source - Transaction source (USER, ADMIN, SYSTEM)
  * @param actorId - ID of the user/admin performing the action
  * @returns Normalized metadata with standardized structure
  * @throws ConvexError if required fields are missing
  */
-function normalizeContributionMetadata(
-  metadata: Record<string, unknown>,
-  source: TransactionSource,
-  actorId?: TransactionActorId,
-) {
-  return {
-    source,
-    actor_id: actorId ? String(actorId) : undefined,
-    channel: getRequiredString(metadata, "channel"),
-    origin_reference: getRequiredString(metadata, "origin_reference"),
-    note: getOptionalString(metadata, "note"),
-  };
-}
 
 /**
  * Normalizes and validates accrual transaction metadata.
  * Accruals represent periodic interest or investment returns.
- * 
+ *
  * Required fields:
  * - period_start: Start date of the accrual period
  * - period_end: End date of the accrual period
  * - rate: Accrual rate (e.g., 0.05 for 5%)
  * - run_id: ID of the accrual run
- * 
+ *
  * Optional fields:
  * - note: Additional context or memo
- * 
+ *
  * @param metadata - Raw metadata object
  * @param source - Transaction source (USER, ADMIN, SYSTEM)
  * @param actorId - ID of the user/admin performing the action
  * @returns Normalized metadata with standardized structure
  * @throws ConvexError if required fields are missing
  */
-function normalizeAccrualMetadata(
-  metadata: Record<string, unknown>,
-  source: TransactionSource,
-  actorId: TransactionActorId | undefined,
-) {
-  return {
-    source,
-    actor_id: actorId ? String(actorId) : undefined,
-    period_start: getRequiredString(metadata, "period_start"),
-    period_end: getRequiredString(metadata, "period_end"),
-    rate: getRequiredNumber(metadata, "rate"),
-    run_id: getRequiredString(metadata, "run_id"),
-    note: getOptionalString(metadata, "note"),
-  };
-}
 
 /**
  * Normalizes and validates referral bonus transaction metadata.
  * Referral bonuses are awarded to users for referring new users.
- * 
+ *
  * Required fields:
  * - referrer_user_id: ID of the referring user
  * - referred_user_id: ID of the referred user
  * - trigger_transaction_reference: Reference of the triggering transaction
- * 
+ *
  * Optional fields:
  * - note: Additional context or memo
- * 
+ *
  * @param metadata - Raw metadata object
  * @param source - Transaction source (USER, ADMIN, SYSTEM)
  * @param actorId - ID of the user/admin performing the action
  * @returns Normalized metadata with standardized structure
  * @throws ConvexError if required fields are missing
  */
-function normalizeReferralBonusMetadata(
-  metadata: Record<string, unknown>,
-  source: TransactionSource,
-  actorId: TransactionActorId | undefined,
-) {
-  return {
-    source,
-    actor_id: actorId ? String(actorId) : undefined,
-    referrer_user_id: getRequiredString(metadata, "referrer_user_id"),
-    referred_user_id: getRequiredString(metadata, "referred_user_id"),
-    trigger_transaction_reference: getRequiredString(
-      metadata,
-      "trigger_transaction_reference",
-    ),
-    note: getOptionalString(metadata, "note"),
-  };
-}
 
 /**
  * Normalizes and validates withdrawal transaction metadata.
  * Withdrawals represent user withdrawals from their savings plans.
- * 
+ *
  * Required fields:
  * - method: Withdrawal method (e.g., "BANK_TRANSFER", "CASH")
  * - withdrawal_status: Status of the withdrawal (e.g., "PENDING", "COMPLETED")
- * 
+ *
  * Optional fields:
  * - bank_account: Bank account details (required for bank transfers)
  * - cash_details: Cash details (required for cash withdrawals)
  * - note: Additional context or memo
- * 
+ *
  * @param metadata - Raw metadata object
  * @param source - Transaction source (USER, ADMIN, SYSTEM)
  * @param actorId - ID of the user/admin performing the action
  * @returns Normalized metadata with standardized structure
  * @throws ConvexError if required fields are missing
  */
-function normalizeWithdrawalMetadata(
-  metadata: Record<string, unknown>,
-  source: TransactionSource,
-  actorId: TransactionActorId | undefined,
-) {
-  const method = getRequiredString(metadata, "method");
-  const withdrawalStatus = getRequiredString(metadata, "withdrawal_status");
-  const bankAccount = metadata.bank_account;
-  const cashDetails = metadata.cash_details;
-
-  if (method === WithdrawalMethod.BANK_TRANSFER && !isRecord(bankAccount)) {
-    throw new ConvexError(
-      "withdrawal metadata.bank_account is required for bank transfer withdrawals",
-    );
-  }
-
-  if (method === WithdrawalMethod.CASH && !isRecord(cashDetails)) {
-    throw new ConvexError(
-      "withdrawal metadata.cash_details is required for cash withdrawals",
-    );
-  }
-
-  return {
-    source,
-    actor_id: actorId ? String(actorId) : undefined,
-    method,
-    withdrawal_status: withdrawalStatus,
-    bank_account: isRecord(bankAccount) ? bankAccount : undefined,
-    cash_details: isRecord(cashDetails) ? cashDetails : undefined,
-    note: getOptionalString(metadata, "note"),
-  };
-}
-
-/**
- * Normalizes and validates reversal transaction metadata.
- * Reversals undo previous transactions.
- * 
- * Required fields:
- * - original_transaction_id: ID of the original transaction
- * - original_reference: Reference of the original transaction
- * - original_type: Type of the original transaction
- * - reason: Reason for the reversal
- * 
- * @param metadata - Raw metadata object
- * @param source - Transaction source (USER, ADMIN, SYSTEM)
- * @param actorId - ID of the user/admin performing the action
- * @returns Normalized metadata with standardized structure
- * @throws ConvexError if required fields are missing
- */
-function normalizeReversalMetadata(
-  metadata: Record<string, unknown>,
-  source: TransactionSource,
-  actorId: TransactionActorId | undefined,
-) {
-  const originalType = metadata.original_type;
-  if (!isTxnTypeValue(originalType)) {
-    throw new ConvexError("reversal metadata.original_type must be valid");
-  }
-
-  return {
-    source,
-    actor_id: actorId ? String(actorId) : undefined,
-    original_transaction_id: getRequiredString(
-      metadata,
-      "original_transaction_id",
-    ),
-    original_reference: getRequiredString(metadata, "original_reference"),
-    original_type: originalType,
-    reason: getRequiredString(metadata, "reason"),
-  };
-}
-
-/**
- * Validates and transforms raw metadata into a structured format based on the transaction type.
- * Each transaction type has specific required fields to ensure data integrity in the ledger.
- */
-function normalizeTransactionMetadata(
-  type: TxnType,
-  metadata: unknown,
-  source: TransactionSource,
-  actorId?: TransactionActorId,
-) {
-  const object = asObject(metadata);
-
-  switch (type) {
-    case TxnType.CONTRIBUTION:
-      return normalizeContributionMetadata(object, source, actorId);
-    case TxnType.INTEREST_ACCRUAL:
-    case TxnType.INVESTMENT_YIELD:
-      return normalizeAccrualMetadata(object, source, actorId);
-    case TxnType.REFERRAL_BONUS:
-      return normalizeReferralBonusMetadata(object, source, actorId);
-    case TxnType.WITHDRAWAL:
-      return normalizeWithdrawalMetadata(object, source, actorId);
-    case TxnType.REVERSAL:
-      return normalizeReversalMetadata(object, source, actorId);
-  }
-}
 
 /**
  * Strips sensitive or internal-only metadata fields to create a summary suitable for UI consumption.
@@ -736,46 +527,6 @@ async function getTransactionsByReference(ctx: Context, reference: string) {
     .collect();
 }
 
-export function buildComparableTransactionPayload(input: {
-  userId: UserId;
-  userPlanId?: UserSavingsPlanId;
-  type: TxnType;
-  amountKobo: bigint;
-  reference: string;
-  reversalOfTransactionId?: TransactionId;
-  reversalOfReference?: string;
-  reversalOfType?: TxnType;
-  metadata: Record<string, unknown>;
-}) {
-  return {
-    user_id: String(input.userId),
-    user_plan_id: input.userPlanId ? String(input.userPlanId) : undefined,
-    type: input.type,
-    amount_kobo: input.amountKobo.toString(),
-    reference: input.reference,
-    reversal_of_transaction_id: input.reversalOfTransactionId
-      ? String(input.reversalOfTransactionId)
-      : undefined,
-    reversal_of_reference: input.reversalOfReference,
-    reversal_of_type: input.reversalOfType,
-    metadata: input.metadata,
-  };
-}
-
-function comparableTransactionFromDoc(transaction: Transaction) {
-  return buildComparableTransactionPayload({
-    userId: transaction.user_id,
-    userPlanId: transaction.user_plan_id,
-    type: transaction.type,
-    amountKobo: transaction.amount_kobo,
-    reference: transaction.reference,
-    reversalOfTransactionId: transaction.reversal_of_transaction_id,
-    reversalOfReference: transaction.reversal_of_reference,
-    reversalOfType: transaction.reversal_of_type,
-    metadata: asObject(transaction.metadata),
-  });
-}
-
 function getEffectiveType(transaction: Transaction) {
   if (transaction.type !== TxnType.REVERSAL) {
     return transaction.type;
@@ -791,92 +542,12 @@ function getEffectiveType(transaction: Transaction) {
 }
 
 /**
- * Calculates the impact of a transaction on the user's total balance, savings balance,
- * and specific plan balance. This logic is used to maintain a projected view of the
- * user's financial state without needing to re-sum the entire transaction history.
- */
-export function computeProjectionDelta(
-  effectiveType: TxnType,
-  amountKobo: bigint,
-  userPlanId?: UserSavingsPlanId,
-): ProjectionDelta {
-  switch (effectiveType) {
-    case TxnType.CONTRIBUTION:
-    case TxnType.INTEREST_ACCRUAL:
-    case TxnType.INVESTMENT_YIELD:
-      return {
-        totalBalanceKobo: amountKobo,
-        savingsBalanceKobo: amountKobo,
-        planAmountKobo: userPlanId ? amountKobo : 0n,
-      };
-    case TxnType.REFERRAL_BONUS:
-      return {
-        totalBalanceKobo: amountKobo,
-        savingsBalanceKobo: amountKobo,
-        planAmountKobo: 0n,
-      };
-    case TxnType.WITHDRAWAL:
-      return {
-        totalBalanceKobo: amountKobo,
-        savingsBalanceKobo: amountKobo,
-        planAmountKobo: userPlanId ? amountKobo : 0n,
-      };
-    case TxnType.REVERSAL:
-      throw new ConvexError("effectiveType cannot be reversal");
-  }
-}
-
-export function areComparableTransactionPayloadsEqual(
-  left: ReturnType<typeof buildComparableTransactionPayload>,
-  right: ReturnType<typeof buildComparableTransactionPayload>,
-) {
-  return stableStringify(left) === stableStringify(right);
-}
-
-/**
  * Updates the denormalized balances for a user and their savings plan.
  *
  * This function performs the actual mutations to the `users` and `user_savings_plans` tables.
  * It ensures that the projected balances never drop below zero, which would indicate
  * a violation of the system's financial constraints.
  */
-async function applyProjectionDelta(
-  ctx: MutationCtx,
-  user: User,
-  userPlan: UserSavingsPlan | undefined,
-  delta: ProjectionDelta,
-  updatedAt: number,
-) {
-  const nextTotalBalance = user.total_balance_kobo + delta.totalBalanceKobo;
-  const nextSavingsBalance =
-    user.savings_balance_kobo + delta.savingsBalanceKobo;
-
-  if (nextTotalBalance < 0n || nextSavingsBalance < 0n) {
-    throw new ConvexError(
-      "Transaction would result in a negative user balance",
-    );
-  }
-
-  if (userPlan) {
-    const nextPlanAmount = userPlan.current_amount_kobo + delta.planAmountKobo;
-    if (nextPlanAmount < 0n) {
-      throw new ConvexError(
-        "Transaction would result in a negative plan balance",
-      );
-    }
-
-    await ctx.db.patch(userPlan._id, {
-      current_amount_kobo: nextPlanAmount,
-      updated_at: updatedAt,
-    });
-  }
-
-  await ctx.db.patch(user._id, {
-    total_balance_kobo: nextTotalBalance,
-    savings_balance_kobo: nextSavingsBalance,
-    updated_at: updatedAt,
-  });
-}
 
 /**
  * Validates transaction arguments and prepares them for processing.
@@ -884,183 +555,6 @@ async function applyProjectionDelta(
  * Handles complex logic for Reversals (verifying original transactions and amounts)
  * and normalizes metadata before the transaction is committed to the database.
  */
-async function preparePostArgs(
-  ctx: MutationCtx,
-  args: TransactionPostArgs,
-): Promise<PreparedPostArgs> {
-  assertReference(args.reference);
-
-  const user = await ctx.db.get(args.userId);
-  if (!user) {
-    throw new ConvexError("User not found");
-  }
-
-  let userPlan = await getUserPlan(ctx, args.userId, args.userPlanId);
-  let reversalOfTransaction: Transaction | undefined;
-
-  if (args.type === TxnType.REVERSAL) {
-    if (!args.reversalOfTransactionId) {
-      throw new ConvexError(
-        "reversalOfTransactionId is required for reversal transactions",
-      );
-    }
-
-    const originalTransaction = await ctx.db.get(args.reversalOfTransactionId);
-    if (!originalTransaction) {
-      throw new ConvexError("Original transaction not found");
-    }
-    reversalOfTransaction = originalTransaction;
-
-    if (reversalOfTransaction.type === TxnType.REVERSAL) {
-      throw new ConvexError("Reversing a reversal is not supported");
-    }
-
-    if (reversalOfTransaction.user_id !== args.userId) {
-      throw new ConvexError(
-        "Reversal must target the original transaction user",
-      );
-    }
-
-    if (
-      args.amountKobo !== -reversalOfTransaction.amount_kobo ||
-      args.amountKobo === 0n
-    ) {
-      throw new ConvexError(
-        "Reversal amount must be the exact inverse of the original transaction amount",
-      );
-    }
-
-    if (
-      args.userPlanId &&
-      args.userPlanId !== reversalOfTransaction.user_plan_id
-    ) {
-      throw new ConvexError(
-        "Reversal savings plan must match the original transaction",
-      );
-    }
-
-    if (!userPlan && reversalOfTransaction.user_plan_id) {
-      userPlan = await getUserPlan(
-        ctx,
-        args.userId,
-        reversalOfTransaction.user_plan_id,
-      );
-    }
-  } else {
-    if (args.reversalOfTransactionId) {
-      throw new ConvexError(
-        "reversalOfTransactionId can only be used with reversal transactions",
-      );
-    }
-
-    switch (args.type) {
-      case TxnType.CONTRIBUTION:
-      case TxnType.INTEREST_ACCRUAL:
-      case TxnType.INVESTMENT_YIELD:
-      case TxnType.REFERRAL_BONUS:
-        assertPositiveAmount(args.type, args.amountKobo);
-        break;
-      case TxnType.WITHDRAWAL:
-        assertNegativeAmount(args.type, args.amountKobo);
-        break;
-    }
-
-    if (args.type === TxnType.REFERRAL_BONUS && userPlan) {
-      throw new ConvexError(
-        "Referral bonus transactions cannot be linked to a savings plan",
-      );
-    }
-  }
-
-  const metadata =
-    args.type === TxnType.REVERSAL && reversalOfTransaction
-      ? normalizeTransactionMetadata(
-          TxnType.REVERSAL,
-          {
-            ...asObject(args.metadata),
-            original_transaction_id: String(reversalOfTransaction._id),
-            original_reference: reversalOfTransaction.reference,
-            original_type: reversalOfTransaction.type,
-          },
-          args.source,
-          args.actorId,
-        )
-      : normalizeTransactionMetadata(
-          args.type,
-          args.metadata,
-          args.source,
-          args.actorId,
-        );
-
-  return {
-    user,
-    userPlan,
-    type: args.type,
-    effectiveType:
-      args.type === TxnType.REVERSAL && reversalOfTransaction
-        ? reversalOfTransaction.type
-        : args.type,
-    amountKobo: args.amountKobo,
-    reference: args.reference.trim(),
-    metadata,
-    source: args.source,
-    actorId: args.actorId,
-    createdAt: args.createdAt ?? Date.now(),
-    reversalOfTransaction,
-    reversalOfReference: reversalOfTransaction?.reference,
-    reversalOfType: reversalOfTransaction?.type,
-  };
-}
-
-/**
- * Performs a deep comparison between an existing transaction and a new request.
- * Used for idempotency to ensure that the same reference isn't used for different financial data.
- */
-function matchesIdempotentPayload(
-  transaction: Transaction,
-  prepared: PreparedPostArgs,
-) {
-  return areComparableTransactionPayloadsEqual(
-    comparableTransactionFromDoc(transaction),
-    buildComparableTransactionPayload({
-      userId: prepared.user._id,
-      userPlanId: prepared.userPlan?._id,
-      type: prepared.type,
-      amountKobo: prepared.amountKobo,
-      reference: prepared.reference,
-      reversalOfTransactionId: prepared.reversalOfTransaction?._id,
-      reversalOfReference: prepared.reversalOfReference,
-      reversalOfType: prepared.reversalOfType,
-      metadata: prepared.metadata,
-    }),
-  );
-}
-
-/**
- * Resolves a transaction reference during a posting attempt.
- * If the reference exists, it verifies idempotency; otherwise, it allows a new entry.
- */
-async function resolveExistingReference(
-  ctx: MutationCtx,
-  prepared: PreparedPostArgs,
-) {
-  const existing = await getTransactionsByReference(ctx, prepared.reference);
-  if (existing.length === 0) {
-    return null;
-  }
-
-  if (existing.length > 1) {
-    throw new ConvexError("Multiple transactions share the same reference");
-  }
-
-  if (!matchesIdempotentPayload(existing[0], prepared)) {
-    throw new ConvexError(
-      "Transaction reference already exists with different payload",
-    );
-  }
-
-  return existing[0];
-}
 
 function shouldAuditTransaction(source: TransactionSource) {
   return (
@@ -1099,12 +593,8 @@ async function auditPostedTransaction(
 /**
  * The primary entry point for recording any financial movement in the system.
  *
- * This function handles:
- * 1. Idempotency checks using the `reference` field (prevents double-posting).
- * 2. Balance projection updates for both the User and any linked Savings Plan.
- * 3. Metadata normalization and validation.
- * 4. Ledger entry insertion.
- * 5. Update of aggregate/denormalized tables for performant queries.
+ * Delegates core business logic to createPostTransactionUseCase, then handles
+ * Convex-specific concerns (aggregate sync, audit logging).
  *
  * @returns The created or existing transaction and an `idempotent` flag.
  */
@@ -1112,103 +602,104 @@ export async function postTransactionEntry(
   ctx: MutationCtx,
   args: TransactionPostArgs,
 ): Promise<PostTransactionResult> {
-  const prepared = await preparePostArgs(ctx, args);
-  const existing = await resolveExistingReference(ctx, prepared);
-
-  if (existing) {
-    return { transaction: existing, idempotent: true };
-  }
-
-  if (prepared.reversalOfTransaction) {
-    const reversalTarget = prepared.reversalOfTransaction;
-    const existingReversals = await ctx.db
-      .query(TABLE_NAMES.TRANSACTIONS)
-      .withIndex("by_reversal_of_transaction_id", (q) =>
-        q.eq("reversal_of_transaction_id", reversalTarget._id),
-      )
-      .collect();
-
-    if (existingReversals.length > 0) {
-      throw new ConvexError("Original transaction has already been reversed");
-    }
-  }
-
-  const delta = computeProjectionDelta(
-    prepared.effectiveType,
-    prepared.amountKobo,
-    prepared.userPlan?._id,
-  );
-
-  await applyProjectionDelta(
-    ctx,
-    prepared.user,
-    prepared.userPlan,
-    delta,
-    prepared.createdAt,
-  );
-
-  const transactionId = await ctx.db.insert(TABLE_NAMES.TRANSACTIONS, {
-    user_id: prepared.user._id,
-    user_plan_id: prepared.userPlan?._id,
-    type: prepared.type,
-    amount_kobo: prepared.amountKobo,
-    reference: prepared.reference,
-    reversal_of_transaction_id: prepared.reversalOfTransaction?._id,
-    reversal_of_reference: prepared.reversalOfReference,
-    reversal_of_type: prepared.reversalOfType,
-    metadata: prepared.metadata,
-    created_at: prepared.createdAt,
+  const postTransaction = createPostTransactionUseCase({
+    transactionReadRepository: createConvexTransactionReadRepository(ctx),
+    transactionWriteRepository: createConvexTransactionWriteRepository(ctx),
+    userRepository: createConvexUserRepository(ctx),
+    savingsPlanRepository: createConvexSavingsPlanRepository(ctx),
   });
 
-  const transaction = await ctx.db.get(transactionId);
-  if (!transaction) {
-    throw new ConvexError("Failed to create transaction");
+  let result: PostTransactionResult;
+  try {
+    const ucResult = await postTransaction({
+      userId: String(args.userId),
+      userPlanId: args.userPlanId ? String(args.userPlanId) : undefined,
+      type: args.type,
+      amountKobo: args.amountKobo,
+      reference: args.reference,
+      reversalOfTransactionId: args.reversalOfTransactionId
+        ? String(args.reversalOfTransactionId)
+        : undefined,
+      metadata: asObject(args.metadata),
+      source: args.source,
+      actorId: args.actorId ? String(args.actorId) : undefined,
+      createdAt: args.createdAt,
+    });
+
+    result = {
+      transaction: ucResult.transaction as Transaction,
+      idempotent: ucResult.idempotent,
+    };
+  } catch (err) {
+    if (err instanceof DomainError) {
+      throw new ConvexError(err.message);
+    }
+    throw err;
   }
 
-  // Sync with aggregate tables for O(log n) queries
-  await syncTransactionInsert(ctx, transaction);
+  if (!result.idempotent) {
+    // Sync with aggregate tables for O(log n) queries
+    await syncTransactionInsert(ctx, result.transaction);
+    await auditPostedTransaction(
+      ctx,
+      result.transaction,
+      args.source,
+      args.actorId,
+    );
+  }
 
-  await auditPostedTransaction(
-    ctx,
-    transaction,
-    prepared.source,
-    prepared.actorId,
-  );
-
-  return { transaction, idempotent: false };
+  return result;
 }
 
 /**
  * Reverses a previously posted transaction by creating an inverse entry.
  *
- * This is the safe way to "undo" a transaction. It ensures the ledger remains immutable
- * while correcting the balances. It requires a reason for the reversal and links
- * the new entry to the original one.
+ * Delegates to createReverseTransactionUseCase, then handles Convex-specific concerns.
  */
 export async function reverseTransactionEntry(
   ctx: MutationCtx,
   args: TransactionReverseArgs,
 ): Promise<PostTransactionResult> {
-  const originalTransaction = await ctx.db.get(args.originalTransactionId);
-  if (!originalTransaction) {
-    throw new ConvexError("Original transaction not found");
+  const reverseTransaction = createReverseTransactionUseCase({
+    transactionReadRepository: createConvexTransactionReadRepository(ctx),
+    transactionWriteRepository: createConvexTransactionWriteRepository(ctx),
+    userRepository: createConvexUserRepository(ctx),
+    savingsPlanRepository: createConvexSavingsPlanRepository(ctx),
+  });
+
+  let result: PostTransactionResult;
+  try {
+    const ucResult = await reverseTransaction({
+      originalTransactionId: String(args.originalTransactionId),
+      reference: args.reference,
+      reason: args.reason,
+      metadata: asObject(args.metadata),
+      source: args.source,
+      actorId: args.actorId ? String(args.actorId) : undefined,
+      createdAt: args.createdAt,
+    });
+
+    result = {
+      transaction: ucResult.transaction as Transaction,
+      idempotent: false,
+    };
+  } catch (err) {
+    if (err instanceof DomainError) {
+      throw new ConvexError(err.message);
+    }
+    throw err;
   }
 
-  return await postTransactionEntry(ctx, {
-    userId: originalTransaction.user_id,
-    userPlanId: originalTransaction.user_plan_id,
-    type: TxnType.REVERSAL,
-    amountKobo: -originalTransaction.amount_kobo,
-    reference: args.reference,
-    metadata: {
-      ...asObject(args.metadata),
-      reason: args.reason,
-    },
-    source: args.source,
-    actorId: args.actorId,
-    createdAt: args.createdAt,
-    reversalOfTransactionId: originalTransaction._id,
-  });
+  // Sync with aggregate tables
+  await syncTransactionInsert(ctx, result.transaction);
+  await auditPostedTransaction(
+    ctx,
+    result.transaction,
+    args.source,
+    args.actorId,
+  );
+
+  return result;
 }
 
 /**
@@ -1372,6 +863,7 @@ export const post = internalMutation({
   returns: transactionSummaryValidator,
   handler: async (ctx, args) => {
     const result = await postTransactionEntry(ctx, args);
+
     return buildTransactionSummary(result.transaction);
   },
 });
@@ -1381,6 +873,7 @@ export const reverse = internalMutation({
   returns: transactionSummaryValidator,
   handler: async (ctx, args) => {
     const result = await reverseTransactionEntry(ctx, args);
+
     return buildTransactionSummary(result.transaction);
   },
 });
@@ -1399,17 +892,35 @@ export const rebuildUserProjection = internalMutation({
     savings_balance_kobo: v.int64(),
   }),
   handler: async (ctx, args) => {
+    const admin = await getAdminUser(ctx);
     const user = await ctx.db.get(args.userId);
     if (!user) {
       throw new ConvexError("User not found");
     }
 
     const projected = await buildProjectedUserBalances(ctx, args.userId);
+    const now = Date.now();
+
+    await auditLog.logChange(ctx, {
+      action: "transaction.user_projection_rebuilt",
+      actorId: admin._id,
+      resourceType: RESOURCE_TYPE.USERS,
+      resourceId: args.userId,
+      before: {
+        total_balance_kobo: user.total_balance_kobo.toString(),
+        savings_balance_kobo: user.savings_balance_kobo.toString(),
+      },
+      after: {
+        total_balance_kobo: projected.totalBalanceKobo.toString(),
+        savings_balance_kobo: projected.savingsBalanceKobo.toString(),
+      },
+      severity: "warning",
+    });
 
     await ctx.db.patch(args.userId, {
       total_balance_kobo: projected.totalBalanceKobo,
       savings_balance_kobo: projected.savingsBalanceKobo,
-      updated_at: Date.now(),
+      updated_at: now,
     });
 
     return {
@@ -1429,16 +940,28 @@ export const rebuildPlanProjection = internalMutation({
     current_amount_kobo: v.int64(),
   }),
   handler: async (ctx, args) => {
+    const admin = await getAdminUser(ctx);
     const plan = await ctx.db.get(args.userPlanId);
     if (!plan) {
       throw new ConvexError("Savings plan not found");
     }
 
     const projected = await buildProjectedPlanAmount(ctx, args.userPlanId);
+    const now = Date.now();
+
+    await auditLog.logChange(ctx, {
+      action: "transaction.plan_projection_rebuilt",
+      actorId: admin._id,
+      resourceType: RESOURCE_TYPE.SAVINGS_PLANS,
+      resourceId: args.userPlanId,
+      before: { current_amount_kobo: plan.current_amount_kobo.toString() },
+      after: { current_amount_kobo: projected.toString() },
+      severity: "warning",
+    });
 
     await ctx.db.patch(args.userPlanId, {
       current_amount_kobo: projected,
-      updated_at: Date.now(),
+      updated_at: now,
     });
 
     return {
@@ -1462,7 +985,9 @@ export const runReconciliation = internalMutation({
   args: {},
   returns: reconciliationRunValidator,
   handler: async (ctx) => {
+    const admin = await getAdminUser(ctx);
     const startedAt = Date.now();
+
     const runId = await ctx.db.insert(
       TABLE_NAMES.TRANSACTION_RECONCILIATION_RUNS,
       {
@@ -1476,6 +1001,14 @@ export const runReconciliation = internalMutation({
         created_at: startedAt,
       },
     );
+
+    await auditLog.log(ctx, {
+      action: "transaction.reconciliation.started",
+      actorId: admin._id,
+      resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
+      resourceId: runId,
+      severity: "info",
+    });
 
     try {
       const previousOpenIssues = await ctx.db

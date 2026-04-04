@@ -8,6 +8,12 @@
  * @module
  */
 
+import type * as adapters_auditLogAdapter from "../adapters/auditLogAdapter.js";
+import type * as adapters_riskAdapters from "../adapters/riskAdapters.js";
+import type * as adapters_savingsPlanAdapters from "../adapters/savingsPlanAdapters.js";
+import type * as adapters_transactionAdapters from "../adapters/transactionAdapters.js";
+import type * as adapters_userAdapters from "../adapters/userAdapters.js";
+import type * as adapters_withdrawalAdapter from "../adapters/withdrawalAdapter.js";
 import type * as admin from "../admin.js";
 import type * as aggregateHelpers from "../aggregateHelpers.js";
 import type * as aggregates from "../aggregates.js";
@@ -42,6 +48,7 @@ import type * as schemas_withdrawals from "../schemas/withdrawals.js";
 import type * as shared from "../shared.js";
 import type * as transactions from "../transactions.js";
 import type * as types from "../types.js";
+import type * as userAudit from "../userAudit.js";
 import type * as users from "../users.js";
 import type * as utils from "../utils.js";
 import type * as verificationQueue from "../verificationQueue.js";
@@ -55,6 +62,12 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "adapters/auditLogAdapter": typeof adapters_auditLogAdapter;
+  "adapters/riskAdapters": typeof adapters_riskAdapters;
+  "adapters/savingsPlanAdapters": typeof adapters_savingsPlanAdapters;
+  "adapters/transactionAdapters": typeof adapters_transactionAdapters;
+  "adapters/userAdapters": typeof adapters_userAdapters;
+  "adapters/withdrawalAdapter": typeof adapters_withdrawalAdapter;
   admin: typeof admin;
   aggregateHelpers: typeof aggregateHelpers;
   aggregates: typeof aggregates;
@@ -89,6 +102,7 @@ declare const fullApi: ApiFromModules<{
   shared: typeof shared;
   transactions: typeof transactions;
   types: typeof types;
+  userAudit: typeof userAudit;
   users: typeof users;
   utils: typeof utils;
   verificationQueue: typeof verificationQueue;
