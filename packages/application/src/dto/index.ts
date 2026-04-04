@@ -34,6 +34,8 @@ export type PostTransactionDTO = {
   actorId?: string;
   createdAt?: number;
   reversalOfTransactionId?: string;
+  reversalOfReference?: string;
+  reversalOfType?: TxnType;
 };
 
 export type ReverseTransactionDTO = {

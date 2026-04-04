@@ -12,6 +12,7 @@ import {
   evaluateWithdrawalRiskDecision,
   buildWithdrawalCapabilities,
   TransactionValidationError,
+  InsufficientBalanceError,
   DuplicateReferenceError,
   WithdrawalBlockedError,
   computeProjectionDelta,
@@ -334,6 +335,8 @@ function buildComparablePayload(input: PostTransactionDTO) {
     amount_kobo: input.amountKobo.toString(),
     reference: input.reference,
     reversal_of_transaction_id: input.reversalOfTransactionId,
+    reversal_of_reference: input.reversalOfReference,
+    reversal_of_type: input.reversalOfType,
     metadata: input.metadata ?? {},
   };
 }
@@ -346,6 +349,8 @@ function buildComparablePayloadFromTx(tx: Transaction) {
     amount_kobo: tx.amount_kobo.toString(),
     reference: tx.reference,
     reversal_of_transaction_id: tx.reversal_of_transaction_id,
+    reversal_of_reference: tx.reversal_of_reference,
+    reversal_of_type: tx.reversal_of_type,
     metadata: tx.metadata,
   };
 }
@@ -418,6 +423,31 @@ export function createPostTransactionUseCase(deps: PostTransactionDeps) {
 
     const createdAt = input.createdAt ?? Date.now();
 
+    const nextTotalBalance = user.total_balance_kobo + delta.totalBalanceKobo;
+    if (nextTotalBalance < 0n) {
+      throw new InsufficientBalanceError(
+        `Projected total balance would go negative for delta ${delta.totalBalanceKobo.toString()}`,
+      );
+    }
+
+    const nextSavingsBalance =
+      user.savings_balance_kobo + delta.savingsBalanceKobo;
+    if (nextSavingsBalance < 0n) {
+      throw new InsufficientBalanceError(
+        `Projected savings balance would go negative for delta ${delta.savingsBalanceKobo.toString()}`,
+      );
+    }
+
+    const nextPlanAmount =
+      userPlan && delta.planAmountKobo !== 0n
+        ? userPlan.current_amount_kobo + delta.planAmountKobo
+        : undefined;
+    if (userPlan && nextPlanAmount !== undefined && nextPlanAmount < 0n) {
+      throw new InsufficientBalanceError(
+        `Projected plan amount would go negative for delta ${delta.planAmountKobo.toString()}`,
+      );
+    }
+
     // 8. Write transaction
     const newTx = await deps.transactionWriteRepository.create({
       user_id: input.userId,
@@ -426,17 +456,13 @@ export function createPostTransactionUseCase(deps: PostTransactionDeps) {
       amount_kobo: input.amountKobo,
       reference: input.reference,
       reversal_of_transaction_id: input.reversalOfTransactionId,
-      reversal_of_reference: undefined,
-      reversal_of_type: undefined,
+      reversal_of_reference: input.reversalOfReference,
+      reversal_of_type: input.reversalOfType,
       metadata: input.metadata ?? {},
       created_at: createdAt,
     });
 
     // 9. Update user balance and savings plan balance concurrently
-    const nextTotalBalance = user.total_balance_kobo + delta.totalBalanceKobo;
-    const nextSavingsBalance =
-      user.savings_balance_kobo + delta.savingsBalanceKobo;
-
     const balanceUpdates: Promise<void>[] = [
       deps.userRepository.updateBalance(
         input.userId,
@@ -446,9 +472,7 @@ export function createPostTransactionUseCase(deps: PostTransactionDeps) {
       ),
     ];
 
-    if (userPlan && delta.planAmountKobo !== 0n) {
-      const nextPlanAmount =
-        userPlan.current_amount_kobo + delta.planAmountKobo;
+    if (userPlan && nextPlanAmount !== undefined) {
       balanceUpdates.push(
         deps.savingsPlanRepository.updateAmount(
           userPlan._id,
@@ -499,6 +523,8 @@ export function createReverseTransactionUseCase(deps: ReverseTransactionDeps) {
       amountKobo: -original.amount_kobo,
       reference: input.reference,
       reversalOfTransactionId: original._id,
+      reversalOfReference: original.reference,
+      reversalOfType: original.type,
       metadata: {
         ...input.metadata,
         original_type: original.type,

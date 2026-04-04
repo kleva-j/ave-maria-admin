@@ -17,6 +17,7 @@ import {
   TransactionSource,
   DuplicateReferenceError,
   DomainError,
+  InsufficientBalanceError,
 } from "@avm-daily/domain";
 
 // --- Arbitrary generators ---
@@ -115,6 +116,8 @@ function makeInMemoryDeps(user: User, plan?: UserSavingsPlan) {
     userRepository,
     savingsPlanRepository,
     getTransactions: () => [...transactions],
+    getUser: () => ({ ...currentUser }),
+    getPlan: () => (currentPlan ? { ...currentPlan } : undefined),
   };
 }
 
@@ -125,6 +128,16 @@ function makeUser(userId: string): User {
     phone: "+2348000000000",
     total_balance_kobo: 0n,
     savings_balance_kobo: 0n,
+    status: "active",
+    updated_at: Date.now(),
+  };
+}
+
+function makePlan(userId: string, planId: string): UserSavingsPlan {
+  return {
+    _id: planId,
+    user_id: userId,
+    current_amount_kobo: 0n,
     status: "active",
     updated_at: Date.now(),
   };
@@ -277,6 +290,118 @@ describe("Property 9: Post transaction conflict detection", () => {
       ),
       { numRuns: 100 },
     );
+  });
+});
+
+describe("Post transaction reversal audit fields", () => {
+  it("treats reversal audit fields as part of duplicate-reference comparison", async () => {
+    const userId = "user-reversal-audit";
+    const user = {
+      ...makeUser(userId),
+      total_balance_kobo: 1_000n,
+      savings_balance_kobo: 1_000n,
+    };
+    const deps = makeInMemoryDeps(user);
+    const postTransaction = createPostTransactionUseCase(deps);
+
+    await postTransaction({
+      userId,
+      type: TxnType.REVERSAL,
+      amountKobo: -1_000n,
+      reference: "reversal-audit-ref",
+      reversalOfTransactionId: "tx-original",
+      reversalOfReference: "original-ref",
+      reversalOfType: TxnType.CONTRIBUTION,
+      metadata: { original_type: TxnType.CONTRIBUTION },
+      source: TransactionSource.ADMIN,
+    });
+
+    await expect(
+      postTransaction({
+        userId,
+        type: TxnType.REVERSAL,
+        amountKobo: -1_000n,
+        reference: "reversal-audit-ref",
+        reversalOfTransactionId: "tx-original",
+        reversalOfReference: "different-original-ref",
+        reversalOfType: TxnType.CONTRIBUTION,
+        metadata: { original_type: TxnType.CONTRIBUTION },
+        source: TransactionSource.ADMIN,
+      }),
+    ).rejects.toThrow(DuplicateReferenceError);
+  });
+});
+
+describe("Post transaction balance guards", () => {
+  it("rejects projected user balances that would go negative", async () => {
+    const userId = "user-negative-balance";
+    const user = {
+      ...makeUser(userId),
+      total_balance_kobo: 500n,
+      savings_balance_kobo: 500n,
+    };
+    const deps = makeInMemoryDeps(user);
+    const postTransaction = createPostTransactionUseCase(deps);
+
+    let caught: unknown;
+    try {
+      await postTransaction({
+        userId,
+        type: TxnType.WITHDRAWAL,
+        amountKobo: -600n,
+        reference: "withdrawal-negative-balance",
+        source: TransactionSource.USER,
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(InsufficientBalanceError);
+    expect((caught as Error).message).toContain(
+      "Projected total balance would go negative",
+    );
+    expect(deps.getTransactions()).toHaveLength(0);
+    expect(deps.getUser().total_balance_kobo).toBe(500n);
+    expect(deps.getUser().savings_balance_kobo).toBe(500n);
+  });
+
+  it("rejects projected plan balances that would go negative", async () => {
+    const userId = "user-negative-plan";
+    const planId = "plan-negative-balance";
+    const user = {
+      ...makeUser(userId),
+      total_balance_kobo: 1_000n,
+      savings_balance_kobo: 1_000n,
+    };
+    const plan = {
+      ...makePlan(userId, planId),
+      current_amount_kobo: 400n,
+    };
+    const deps = makeInMemoryDeps(user, plan);
+    const postTransaction = createPostTransactionUseCase(deps);
+
+    let caught: unknown;
+    try {
+      await postTransaction({
+        userId,
+        userPlanId: planId,
+        type: TxnType.WITHDRAWAL,
+        amountKobo: -500n,
+        reference: "withdrawal-negative-plan",
+        source: TransactionSource.USER,
+      });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBeInstanceOf(InsufficientBalanceError);
+    expect((caught as Error).message).toContain(
+      "Projected plan amount would go negative",
+    );
+    expect(deps.getTransactions()).toHaveLength(0);
+    expect(deps.getUser().total_balance_kobo).toBe(1_000n);
+    expect(deps.getUser().savings_balance_kobo).toBe(1_000n);
+    expect(deps.getPlan()?.current_amount_kobo).toBe(400n);
   });
 });
 

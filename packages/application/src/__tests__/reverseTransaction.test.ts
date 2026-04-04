@@ -204,10 +204,13 @@ describe("Property 10: Reverse transaction rejects reversals of reversals", () =
         async (userId, originalRef, reverseRef, txnType) => {
           fc.pre(originalRef !== reverseRef);
 
-          const user = makeUser(userId);
-
           // For WITHDRAWAL, amount is negative; for others, positive
           const amountKobo = txnType === TxnType.WITHDRAWAL ? -1000n : 1000n;
+          const user = {
+            ...makeUser(userId),
+            total_balance_kobo: txnType === TxnType.WITHDRAWAL ? 0n : 1000n,
+            savings_balance_kobo: txnType === TxnType.WITHDRAWAL ? 0n : 1000n,
+          };
 
           const originalTx: Transaction = {
             _id: "tx-original-seed",
@@ -235,6 +238,42 @@ describe("Property 10: Reverse transaction rejects reversals of reversals", () =
       ),
       { numRuns: 100 },
     );
+  });
+
+  it("copies the original reference and type into the reversal audit fields", async () => {
+    const userId = "user-reversal-fields";
+    const originalTx: Transaction = {
+      _id: "tx-original-fields",
+      user_id: userId,
+      type: TxnType.CONTRIBUTION,
+      amount_kobo: 1_000n,
+      reference: "original-contribution-ref",
+      metadata: {},
+      created_at: Date.now(),
+    };
+    const user = {
+      ...makeUser(userId),
+      total_balance_kobo: 1_000n,
+      savings_balance_kobo: 1_000n,
+    };
+    const deps = makeInMemoryDeps(user, [originalTx]);
+    const reverseTransaction = createReverseTransactionUseCase(deps);
+
+    const result = await reverseTransaction({
+      originalTransactionId: originalTx._id,
+      reference: "reverse-contribution-ref",
+      reason: "audit trail",
+      source: TransactionSource.ADMIN,
+    });
+
+    expect(result.transaction.reversalOfTransactionId).toBe(originalTx._id);
+    expect(result.transaction.reversalOfReference).toBe(originalTx.reference);
+    expect(result.transaction.reversalOfType).toBe(originalTx.type);
+
+    const transactions = deps.getTransactions();
+    expect(transactions).toHaveLength(2);
+    expect(transactions[1]?.reversal_of_reference).toBe(originalTx.reference);
+    expect(transactions[1]?.reversal_of_type).toBe(originalTx.type);
   });
 
   it("throws a DomainError when the original transaction does not exist", async () => {
