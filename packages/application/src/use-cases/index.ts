@@ -5,7 +5,6 @@ import type {
   ReverseTransactionDTO,
   PostTransactionDTO,
   RiskDecisionDTO,
-  TransactionDTO,
 } from "../dto";
 
 import {
@@ -315,22 +314,6 @@ export function createReleaseRiskHoldUseCase(deps: {
   };
 }
 
-function transactionToDTO(tx: Transaction): TransactionDTO {
-  return {
-    id: tx._id,
-    userId: tx.user_id,
-    userPlanId: tx.user_plan_id,
-    type: tx.type as TransactionDTO["type"],
-    amountKobo: tx.amount_kobo,
-    reference: tx.reference,
-    reversalOfTransactionId: tx.reversal_of_transaction_id,
-    reversalOfReference: tx.reversal_of_reference,
-    reversalOfType: tx.reversal_of_type as TransactionDTO["reversalOfType"],
-    metadata: tx.metadata,
-    createdAt: tx.created_at,
-  };
-}
-
 function canonicalizeValue(value: unknown): unknown {
   if (Array.isArray(value)) {
     return value.map(canonicalizeValue);
@@ -406,7 +389,7 @@ export function createPostTransactionUseCase(deps: PostTransactionDeps) {
       const inputPayload = buildComparablePayload(input);
 
       if (stableStringify(existingPayload) === stableStringify(inputPayload)) {
-        return { transaction: transactionToDTO(existing), idempotent: true };
+        return { transaction: existing, idempotent: true };
       }
 
       // 4. If found and payload differs → throw DuplicateReferenceError
@@ -507,7 +490,7 @@ export function createPostTransactionUseCase(deps: PostTransactionDeps) {
 
     await Promise.all(balanceUpdates);
 
-    return { transaction: transactionToDTO(newTx), idempotent: false };
+    return { transaction: newTx, idempotent: false };
   };
 }
 

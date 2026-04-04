@@ -1,10 +1,10 @@
 /**
  * Transaction Ledger Module
- * 
+ *
  * Core financial transaction processing system for the savings platform.
  * Handles all monetary movements including contributions, withdrawals, interest accrual,
  * investment yields, referral bonuses, and reversals.
- * 
+ *
  * Key Features:
  * - Idempotent transaction posting (prevents duplicate entries)
  * - Automatic balance projection updates (user & plan levels)
@@ -12,7 +12,7 @@
  * - Reversal mechanism with full traceability
  * - Real-time reconciliation issue detection
  * - Aggregate table synchronization for O(log n) analytics queries
- * 
+ *
  * Transaction Types:
  * - CONTRIBUTION: User deposits into savings
  * - WITHDRAWAL: User withdrawals from savings
@@ -20,7 +20,7 @@
  * - INVESTMENT_YIELD: Investment returns credited
  * - REFERRAL_BONUS: Bonus for referring new users
  * - REVERSAL: Undoing a previous transaction
- * 
+ *
  * @module transactions
  */
 import type { MutationCtx } from "./_generated/server";
@@ -55,10 +55,7 @@ import {
 import { createConvexUserRepository } from "./adapters/userAdapters";
 import { createConvexSavingsPlanRepository } from "./adapters/savingsPlanAdapters";
 
-import {
-  DomainError,
-  computeProjectionDelta,
-} from "@avm-daily/domain";
+import { DomainError, computeProjectionDelta } from "@avm-daily/domain";
 
 // Re-export computeProjectionDelta from domain (single source of truth)
 export { computeProjectionDelta } from "@avm-daily/domain";
@@ -205,7 +202,6 @@ type TransactionReverseArgs = {
   createdAt?: number;
 };
 
-
 type PostTransactionResult = {
   transaction: Transaction;
   idempotent: boolean;
@@ -215,7 +211,6 @@ type ProjectionTotals = {
   totalBalanceKobo: bigint;
   savingsBalanceKobo: bigint;
 };
-
 
 type TransactionListFilters = {
   type?: TxnType;
@@ -229,7 +224,7 @@ type TransactionListFilters = {
 /**
  * Type guard to check if a value is a record object.
  * Used for safe metadata parsing and validation.
- * 
+ *
  * @param value - The value to check
  * @returns True if the value is a non-null object (not an array)
  */
@@ -240,7 +235,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 /**
  * Safely extracts and validates metadata as a record object.
  * Throws ConvexError if the value is not a valid object.
- * 
+ *
  * @param value - The value to validate (default: undefined)
  * @param fieldName - Name of the field for error messages (default: "metadata")
  * @returns The validated record object or empty object if undefined
@@ -261,7 +256,7 @@ function asObject(value: unknown, fieldName = "metadata") {
 /**
  * Converts a value to a string ID representation.
  * Handles null, undefined, and converts to string safely.
- * 
+ *
  * @param value - The value to convert
  * @returns String representation or undefined if null/undefined
  */
@@ -276,7 +271,7 @@ function asStringId(value: unknown) {
 /**
  * Extracts a required string field from a metadata object.
  * Validates presence and trims whitespace.
- * 
+ *
  * @param object - The metadata object to extract from
  * @param key - The key to look up
  * @param message - Custom error message (default: "{key} is required")
@@ -287,7 +282,7 @@ function asStringId(value: unknown) {
 /**
  * Extracts an optional string field from a metadata object.
  * Returns undefined for missing/null/empty values.
- * 
+ *
  * @param object - The metadata object to extract from
  * @param key - The key to look up
  * @returns The trimmed string value or undefined
@@ -309,7 +304,7 @@ function getOptionalString(object: Record<string, unknown>, key: string) {
 /**
  * Extracts a required number field from a metadata object.
  * Validates that the value is a finite number.
- * 
+ *
  * @param object - The metadata object to extract from
  * @param key - The key to look up
  * @returns The numeric value
@@ -319,7 +314,7 @@ function getOptionalString(object: Record<string, unknown>, key: string) {
 /**
  * Type guard to validate transaction type values.
  * Ensures the value matches one of the defined TxnType enum values.
- * 
+ *
  * @param value - The value to validate
  * @returns True if the value is a valid TxnType
  */
@@ -330,7 +325,7 @@ function isTxnTypeValue(value: unknown): value is TxnType {
 /**
  * Validates that a transaction reference is provided and non-empty.
  * References are critical for idempotency and audit trails.
- * 
+ *
  * @param reference - The transaction reference to validate
  * @throws ConvexError if the reference is empty or whitespace
  */
@@ -338,7 +333,7 @@ function isTxnTypeValue(value: unknown): value is TxnType {
 /**
  * Validates that positive-amount transactions have the correct amount sign.
  * Applied to: CONTRIBUTION, INTEREST_ACCRUAL, INVESTMENT_YIELD, REFERRAL_BONUS
- * 
+ *
  * @param type - The transaction type
  * @param amountKobo - The amount in kobo (must be positive)
  * @throws ConvexError if amount is not positive
@@ -347,7 +342,7 @@ function isTxnTypeValue(value: unknown): value is TxnType {
 /**
  * Validates that negative-amount transactions have the correct amount sign.
  * Applied to: WITHDRAWAL
- * 
+ *
  * @param type - The transaction type
  * @param amountKobo - The amount in kobo (must be negative)
  * @throws ConvexError if amount is not negative
@@ -357,10 +352,10 @@ function isTxnTypeValue(value: unknown): value is TxnType {
  * Canonicalizes a value for stable string comparison.
  * Recursively sorts object keys and processes arrays to ensure
  * consistent ordering regardless of input order.
- * 
+ *
  * This is critical for idempotency checks - two identical payloads
  * must produce the same canonical form even if keys were in different order.
- * 
+ *
  * @param value - The value to canonicalize
  * @returns A canonically ordered version of the value
  */
@@ -368,14 +363,14 @@ function isTxnTypeValue(value: unknown): value is TxnType {
 /**
  * Normalizes and validates contribution transaction metadata.
  * Contributions represent user deposits into their savings plans.
- * 
+ *
  * Required fields:
  * - channel: Where the contribution originated (e.g., "mobile_app", "web")
  * - origin_reference: External system reference for tracing
- * 
+ *
  * Optional fields:
  * - note: Additional context or memo
- * 
+ *
  * @param metadata - Raw metadata object
  * @param source - Transaction source (USER, ADMIN, SYSTEM)
  * @param actorId - ID of the user/admin performing the action
@@ -386,16 +381,16 @@ function isTxnTypeValue(value: unknown): value is TxnType {
 /**
  * Normalizes and validates accrual transaction metadata.
  * Accruals represent periodic interest or investment returns.
- * 
+ *
  * Required fields:
  * - period_start: Start date of the accrual period
  * - period_end: End date of the accrual period
  * - rate: Accrual rate (e.g., 0.05 for 5%)
  * - run_id: ID of the accrual run
- * 
+ *
  * Optional fields:
  * - note: Additional context or memo
- * 
+ *
  * @param metadata - Raw metadata object
  * @param source - Transaction source (USER, ADMIN, SYSTEM)
  * @param actorId - ID of the user/admin performing the action
@@ -406,15 +401,15 @@ function isTxnTypeValue(value: unknown): value is TxnType {
 /**
  * Normalizes and validates referral bonus transaction metadata.
  * Referral bonuses are awarded to users for referring new users.
- * 
+ *
  * Required fields:
  * - referrer_user_id: ID of the referring user
  * - referred_user_id: ID of the referred user
  * - trigger_transaction_reference: Reference of the triggering transaction
- * 
+ *
  * Optional fields:
  * - note: Additional context or memo
- * 
+ *
  * @param metadata - Raw metadata object
  * @param source - Transaction source (USER, ADMIN, SYSTEM)
  * @param actorId - ID of the user/admin performing the action
@@ -425,16 +420,16 @@ function isTxnTypeValue(value: unknown): value is TxnType {
 /**
  * Normalizes and validates withdrawal transaction metadata.
  * Withdrawals represent user withdrawals from their savings plans.
- * 
+ *
  * Required fields:
  * - method: Withdrawal method (e.g., "BANK_TRANSFER", "CASH")
  * - withdrawal_status: Status of the withdrawal (e.g., "PENDING", "COMPLETED")
- * 
+ *
  * Optional fields:
  * - bank_account: Bank account details (required for bank transfers)
  * - cash_details: Cash details (required for cash withdrawals)
  * - note: Additional context or memo
- * 
+ *
  * @param metadata - Raw metadata object
  * @param source - Transaction source (USER, ADMIN, SYSTEM)
  * @param actorId - ID of the user/admin performing the action
@@ -532,7 +527,6 @@ async function getTransactionsByReference(ctx: Context, reference: string) {
     .collect();
 }
 
-
 function getEffectiveType(transaction: Transaction) {
   if (transaction.type !== TxnType.REVERSAL) {
     return transaction.type;
@@ -546,7 +540,6 @@ function getEffectiveType(transaction: Transaction) {
 
   return transaction.reversal_of_type;
 }
-
 
 /**
  * Updates the denormalized balances for a user and their savings plan.
@@ -562,7 +555,6 @@ function getEffectiveType(transaction: Transaction) {
  * Handles complex logic for Reversals (verifying original transactions and amounts)
  * and normalizes metadata before the transaction is committed to the database.
  */
-
 
 function shouldAuditTransaction(source: TransactionSource) {
   return (
@@ -634,12 +626,10 @@ export async function postTransactionEntry(
       createdAt: args.createdAt,
     });
 
-    // Map DTO back to the Transaction shape expected by callers
-    const transaction = await ctx.db.get(ucResult.transaction.id as TransactionId);
-    if (!transaction) {
-      throw new ConvexError("Failed to retrieve created transaction");
-    }
-    result = { transaction, idempotent: ucResult.idempotent };
+    result = {
+      transaction: ucResult.transaction as Transaction,
+      idempotent: ucResult.idempotent,
+    };
   } catch (err) {
     if (err instanceof DomainError) {
       throw new ConvexError(err.message);
@@ -650,7 +640,12 @@ export async function postTransactionEntry(
   if (!result.idempotent) {
     // Sync with aggregate tables for O(log n) queries
     await syncTransactionInsert(ctx, result.transaction);
-    await auditPostedTransaction(ctx, result.transaction, args.source, args.actorId);
+    await auditPostedTransaction(
+      ctx,
+      result.transaction,
+      args.source,
+      args.actorId,
+    );
   }
 
   return result;
@@ -684,11 +679,10 @@ export async function reverseTransactionEntry(
       createdAt: args.createdAt,
     });
 
-    const transaction = await ctx.db.get(ucResult.transaction.id as TransactionId);
-    if (!transaction) {
-      throw new ConvexError("Failed to retrieve reversed transaction");
-    }
-    result = { transaction, idempotent: false };
+    result = {
+      transaction: ucResult.transaction as Transaction,
+      idempotent: false,
+    };
   } catch (err) {
     if (err instanceof DomainError) {
       throw new ConvexError(err.message);
@@ -698,7 +692,12 @@ export async function reverseTransactionEntry(
 
   // Sync with aggregate tables
   await syncTransactionInsert(ctx, result.transaction);
-  await auditPostedTransaction(ctx, result.transaction, args.source, args.actorId);
+  await auditPostedTransaction(
+    ctx,
+    result.transaction,
+    args.source,
+    args.actorId,
+  );
 
   return result;
 }

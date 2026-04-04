@@ -176,7 +176,7 @@ describe("Property 8: Post transaction idempotency", () => {
         expect(afterSecond).toHaveLength(1);
 
         // The returned transaction should be the same record
-        expect(second.transaction.id).toBe(first.transaction.id);
+        expect(second.transaction._id).toBe(first.transaction._id);
         expect(second.transaction.reference).toBe(input.reference);
       }),
       { numRuns: 100 },

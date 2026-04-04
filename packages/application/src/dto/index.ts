@@ -6,6 +6,7 @@ import type {
   RiskEventType,
   RiskHoldScope,
   RiskSeverity,
+  Transaction,
   TxnType,
 } from "@avm-daily/domain";
 
@@ -115,10 +116,10 @@ export type RiskSummaryDTO = {
 };
 
 export type PostTransactionOutput = {
-  transaction: TransactionDTO;
+  transaction: Transaction;
   idempotent: boolean;
 };
 
 export type ReverseTransactionOutput = {
-  transaction: TransactionDTO;
+  transaction: Transaction;
 };

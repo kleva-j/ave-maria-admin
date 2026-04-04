@@ -266,9 +266,9 @@ describe("Property 10: Reverse transaction rejects reversals of reversals", () =
       source: TransactionSource.ADMIN,
     });
 
-    expect(result.transaction.reversalOfTransactionId).toBe(originalTx._id);
-    expect(result.transaction.reversalOfReference).toBe(originalTx.reference);
-    expect(result.transaction.reversalOfType).toBe(originalTx.type);
+    expect(result.transaction.reversal_of_transaction_id).toBe(originalTx._id);
+    expect(result.transaction.reversal_of_reference).toBe(originalTx.reference);
+    expect(result.transaction.reversal_of_type).toBe(originalTx.type);
 
     const transactions = deps.getTransactions();
     expect(transactions).toHaveLength(2);
