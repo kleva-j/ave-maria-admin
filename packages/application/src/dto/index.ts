@@ -123,3 +123,60 @@ export type PostTransactionOutput = {
 export type ReverseTransactionOutput = {
   transaction: Transaction;
 };
+
+export type CreateSavingsPlanTemplateDTO = {
+  name: string;
+  description?: string;
+  defaultTargetKobo: bigint;
+  durationDays: number;
+  interestRate: number;
+  automationType?: string;
+};
+
+export type UpdateSavingsPlanTemplateDTO = {
+  templateId: string;
+  name?: string;
+  description?: string;
+  defaultTargetKobo?: bigint;
+  durationDays?: number;
+  interestRate?: number;
+  automationType?: string;
+};
+
+export type SetSavingsPlanTemplateActiveStateDTO = {
+  templateId: string;
+  isActive: boolean;
+  actorId: string;
+};
+
+export type CreateSavingsPlanDTO = {
+  userId: string;
+  templateId: string;
+  customTargetKobo?: bigint;
+  startDate?: string;
+  endDate?: string;
+  today?: string;
+};
+
+export type UpdateSavingsPlanSettingsDTO = {
+  planId: string;
+  userId: string;
+  customTargetKobo?: bigint;
+  endDate?: string;
+};
+
+export type ChangeSavingsPlanStatusDTO = {
+  planId: string;
+  userId: string;
+};
+
+export type RecordSavingsPlanContributionDTO = {
+  planId: string;
+  userId: string;
+  amountKobo: bigint;
+  reference: string;
+  metadata?: Record<string, unknown>;
+  source: TransactionSource;
+  actorId?: string;
+};
+

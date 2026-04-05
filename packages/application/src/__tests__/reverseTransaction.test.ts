@@ -81,6 +81,17 @@ function makeInMemoryDeps(user: User, seedTransactions: Transaction[] = []) {
   const savingsPlanRepository: SavingsPlanRepository = {
     findById: async () => null,
     findByUserId: async () => [],
+    findByUserIdAndTemplateId: async () => null,
+    create: async () => {
+      throw new Error(
+        "create should not be called in reverseTransaction tests",
+      );
+    },
+    update: async () => {
+      throw new Error(
+        "update should not be called in reverseTransaction tests",
+      );
+    },
     updateAmount: async () => undefined,
   };
 
@@ -97,7 +108,6 @@ function makeInMemoryDeps(user: User, seedTransactions: Transaction[] = []) {
 
 describe("Property 10: Reverse transaction rejects reversals of reversals", () => {
   it("throws a DomainError when attempting to reverse a REVERSAL transaction", async () => {
-
     await fc.assert(
       fc.asyncProperty(
         arbitraryUserId,
@@ -137,7 +147,6 @@ describe("Property 10: Reverse transaction rejects reversals of reversals", () =
   });
 
   it("the thrown error is an instance of DomainError (not a plain Error)", async () => {
-
     await fc.assert(
       fc.asyncProperty(
         arbitraryUserId,
@@ -186,7 +195,6 @@ describe("Property 10: Reverse transaction rejects reversals of reversals", () =
   });
 
   it("does NOT throw when reversing a non-REVERSAL transaction", async () => {
-
     const nonReversalTypes = [
       TxnType.CONTRIBUTION,
       TxnType.INTEREST_ACCRUAL,
@@ -277,7 +285,6 @@ describe("Property 10: Reverse transaction rejects reversals of reversals", () =
   });
 
   it("throws a DomainError when the original transaction does not exist", async () => {
-
     await fc.assert(
       fc.asyncProperty(
         arbitraryUserId,
@@ -306,7 +313,6 @@ describe("Property 10: Reverse transaction rejects reversals of reversals", () =
 
 describe("Property 16: Use-case errors are DomainError instances", () => {
   it("reversing a REVERSAL transaction throws an instance of DomainError (not a plain Error)", async () => {
-
     await fc.assert(
       fc.asyncProperty(
         arbitraryUserId,

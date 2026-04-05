@@ -13,11 +13,11 @@ import type {
 import type { Transaction, User, UserSavingsPlan } from "@avm-daily/domain";
 import type { PostTransactionDTO } from "../dto/index.js";
 import {
-  TxnType,
-  TransactionSource,
-  DuplicateReferenceError,
-  DomainError,
   InsufficientBalanceError,
+  DuplicateReferenceError,
+  TransactionSource,
+  DomainError,
+  TxnType,
 } from "@avm-daily/domain";
 
 // --- Arbitrary generators ---
@@ -64,7 +64,9 @@ const arbitraryPostTransactionInput = fc.record({
   >(TransactionSource.USER, TransactionSource.ADMIN, TransactionSource.SYSTEM),
   metadata: fc.option(
     fc.dictionary(fc.string({ minLength: 1, maxLength: 16 }), fc.string()),
-    { nil: undefined },
+    {
+      nil: undefined,
+    },
   ),
 });
 
@@ -122,6 +124,30 @@ function makeInMemoryDeps(user: User, plan?: UserSavingsPlan) {
       currentPlan && currentPlan._id === id ? { ...currentPlan } : null,
     findByUserId: async (uid) =>
       currentPlan && currentPlan.user_id === uid ? [{ ...currentPlan }] : [],
+    findByUserIdAndTemplateId: async (uid, templateId) =>
+      currentPlan &&
+      currentPlan.user_id === uid &&
+      currentPlan.template_id === templateId
+        ? { ...currentPlan }
+        : null,
+    create: async (plan) => {
+      currentPlan = { ...plan, _id: `plan-${Date.now()}` };
+      return { ...currentPlan };
+    },
+    update: async (id, patch) => {
+      if (!currentPlan || currentPlan._id !== id) {
+        throw new Error(
+          `Unexpected savings plan update for ${id}; expected ${currentPlan?._id ?? "none"}`,
+        );
+      }
+
+      currentPlan = {
+        ...currentPlan,
+        ...patch,
+      };
+
+      return { ...currentPlan };
+    },
     updateAmount: async (id, currentAmountKobo, updatedAt) => {
       if (!currentPlan) {
         throw new Error(
@@ -170,8 +196,15 @@ function makePlan(userId: string, planId: string): UserSavingsPlan {
   return {
     _id: planId,
     user_id: userId,
+    template_id: "template-1",
+    custom_target_kobo: 100_000n,
     current_amount_kobo: 0n,
+    start_date: "2026-04-04",
+    end_date: "2026-05-04",
     status: "active",
+    automation_enabled: false,
+    metadata: {},
+    created_at: Date.now(),
     updated_at: Date.now(),
   };
 }
@@ -189,7 +222,6 @@ function makeDepsForInput(input: PostTransactionDTO) {
 
 describe("Property 8: Post transaction idempotency", () => {
   it("posting the same transaction twice returns idempotent: true on the second call and does not create a duplicate record", async () => {
-
     await fc.assert(
       fc.asyncProperty(arbitraryPostTransactionInput, async (rawInput) => {
         const input: PostTransactionDTO = {
@@ -233,7 +265,6 @@ describe("Property 8: Post transaction idempotency", () => {
 
 describe("Property 9: Post transaction conflict detection", () => {
   it("posting the same reference with a different amount throws DuplicateReferenceError", async () => {
-
     await fc.assert(
       fc.asyncProperty(
         arbitraryPostTransactionInput,
@@ -270,7 +301,6 @@ describe("Property 9: Post transaction conflict detection", () => {
   });
 
   it("posting the same reference with a different type throws DuplicateReferenceError", async () => {
-
     await fc.assert(
       fc.asyncProperty(arbitraryPostTransactionInput, async (rawInput) => {
         // Pick a type that differs from the input type
@@ -311,7 +341,6 @@ describe("Property 9: Post transaction conflict detection", () => {
   });
 
   it("the thrown error is a DomainError instance with code 'duplicate_reference'", async () => {
-
     await fc.assert(
       fc.asyncProperty(
         arbitraryPostTransactionInput,

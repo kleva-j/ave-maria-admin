@@ -15,6 +15,9 @@
     "./errors": "./src/errors/index.ts",
     "./services": "./src/services/index.ts"
   },
+  "dependencies": {
+    "date-fns": "catalog:"
+  },
   "devDependencies": {
     "@avm-daily/config": "workspace:*",
     "@types/node": "^24.3.0",

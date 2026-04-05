@@ -12,4 +12,5 @@ export const savings_plan_templates = defineTable({
   created_at: v.number(),
 })
   .index("by_name", ["name"])
-  .index("by_is_active", ["is_active"]);
+  .index("by_created_at", ["created_at"])
+  .index("by_is_active_and_created_at", ["is_active", "created_at"]);

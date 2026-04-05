@@ -1,4 +1,4 @@
-import type { Transaction, User, UserSavingsPlan } from "@avm-daily/domain";
+import type { SavingsPlanTemplate, UserSavingsPlan, Transaction, User } from "@avm-daily/domain";
 
 // --- Transaction Ports (ISP: split read vs write) ---
 
@@ -26,14 +26,30 @@ export interface UserRepository {
   ): Promise<void>;
 }
 
+export type SavingsPlanUpdatePatch = Partial<
+  Pick<
+    UserSavingsPlan,
+    "custom_target_kobo" | "end_date" | "status" | "automation_enabled" | "updated_at"
+  >
+>;
+
 export interface SavingsPlanRepository {
   findById(id: string): Promise<UserSavingsPlan | null>;
   findByUserId(userId: string): Promise<UserSavingsPlan[]>;
-  updateAmount(
+  findByUserIdAndTemplateId(userId: string, templateId: string): Promise<UserSavingsPlan | null>;
+  create(plan: Omit<UserSavingsPlan, "_id">): Promise<UserSavingsPlan>;
+  update(id: string, patch: SavingsPlanUpdatePatch): Promise<UserSavingsPlan>;
+  updateAmount(id: string, currentAmountKobo: bigint, updatedAt: number): Promise<void>;
+}
+
+export interface SavingsPlanTemplateRepository {
+  findById(id: string): Promise<SavingsPlanTemplate | null>;
+  findByName(name: string): Promise<SavingsPlanTemplate | null>;
+  create(template: Omit<SavingsPlanTemplate, "_id">): Promise<SavingsPlanTemplate>;
+  update(
     id: string,
-    currentAmountKobo: bigint,
-    updatedAt: number,
-  ): Promise<void>;
+    patch: Partial<Omit<SavingsPlanTemplate, "_id" | "created_at">>,
+  ): Promise<SavingsPlanTemplate>;
 }
 
 // --- Withdrawal Port ---
@@ -65,11 +81,7 @@ export interface RiskHoldRepository {
     placed_by_admin_id: string;
     placed_at: number;
   }): Promise<{ _id: string }>;
-  release(
-    id: string,
-    releasedByAdminId: string,
-    releasedAt: number,
-  ): Promise<void>;
+  release(id: string, releasedByAdminId: string, releasedAt: number): Promise<void>;
 }
 
 // --- Risk Event Ports (ISP: bank-account events separated from risk events) ---
@@ -106,9 +118,7 @@ export interface RiskEventService {
 
 export type AuditLogChangeSnapshot = Record<string, unknown>;
 
-export interface AuditLogChangeParams<
-  T extends AuditLogChangeSnapshot = AuditLogChangeSnapshot,
-> {
+export interface AuditLogChangeParams<T extends AuditLogChangeSnapshot = AuditLogChangeSnapshot> {
   action: string;
   actorId?: string;
   resourceType: string;
@@ -127,7 +137,7 @@ export interface AuditLogService {
     severity: string;
     metadata?: Record<string, unknown>;
   }): Promise<void>;
-  logChange<
-    T extends AuditLogChangeSnapshot = AuditLogChangeSnapshot,
-  >(params: AuditLogChangeParams<T>): Promise<void>;
+  logChange<T extends AuditLogChangeSnapshot = AuditLogChangeSnapshot>(
+    params: AuditLogChangeParams<T>,
+  ): Promise<void>;
 }

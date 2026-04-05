@@ -30,11 +30,30 @@ export interface AdminUser {
   created_at: number;
 }
 
+export interface SavingsPlanTemplate {
+  _id: string;
+  name: string;
+  description?: string;
+  default_target_kobo: bigint;
+  duration_days: number;
+  interest_rate: number;
+  automation_type?: string;
+  is_active: boolean;
+  created_at: number;
+}
+
 export interface UserSavingsPlan {
   _id: string;
   user_id: string;
+  template_id: string;
+  custom_target_kobo: bigint;
   current_amount_kobo: bigint;
+  start_date: string;
+  end_date: string;
   status: PlanStatus;
+  automation_enabled: boolean;
+  metadata?: Record<string, unknown>;
+  created_at: number;
   updated_at: number;
 }
 
