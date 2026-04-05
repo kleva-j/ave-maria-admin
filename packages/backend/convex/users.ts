@@ -1,19 +1,16 @@
 import { v } from "convex/values";
 
+import { createApplyKycDecisionUseCase } from "@avm-daily/application/use-cases";
 import { AuditActions } from "convex-audit-log";
 
+import { RESOURCE_TYPE, TABLE_NAMES, EVENT_TYPE, UserStatus } from "./shared";
+import { createConvexKycDocumentRepository } from "./adapters/kycAdapters";
+import { createConvexAuditLogService } from "./adapters/auditLogAdapter";
 import { internalMutation, mutation, query } from "./_generated/server";
+import { createConvexUserRepository } from "./adapters/userAdapters";
 import { buildUserProfileSyncAuditChange } from "./userAudit";
 import { ensureUser, getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
-
-import {
-  KYC_VERIFICATION_STATUS,
-  RESOURCE_TYPE,
-  TABLE_NAMES,
-  EVENT_TYPE,
-  UserStatus,
-} from "./shared";
 
 import {
   syncUserInsert,
@@ -200,54 +197,51 @@ export const processKycResult = internalMutation({
     approved: v.boolean(),
     reason: v.optional(v.string()),
     reviewedBy: v.optional(v.id("admin_users")),
+    providerReference: v.optional(v.string()),
+    metadata: v.optional(v.any()),
   },
   handler: async (ctx, args) => {
-    const user = await ensureUser(ctx, args.userId);
+    const oldUser = await ensureUser(ctx, args.userId);
+    const applyKycDecision = createApplyKycDecisionUseCase({
+      userRepository: createConvexUserRepository(ctx),
+      kycDocumentRepository: createConvexKycDocumentRepository(ctx),
+      auditLogService: createConvexAuditLogService(ctx),
+    });
 
-    const newStatus = args.approved ? "active" : "closed";
-    const docNewStatus = args.approved
-      ? KYC_VERIFICATION_STATUS.APPROVED
-      : KYC_VERIFICATION_STATUS.REJECTED;
+    const result = await applyKycDecision({
+      userId: String(args.userId),
+      approved: args.approved,
+      reason: args.reason,
+      reviewedBy: args.reviewedBy ? String(args.reviewedBy) : undefined,
+      providerReference: args.providerReference,
+      metadata:
+        args.metadata &&
+        typeof args.metadata === "object" &&
+        !Array.isArray(args.metadata)
+          ? { ...args.metadata }
+          : undefined,
+    });
 
-    const documents = await ctx.db
-      .query(TABLE_NAMES.KYC_DOCUMENTS)
-      .withIndex("by_user_id_and_status", (q) =>
-        q
-          .eq("user_id", args.userId)
-          .eq("status", KYC_VERIFICATION_STATUS.PENDING),
-      )
-      .collect();
+    const updatedUser = await ensureUser(ctx, args.userId);
+    await syncUserUpdate(ctx, oldUser, updatedUser);
 
-    const now = Date.now();
-
-    // Update the user's status
-    await ctx.db.patch(args.userId, { status: newStatus, updated_at: now });
-
-    // Update all pending documents concurrently
-    await Promise.all(
-      documents.map((doc) =>
-        ctx.db.patch(doc._id, {
-          status: docNewStatus,
-          reviewed_by: args.reviewedBy,
-          reviewed_at: now,
-          rejection_reason: args.approved ? undefined : args.reason,
-        }),
-      ),
-    );
-
-    // Log the result using system event types
-    await auditLog.logChange(ctx, {
+    await auditLog.log(ctx, {
       action: args.approved
         ? EVENT_TYPE.KYC_VERIFICATION_COMPLETED
         : EVENT_TYPE.KYC_VERIFICATION_FAILED,
-      actorId: args.userId, // System action, but attributing to user context
+      actorId: args.reviewedBy ?? args.userId,
       resourceType: RESOURCE_TYPE.USERS,
       resourceId: args.userId,
-      before: { status: user.status },
-      after: { status: newStatus, reason: args.reason },
       severity: args.approved ? "info" : "warning",
+      metadata: {
+        approved: args.approved,
+        reason: args.reason,
+        documents_reviewed: result.documentsReviewed,
+        provider_reference: args.providerReference,
+        metadata: args.metadata,
+      },
     });
 
-    return { success: true };
+    return result;
   },
 });

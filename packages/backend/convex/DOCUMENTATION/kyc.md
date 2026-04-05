@@ -1,1177 +1,455 @@
-# KYC Identity Verification System
+# KYC Feature Behavior
 
 ## Overview
 
-The `kyc.ts` module implements a comprehensive Know Your Customer (KYC) identity verification pipeline. It supports both automated verification through simulated third-party providers and manual admin review, with full audit logging and aggregate synchronization.
+**Primary modules**:
 
-**Primary Responsibilities**:
+- `packages/backend/convex/kyc.ts`
+- `packages/backend/convex/kycDocuments.ts`
+- `packages/backend/convex/kycInternal.ts`
 
-- Automated KYC verification via external provider simulation
-- Manual admin review and approval workflow
-- Document requirement validation
-- User status transitions based on KYC results
-- Risk assessment integration
-- Audit trail maintenance
+The KYC feature is a document-backed identity verification pipeline with two decision paths:
 
----
+1. **Automated verification**
+   - user triggers verification
+   - provider adapter returns a decision
+   - shared decision logic applies the outcome
 
-## Architecture
+2. **Manual admin review**
+   - admin reviews pending users/documents
+   - admin approves or rejects
+   - the exact same shared decision logic applies the outcome
 
-```
-┌─────────────────────┐
-│   User Submits      │
-│   KYC Documents     │
-└──────────┬──────────┘
-           │
-           ▼
-┌─────────────────────────┐
-│  verifyIdentity Action  │
-│  ─────────────────────  │
-│  • Validate documents   │
-│  • Call KYC provider    │
-│  • Process result       │
-└──────────┬──────────────┘
-           │
-           ▼
-┌─────────────────────────┐
-│  simulateKycProvider    │
-│  (External API Mock)    │
-│  • 80% auto-approval    │
-│  • Random rejections    │
-└──────────┬──────────────┘
-           │
-           ▼
-┌─────────────────────────┐
-│  processKycResult       │
-│  • Update user status   │
-│  • Mark documents       │
-│  • Sync aggregates      │
-└──────────┬──────────────┘
-           │
-           ▼
-┌─────────────────────┐
-│  APPROVED → ACTIVE  │
-│  REJECTED → CLOSED  │
-└─────────────────────┘
-```
+The important current behavior is:
+
+- KYC rejection is **retryable**.
+- Rejection returns the user to `pending_kyc`.
+- Rejected documents remain in history.
+- Replacement uploads supersede prior rejected documents of the same type.
+
+This is different from the older model that moved rejected users to `closed`.
 
 ---
 
-## Required KYC Documents
+## Core Modules
 
-Users must submit these documents before verification:
+### API / Orchestration
+- `packages/backend/convex/kyc.ts`
+- `packages/backend/convex/kycDocuments.ts`
+- `packages/backend/convex/users.ts`
 
-```typescript
-const REQUIRED_KYC_DOCUMENTS = [
-  DOCUMENT_TYPES.GOVERNMENT_ID, // National ID card, Passport, Driver's license
-  DOCUMENT_TYPES.SELFIE_WITH_ID, // Selfie while holding the government ID
-] as const;
-```
+### Internal provider/query helpers
+- `packages/backend/convex/kycInternal.ts`
 
-**Validation Rules**:
+### Domain rules
+- `packages/domain/src/services/kycPolicy.ts`
 
-- Both documents must be uploaded before verification can proceed
-- Documents must be in PENDING status
-- User must be in PENDING_KYC status
+### Application use cases
+- `packages/application/src/use-cases/index.ts`
 
----
-
-## KYC Status Flow
-
-```
-User Registration
-        ↓
-PENDING_KYC ─────────────────────┐
-        ↓                        │
-  Upload Documents               │
-        ↓                        │
-  verifyIdentity()              │
-        ↓                        │
-   ┌────┴─────┐                  │
-   │          │                  │
-APPROVED   REJECTED              │
-   ↓          ↓                  │
- ACTIVE    CLOSED ←──────────────┘
-            │
-            │ (Admin override possible)
-            └─────────────────────→ (Manual review path)
-```
-
-### Status Definitions
-
-```typescript
-enum UserStatus {
-  PENDING_KYC = "pending_kyc", // Awaiting document upload and verification
-  ACTIVE = "active", // KYC approved, full platform access
-  CLOSED = "closed", // KYC rejected, account restricted
-}
-```
+### Backend adapters
+- `packages/backend/convex/adapters/kycAdapters.ts`
+- `packages/backend/convex/adapters/userAdapters.ts`
 
 ---
 
-## Core Functions
+## KYC State Model
 
-### `verifyIdentity(args)`
+## User status
 
-Main action to trigger the complete KYC verification process.
+Relevant user statuses:
 
-**Type**: Action (can call external services)
+- `pending_kyc`
+  - user can upload documents
+  - user can run automated verification
+  - admin can review pending docs
 
-**Arguments**: None (uses authenticated user context)
+- `active`
+  - KYC approved
+  - full access granted
 
-**Returns**:
+Current rejection behavior:
 
-```typescript
-{
-  approved: boolean;
-  reason: string;
-  userId: Id<"users">;
-}
-```
+- rejection does **not** move the user to `closed`
+- rejection moves the user back to `pending_kyc`
+- user may upload replacement documents and retry
 
-**Workflow**:
+## Document status
 
-1. **Fetch User Data**
+KYC document statuses:
 
-   - Calls `getViewerKycData()` internal query
-   - Retrieves user record and pending documents
+- `pending`
+- `approved`
+- `rejected`
 
-2. **Validate Requirements**
-
-   - Checks for pending documents
-   - Verifies user status is PENDING_KYC
-   - Ensures required documents are present
-
-3. **Call External Provider**
-
-   - Invokes `simulateKycProvider()` internal action
-   - Simulates 2-second network delay
-   - Returns 80% approval rate with random rejection reasons
-
-4. **Process Result**
-
-   - Calls `processKycResult()` mutation
-   - Updates user status and documents
-   - Syncs aggregates
-
-5. **Return Outcome**
-   - Provides approval status and reason
-
-**Implementation**:
-
-```typescript
-export const verifyIdentity = action({
-  handler: async (ctx) => {
-    // Step 1: Fetch user data and pending documents
-    const data: KycData = await ctx.runQuery(internal.kyc.getViewerKycData);
-
-    if (data.documents.length === 0) {
-      throw new ConvexError("No pending KYC documents found to verify");
-    }
-
-    if (data.user.status !== UserStatus.PENDING_KYC) {
-      throw new ConvexError("User is not in pending_kyc status");
-    }
-
-    // Step 2: Validate required documents
-    const submittedTypes = new Set(data.documents.map((d) => d.document_type));
-    const missingRequired = REQUIRED_KYC_DOCUMENTS.filter(
-      (docType) => !submittedTypes.has(docType)
-    );
-
-    if (missingRequired.length > 0) {
-      throw new ConvexError(
-        `Missing required KYC documents: ${missingRequired.join(", ")}`
-      );
-    }
-
-    // Step 3: Call external provider (simulated)
-    const result = await ctx.runAction(internal.kyc.simulateKycProvider, {
-      userId: data.user._id,
-      documentTypes: data.documents.map((d) => d.document_type),
-    });
-
-    // Step 4: Process result
-    await ctx.runMutation(internal.users.processKycResult, {
-      userId: data.user._id,
-      approved: result.approved,
-      reason: result.reason,
-    });
-
-    // Step 5: Return outcome
-    return { ...result, userId: data.user._id };
-  },
-});
-```
-
-**Error Scenarios**:
-
-| Error                               | Condition                               |
-| ----------------------------------- | --------------------------------------- |
-| "No pending KYC documents found"    | No documents in PENDING status          |
-| "User is not in pending_kyc status" | User already processed or not started   |
-| "Missing required KYC documents"    | Missing government_id or selfie_with_id |
-
-**Usage**:
-
-```typescript
-const result = await ctx.runAction(kyc.verifyIdentity);
-
-if (result.approved) {
-  toast.success("KYC verified successfully!");
-} else {
-  toast.error(`KYC failed: ${result.reason}`);
-}
-```
+Only `pending` documents participate in a verification run.
 
 ---
 
-### `simulateKycProvider(args)`
+## Required Documents
 
-Simulates a third-party KYC provider API call (e.g., Smile Identity, Dojah).
+The required document set is currently:
 
-**Type**: Internal Action
+- `government_id`
+- `selfie_with_id`
 
-**Arguments**:
+Optional documents:
 
-```typescript
-{
-  userId: v.id("users");
-  documentTypes: v.array(v.string());
-}
-```
+- `proof_of_address`
+- `bank_statement`
 
-**Returns**:
-
-```typescript
-{
-  approved: boolean;
-  reason: string;
-}
-```
-
-**Simulation Logic**:
-
-```typescript
-export const simulateKycProvider = internalAction({
-  handler: async () => {
-    // Simulate network latency (2 seconds)
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Simulate 80% approval rate
-    const isApproved = Math.random() < 0.8;
-
-    if (isApproved) {
-      return {
-        approved: true,
-        reason: "Automatically verified by provider",
-      };
-    }
-
-    // Random rejection reasons
-    const reasons = [
-      "Document illegible or blurry",
-      "Face mismatch with government ID",
-      "ID expired or invalid",
-      "Suspected fraudulent document",
-    ];
-
-    return {
-      approved: false,
-      reason: reasons[Math.floor(Math.random() * reasons.length)],
-    };
-  },
-});
-```
-
-**Rejection Reasons** (randomly selected):
-
-1. "Document illegible or blurry"
-2. "Face mismatch with government ID"
-3. "ID expired or invalid"
-4. "Suspected fraudulent document"
-
-**Production Integration**:
-
-Replace with real provider call:
-
-```typescript
-// Production example
-const response = await fetch("https://api.smileidentity.com/v1/kyb", {
-  method: "POST",
-  headers: {
-    Authorization: `Bearer ${SMILE_API_KEY}`,
-    "Content-Type": "application/json",
-  },
-  body: JSON.stringify({
-    user_id: userId,
-    documents: documentUrls,
-  }),
-});
-
-const result = await response.json();
-return {
-  approved: result.status === "approved",
-  reason: result.rejection_reason || "Verified",
-};
-```
+A verification run is blocked until all required document types exist in `pending` status.
 
 ---
 
-### `getViewerKycData()`
+## Persistence Model
 
-Internal query to fetch authenticated user's KYC data safely.
+### `kyc_documents`
 
-**Type**: Internal Query
+This table stores document metadata and review outcome history.
 
-**Arguments**: None
+Important fields:
 
-**Returns**:
+- `user_id`
+- `document_type`
+- `status`
+- `file_url` (legacy compatibility)
+- `storage_id`
+- `file_name`
+- `file_size`
+- `mime_type`
+- `uploaded_at`
+- `reviewed_by`
+- `reviewed_at`
+- `rejection_reason`
+- `supersedes_document_id`
+- `created_at`
 
-```typescript
-{
-  user: User;
-  documents: KycDocument[];
-}
-```
+### `supersedes_document_id`
 
-**Implementation**:
+This field links a fresh upload to the most recent rejected document of the same type.
 
-```typescript
-export const getViewerKycData = internalQuery({
-  handler: async (ctx) => {
-    const user = await getUser(ctx);
+Meaning:
 
-    const documents = await ctx.db
-      .query(TABLE_NAMES.KYC_DOCUMENTS)
-      .withIndex("by_user_id_and_status", (q) =>
-        q.eq("user_id", user._id).eq("status", KYCStatus.PENDING)
-      )
-      .collect();
-
-    return { user, documents };
-  },
-});
-```
-
-**Note**: Uses internal query pattern for safe action-to-query communication
+- rejected documents are retained
+- replacement uploads do not overwrite old records
+- the chain of attempts remains auditable
 
 ---
 
-### `adminListPendingKyc()`
+## Upload Behavior
 
-Admin query to list all users awaiting KYC review.
+## Step 1: `kycDocuments.getUploadUrl`
 
-**Type**: Query (requires admin authentication)
+This mutation validates file name and MIME type and returns a Convex upload URL.
 
-**Arguments**: None
+It does **not** create a database row.
 
-**Returns**: Array of user records with pending documents:
+## Step 2: client uploads directly to storage
 
-```typescript
-Array<{
-  user_id: Id<"users">;
-  first_name: string;
-  last_name: string;
-  email?: string;
-  phone: string;
-  status: string;
-  pending_documents: Array<{
-    document_id: Id<"kyc_documents">;
-    document_type: KycDocumentType;
-    created_at: number;
-    uploaded_at?: number;
-    file_name?: string;
-    file_size?: number;
-    mime_type?: string;
-  }>;
-}>;
-```
+The client uploads bytes to the returned URL.
 
-**Ordering**: Sorted by oldest pending document (first-come-first-serve)
+## Step 3: `kycDocuments.uploadDocument`
 
-**Implementation**:
+This mutation finalizes the document record.
 
-```typescript
-export const adminListPendingKyc = query({
-  handler: async (ctx) => {
-    await getAdminUser(ctx); // Require admin auth
+### Preconditions
 
-    // Fetch all pending documents
-    const pendingDocs = await ctx.db
-      .query(TABLE_NAMES.KYC_DOCUMENTS)
-      .withIndex("by_status", (q) => q.eq("status", KYCStatus.PENDING))
-      .collect();
+1. User must be authenticated.
+2. User must still be in `pending_kyc`.
+3. File size must be within limits.
+4. File extension and MIME type must be allowed.
+5. There must not already be another `pending` document of the same type for that user.
 
-    // Group by user
-    const grouped = new Map<UserId, KycDocument[]>();
-    for (const doc of pendingDocs) {
-      const key = doc.user_id;
-      const current = grouped.get(key);
-      if (current) {
-        current.push(doc);
-      } else {
-        grouped.set(key, [doc]);
-      }
-    }
+### Replacement behavior
 
-    // Build response
-    const rows = [];
-    for (const [userId, docs] of grouped) {
-      const user = await ctx.db.get(userId);
-      if (!user) continue;
+If the user previously uploaded a rejected document of the same type:
 
-      docs.sort((a, b) => a.created_at - b.created_at);
+- the new record is allowed
+- `supersedes_document_id` is set to the latest rejected document of that type
 
-      rows.push({
-        user_id: user._id,
-        first_name: user.first_name,
-        last_name: user.last_name,
-        email: user.email ?? undefined,
-        phone: user.phone,
-        status: user.status,
-        pending_documents: docs.map((doc) => ({
-          document_id: doc._id,
-          document_type: doc.document_type,
-          created_at: doc.created_at,
-          uploaded_at: doc.uploaded_at,
-          file_name: doc.file_name,
-          file_size: doc.file_size,
-          mime_type: doc.mime_type,
-        })),
-      });
-    }
+### What gets written
 
-    // Sort by oldest pending document
-    rows.sort((a, b) => {
-      const aOldest =
-        a.pending_documents[0]?.created_at ?? Number.MAX_SAFE_INTEGER;
-      const bOldest =
-        b.pending_documents[0]?.created_at ?? Number.MAX_SAFE_INTEGER;
-      return aOldest - bOldest;
-    });
+A new `kyc_documents` row is inserted with:
 
-    return rows;
-  },
-});
-```
+- `status = pending`
+- file metadata
+- storage linkage
+- optional `supersedes_document_id`
 
-**Usage**: Admin dashboard KYC review queue
+### What does **not** happen
+
+- Existing rejected docs are not modified.
+- Existing approved docs are not replaced.
+- Verification does not run automatically on upload.
 
 ---
 
-### `adminReviewKyc(args)`
+## Document Deletion Behavior
 
-Admin mutation to manually review and approve/reject KYC submissions.
+## Entry point
 
-**Type**: Mutation (requires admin authentication)
+- `kycDocuments.deleteDocument`
 
-**Arguments**:
+## Rules
 
-```typescript
-{
-  userId: v.id("users");
-  approved: v.boolean();
-  reason?: v.string();  // Required if rejected
-}
-```
+A user may delete only their own documents.
 
-**Returns**:
+Deletion rules by status:
 
-```typescript
-{
-  userId: Id<"users">;
-  newStatus: "active" | "closed";
-  documentsReviewed: number;
-}
-```
+- `approved`
+  - cannot be deleted
+- `pending`
+  - can be deleted
+- `rejected`
+  - can be deleted
 
-**Validation**:
+When deletion succeeds:
 
-1. Admin must be authenticated
-2. User must exist
-3. User must be in PENDING_KYC status
-4. Rejection requires a reason
-5. Must have pending documents to review
+1. The document row is deleted through the KYC document repository.
+2. If the row had a `storage_id`, the file is deleted from Convex storage.
+3. An audit event is recorded.
 
-**Side Effects**:
-
-1. Calls `processKycResult()` to update user and documents
-2. Syncs user aggregates (for analytics)
-3. Logs comprehensive audit trail
-4. Transitions user status
-
-**Implementation**:
-
-```typescript
-export const adminReviewKyc = mutation({
-  handler: async (ctx, args) => {
-    const admin = await getAdminUser(ctx);
-
-    const user = await ctx.db.get(args.userId);
-    if (!user) {
-      throw new ConvexError("User not found");
-    }
-
-    if (user.status !== UserStatus.PENDING_KYC) {
-      throw new ConvexError("User is not in pending_kyc status");
-    }
-
-    if (!args.approved && (!args.reason || args.reason.trim().length === 0)) {
-      throw new ConvexError("Rejection reason is required");
-    }
-
-    const pendingDocs = await ctx.db
-      .query(TABLE_NAMES.KYC_DOCUMENTS)
-      .withIndex("by_user_id_and_status", (q) =>
-        q.eq("user_id", args.userId).eq("status", KYCStatus.PENDING)
-      )
-      .collect();
-
-    if (pendingDocs.length === 0) {
-      throw new ConvexError("No pending KYC documents to review");
-    }
-
-    const nextUserStatus = args.approved
-      ? UserStatus.ACTIVE
-      : UserStatus.CLOSED;
-
-    // Capture old state before update
-    const oldUser = user;
-
-    // Process KYC result
-    await ctx.runMutation(internal.users.processKycResult, {
-      userId: args.userId,
-      approved: args.approved,
-      reason: args.reason,
-      reviewedBy: admin._id,
-    });
-
-    // Get updated user and sync aggregates
-    const updatedUser = await ctx.db.get(args.userId);
-    if (updatedUser) {
-      await syncUserUpdate(ctx, oldUser, updatedUser);
-    }
-
-    // Log audit trail
-    await auditLog.logChange(ctx, {
-      action: "kyc.reviewed",
-      actorId: admin._id,
-      resourceType: RESOURCE_TYPE.USERS,
-      resourceId: user._id,
-      before: { status: user.status },
-      after: {
-        status: nextUserStatus,
-        approved: args.approved,
-        reason: args.reason,
-        documents_reviewed: pendingDocs.length,
-      },
-      severity: args.approved ? "info" : "warning",
-    });
-
-    return {
-      userId: user._id,
-      newStatus: nextUserStatus,
-      documentsReviewed: pendingDocs.length,
-    };
-  },
-});
-```
-
-**Usage**:
-
-```typescript
-// Approve KYC
-await ctx.runMutation(kyc.adminReviewKyc, {
-  userId: user._id,
-  approved: true,
-});
-
-// Reject KYC with reason
-await ctx.runMutation(kyc.adminReviewKyc, {
-  userId: user._id,
-  approved: false,
-  reason: "Government ID appears to be expired",
-});
-```
+This preserves the rule that approved evidence cannot be removed by the user.
 
 ---
 
-## Aggregate Integration
+## Automated Verification Behavior
 
-### User Status Aggregates
+## Entry point
 
-KYC status changes affect user count aggregates:
+- `kyc.verifyIdentity`
 
-```typescript
-// In adminReviewKyc mutation
-const oldUser = user; // Before status change
+## Preconditions
 
-await ctx.runMutation(internal.users.processKycResult, {
-  userId: args.userId,
-  approved: args.approved,
-  reason: args.reason,
-  reviewedBy: admin._id,
-});
+1. User must be authenticated.
+2. User must be in `pending_kyc`.
+3. There must be pending KYC documents.
+4. Required document types must be present among those pending docs.
 
-const updatedUser = await ctx.db.get(args.userId);
+## Runtime flow
 
-// Sync aggregates after status change
-await syncUserUpdate(ctx, oldUser, updatedUser);
-```
+1. Fetch viewer user + pending documents via `kycInternal.getViewerKycData`.
+2. Build static repository adapters for the action context.
+3. Run `createRunAutomatedKycUseCase`.
+4. Call the provider adapter via `kycInternal.simulateKycProvider`.
+5. Apply the resulting decision through `internal.users.processKycResult`.
 
-**Aggregates Updated**:
+## Current provider behavior
 
-- `totalUsers` - Overall user count (unchanged, just status shift)
-- `usersByStatus` - Count by status (PENDING_KYC → ACTIVE/CLOSED)
+The provider is still simulated.
 
-**Sync Helper**:
+Current properties:
 
-```typescript
-// aggregateHelpers.ts
-export async function syncUserUpdate(
-  ctx: MutationCtx,
-  oldUser: { _id: string; status: string },
-  newUser: { _id: string; status: string }
-) {
-  await Promise.all([
-    totalUsers.replace(ctx, oldUser as any, newUser as any),
-    usersByStatus.replace(ctx, oldUser as any, newUser as any),
-  ]);
-}
-```
+- async action
+- artificial delay
+- random approve/reject outcome
+- returns:
+  - `approved`
+  - `reason`
+  - `providerReference`
+  - `metadata`
+
+The orchestration is already provider-ready. Replacing the stub with a real provider should not require changing the feature’s domain workflow.
 
 ---
 
-## Audit Logging
+## Manual Review Behavior
 
-### Comprehensive Trail
+## Queue query
 
-All KYC operations are logged with full metadata:
+- `kyc.adminListPendingKyc`
 
-#### Document Upload (in kycDocuments.ts)
+This query returns pending KYC review rows grouped by user, including pending document metadata.
 
-```typescript
-await auditLog.log(ctx, {
-  action: "kyc.document_uploaded",
-  actorId: user._id,
-  resourceType: RESOURCE_TYPE.KYC_DOCUMENTS,
-  resourceId: document._id,
-  severity: "info",
-  metadata: {
-    document_type: args.documentType,
-    file_name: args.fileName,
-    file_size: args.fileSize,
-    mime_type: args.mimeType,
-  },
-});
-```
+Each row includes:
 
-#### Admin Review
+- `user_id`
+- identity fields
+- current user status
+- `pending_documents`
 
-```typescript
-await auditLog.logChange(ctx, {
-  action: "kyc.reviewed",
-  actorId: admin._id,
-  resourceType: RESOURCE_TYPE.USERS,
-  resourceId: user._id,
-  before: { status: user.status },
-  after: {
-    status: nextUserStatus,
-    approved: args.approved,
-    reason: args.reason,
-    documents_reviewed: pendingDocs.length,
-  },
-  severity: args.approved ? "info" : "warning",
-});
-```
+Document summaries include:
 
-**Audit Events Tracked**:
+- `document_id`
+- `document_type`
+- `created_at`
+- `uploaded_at`
+- `file_name`
+- `file_size`
+- `mime_type`
+- `supersedes_document_id`
 
-- `kyc.document_uploaded` - User uploads document
-- `kyc.document_deleted` - User deletes document
-- `kyc.reviewed` - Admin reviews KYC submission
-- `kyc.verified` - Automated verification completed
-- `user.status_changed` - User status transition
+## Decision mutation
+
+- `kyc.adminReviewKyc`
+
+### Rules
+
+1. Caller must be an authenticated admin.
+2. If rejecting, a reason is required.
+3. Manual review uses the same shared decision path as automated review.
+
+This is important because it prevents the admin path and the automated path from diverging semantically.
 
 ---
 
-## Error Handling
+## Shared Decision Application
 
-### Client-Facing Errors
+## Internal decision application path
 
-#### Missing Documents
+Both automated verification and admin review end in:
 
-```typescript
-throw new ConvexError(
-  `Missing required KYC documents: ${missingRequired.join(", ")}`
-);
-// Example: "Missing required KYC documents: government_id, selfie_with_id"
-```
+- `internal.users.processKycResult`
+- which delegates to `createApplyKycDecisionUseCase`
 
-#### Invalid User Status
+## Approval outcome
 
-```typescript
-throw new ConvexError("User is not in pending_kyc status");
-```
+If `approved = true`:
 
-#### No Pending Documents
+- user status becomes `active`
+- all currently pending KYC documents become `approved`
+- `reviewed_by` / `reviewed_at` are stored where available
 
-```typescript
-throw new ConvexError("No pending KYC documents found to verify");
-```
+## Rejection outcome
 
-#### Missing Rejection Reason
+If `approved = false`:
 
-```typescript
-throw new ConvexError("Rejection reason is required");
-```
+- user status becomes `pending_kyc`
+- all currently pending KYC documents become `rejected`
+- `rejection_reason` is stored
+- `reviewed_by` / `reviewed_at` are stored where available
 
-#### User Not Found
-
-```typescript
-throw new ConvexError("User not found");
-```
-
-#### No Documents to Review
-
-```typescript
-throw new ConvexError("No pending KYC documents to review");
-```
+The user can then upload replacements and retry.
 
 ---
 
-## Integration Example
+## Important Behavioral Semantics
 
-### User KYC Submission Flow
+## Only pending documents are reviewed
 
-```typescript
-// React component for KYC submission
-function KycSubmissionForm() {
-  const [submitting, setSubmitting] = useState(false);
-  const verifyIdentity = useAction(kyc.verifyIdentity);
+Previously uploaded approved or rejected documents do not participate in the active decision run.
 
-  const handleVerify = async () => {
-    setSubmitting(true);
-    try {
-      const result = await verifyIdentity();
+The current decision scope is:
 
-      if (result.approved) {
-        toast.success("✅ KYC Verified Successfully!", {
-          description: "Your account has been activated.",
-        });
-        // Redirect to dashboard or refresh user data
-      } else {
-        toast.error("❌ KYC Verification Failed", {
-          description: result.reason,
-          action: (
-            <Button variant="outline" onClick={() => window.location.reload()}>
-              Try Again
-            </Button>
-          ),
-        });
-      }
-    } catch (error) {
-      if (error.message.includes("Missing required")) {
-        toast.error("Incomplete Submission", {
-          description: error.message,
-        });
-      } else {
-        toast.error("Verification Error", {
-          description: error.message,
-        });
-      }
-    } finally {
-      setSubmitting(false);
-    }
-  };
+- `findByUserIdAndStatus(userId, "pending")`
 
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Verify Your Identity</CardTitle>
-        <CardDescription>
-          Submit your KYC documents for verification
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Button onClick={handleVerify} disabled={submitting}>
-          {submitting ? "Verifying..." : "Submit for Verification"}
-        </Button>
-      </CardContent>
-    </Card>
-  );
-}
-```
+That means each review cycle acts on a clean pending batch.
+
+## Rejection is retryable
+
+This is the most important KYC behavior in the current system.
+
+A rejection means:
+
+- current attempt failed
+- current pending docs were marked rejected
+- user is still eligible to try again
+
+It does **not** mean the account is permanently closed.
+
+## Supersession preserves history
+
+If the user re-uploads a document type after rejection:
+
+- old rejected document remains
+- new pending document points back via `supersedes_document_id`
+- reviewers and auditors can follow the chain of attempts
 
 ---
 
-### Admin KYC Review Dashboard
+## Access Control
 
-```typescript
-// Admin dashboard component
-function AdminKycReviewQueue() {
-  const pendingUsers = useQuery(kyc.adminListPendingKyc);
-  const reviewKyc = useMutation(kyc.adminReviewKyc);
+## User access
 
-  const handleApprove = async (userId: UserId) => {
-    if (!confirm("Approve this user's KYC submission?")) return;
+A user can:
 
-    try {
-      await reviewKyc({
-        userId,
-        approved: true,
-      });
+- request upload URLs
+- upload KYC documents
+- list their own KYC documents
+- delete their own pending/rejected documents
+- run automated verification for their own account
+- view their own document URLs
 
-      toast.success("KYC Approved");
-    } catch (error) {
-      toast.error(`Approval failed: ${error.message}`);
-    }
-  };
+## Admin access
 
-  const handleReject = async (userId: UserId) => {
-    const reason = prompt("Enter rejection reason:");
-    if (!reason) return;
+An admin can:
 
-    try {
-      await reviewKyc({
-        userId,
-        approved: false,
-        reason,
-      });
+- list pending KYC review items
+- review KYC manually
+- open document URLs for review
 
-      toast.success("KYC Rejected");
-    } catch (error) {
-      toast.error(`Rejection failed: ${error.message}`);
-    }
-  };
+Document URL access is controlled in `kycDocuments.getDocumentUrl`:
 
-  if (!pendingUsers) return <LoadingSpinner />;
-  if (pendingUsers.length === 0) {
-    return <EmptyState title="No Pending KYC Reviews" />;
-  }
-
-  return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>User</TableHead>
-          <TableHead>Documents</TableHead>
-          <TableHead>Submitted</TableHead>
-          <TableHead>Actions</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {pendingUsers.map((user) => (
-          <TableRow key={user.user_id}>
-            <TableCell>
-              <div>
-                <div className="font-medium">
-                  {user.first_name} {user.last_name}
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {user.email}
-                </div>
-                <div className="text-sm text-muted-foreground">
-                  {user.phone}
-                </div>
-              </div>
-            </TableCell>
-            <TableCell>
-              <div className="flex gap-1 flex-wrap">
-                {user.pending_documents.map((doc) => (
-                  <Badge key={doc.document_id} variant="outline">
-                    {formatDocType(doc.document_type)}
-                  </Badge>
-                ))}
-              </div>
-            </TableCell>
-            <TableCell>
-              {new Date(
-                user.pending_documents[0].created_at
-              ).toLocaleDateString()}
-            </TableCell>
-            <TableCell>
-              <div className="flex gap-2">
-                <Button size="sm" onClick={() => handleApprove(user.user_id)}>
-                  Approve
-                </Button>
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  onClick={() => handleReject(user.user_id)}
-                >
-                  Reject
-                </Button>
-              </div>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
-  );
-}
-```
+- admins may access any KYC document
+- users may access only their own documents
 
 ---
 
-## Testing Checklist
+## File Validation Rules
 
-### Unit Tests
+Validation is enforced before finalizing uploads.
 
-```typescript
-describe("verifyIdentity action", () => {
-  test("should succeed with valid documents", async () => {
-    // Create user in PENDING_KYC status
-    const userId = await createTestUser({ status: UserStatus.PENDING_KYC });
+Current constraints come from shared constants in `packages/backend/convex/shared.ts`.
 
-    // Upload required documents
-    await uploadTestDocument(userId, DOCUMENT_TYPES.GOVERNMENT_ID);
-    await uploadTestDocument(userId, DOCUMENT_TYPES.SELFIE_WITH_ID);
+Important points:
 
-    // Run verification
-    const result = await ctx.runAction(kyc.verifyIdentity);
+- file name extension must be allowed
+- MIME type must be allowed
+- max file size must be respected
 
-    expect(result.approved).toBe(true); // 80% chance
-    expect(result.userId).toBe(userId);
-  });
-
-  test("should fail if no documents", async () => {
-    const userId = await createTestUser({ status: UserStatus.PENDING_KYC });
-
-    await expect(ctx.runAction(kyc.verifyIdentity)).rejects.toThrow(
-      "No pending KYC documents"
-    );
-  });
-
-  test("should fail if missing required documents", async () => {
-    const userId = await createTestUser({ status: UserStatus.PENDING_KYC });
-
-    // Only upload one document
-    await uploadTestDocument(userId, DOCUMENT_TYPES.GOVERNMENT_ID);
-
-    await expect(ctx.runAction(kyc.verifyIdentity)).rejects.toThrow(
-      "Missing required KYC documents"
-    );
-  });
-
-  test("should fail if user not in PENDING_KYC", async () => {
-    const userId = await createTestUser({ status: UserStatus.ACTIVE });
-
-    await expect(ctx.runAction(kyc.verifyIdentity)).rejects.toThrow(
-      "User is not in pending_kyc status"
-    );
-  });
-});
-
-describe("adminReviewKyc mutation", () => {
-  test("should approve user successfully", async () => {
-    const userId = await createTestUser({ status: UserStatus.PENDING_KYC });
-    await uploadTestDocument(userId, DOCUMENT_TYPES.GOVERNMENT_ID);
-
-    const result = await ctx.runMutation(kyc.adminReviewKyc, {
-      userId,
-      approved: true,
-    });
-
-    expect(result.newStatus).toBe(UserStatus.ACTIVE);
-    expect(result.documentsReviewed).toBe(1);
-
-    // Verify user status changed
-    const updatedUser = await ctx.db.get(userId);
-    expect(updatedUser?.status).toBe(UserStatus.ACTIVE);
-  });
-
-  test("should reject user with reason", async () => {
-    const userId = await createTestUser({ status: UserStatus.PENDING_KYC });
-    await uploadTestDocument(userId, DOCUMENT_TYPES.GOVERNMENT_ID);
-
-    const result = await ctx.runMutation(kyc.adminReviewKyc, {
-      userId,
-      approved: false,
-      reason: "Document quality insufficient",
-    });
-
-    expect(result.newStatus).toBe(UserStatus.CLOSED);
-
-    const updatedUser = await ctx.db.get(userId);
-    expect(updatedUser?.status).toBe(UserStatus.CLOSED);
-  });
-
-  test("should require rejection reason", async () => {
-    const userId = await createTestUser({ status: UserStatus.PENDING_KYC });
-
-    await expect(
-      ctx.runMutation(kyc.adminReviewKyc, {
-        userId,
-        approved: false,
-      })
-    ).rejects.toThrow("Rejection reason is required");
-  });
-
-  test("should sync aggregates after approval", async () => {
-    const userId = await createTestUser({ status: UserStatus.PENDING_KYC });
-
-    await ctx.runMutation(kyc.adminReviewKyc, {
-      userId,
-      approved: true,
-    });
-
-    // Check aggregate tables were updated
-    const usersByStatusCount = await ctx.runQuery(
-      aggregates.usersByStatus.count,
-      { prefix: [UserStatus.ACTIVE] }
-    );
-
-    expect(usersByStatusCount).toBeGreaterThan(0);
-  });
-});
-```
+The code is authoritative for exact current limits.
 
 ---
 
-## Security Considerations
+## Audit Behavior
 
-⚠️ **Critical Security Points**:
+KYC flow writes audit information for:
 
-1. **Document validation before verification**
+- document upload
+- document delete
+- decision application
+- final KYC completed/failed event on the user record path
 
-   - Prevents bypassing requirements
-   - Ensures complete submission
+Important actions include:
 
-2. **Status enforcement**
+- `kyc.document_uploaded`
+- `kyc.document_deleted`
+- `kyc.decision_applied`
+- `KYC_VERIFICATION_COMPLETED`
+- `KYC_VERIFICATION_FAILED`
 
-   - Only PENDING_KYC users can verify
-   - Prevents re-verification attempts
-
-3. **Admin authentication required**
-
-   - Manual review restricted to admins
-   - All actions logged with admin ID
-
-4. **Aggregate synchronization**
-
-   - Analytics stay accurate
-   - User counts reflect real-time status
-
-5. **Comprehensive audit trail**
-
-   - Full compliance tracking
-   - Before/after state captured
-
-6. **Rejection reason requirement**
-   - Forces thoughtful decisions
-   - Provides feedback to users
+This gives both document-level and user-level audit history.
 
 ---
 
-## Performance Notes
+## Invariants
 
-### Query Optimization
+These are the main invariants to preserve in future changes:
 
-All queries use indexes:
-
-```typescript
-// By user ID and status (user-specific lookups)
-.withIndex("by_user_id_and_status", q =>
-  q.eq("user_id", userId).eq("status", KYCStatus.PENDING)
-)
-
-// By status only (admin queue)
-.withIndex("by_status", q => q.eq("status", KYCStatus.PENDING))
-```
-
-### Action Pattern
-
-Uses internal action/query pattern for safe cross-context calls:
-
-```typescript
-// Action → Internal Query → Database
-const data = await ctx.runQuery(internal.kyc.getViewerKycData);
-
-// Action → Internal Action → External API
-const result = await ctx.runAction(internal.kyc.simulateKycProvider, {...});
-
-// Action → Mutation → Database Update
-await ctx.runMutation(internal.users.processKycResult, {...});
-```
+1. A user must be `pending_kyc` to run verification.
+2. Required docs must be present in `pending` status before verification runs.
+3. Only pending docs are affected by a decision.
+4. Approval moves the user to `active`.
+5. Rejection moves the user back to `pending_kyc`.
+6. Rejected docs remain historical.
+7. Replacement docs supersede the latest rejected doc of the same type.
+8. Approved docs cannot be user-deleted.
+9. Manual and automated decisions must converge on the same persistence path.
 
 ---
 
-## Monitoring Recommendations
+## Operational Notes
 
-Track these metrics:
-
-```typescript
-// KYC approval rate
-const totalSubmissions = count(allKycAttempts);
-const approvedCount = count(allKycAttempts, (k) => k.approved);
-const approvalRate = approvedCount / totalSubmissions;
-
-// Average time to review
-const avgReviewTime =
-  approvedReviews.reduce(
-    (sum, r) => sum + (r.reviewed_at - r.submitted_at),
-    0
-  ) / approvedReviews.length;
-
-// Rejection reasons breakdown
-const reasons = groupBy(rejectedKyc, (k) => k.reason);
-
-// Pending queue size
-const pendingCount = await ctx.db
-  .query(TABLE_NAMES.KYC_DOCUMENTS)
-  .withIndex("by_status", (q) => q.eq("status", KYCStatus.PENDING))
-  .collect()
-  .then((docs) => docs.length);
-```
+1. If a user says “I was rejected and uploaded new documents,” the correct expectation is another pending review cycle, not account reactivation by default.
+2. If there are no pending docs, automated verification should fail fast.
+3. If required docs are missing from the pending set, verification should fail fast.
+4. If a user has both approved historical docs and new pending docs, the new decision only affects the pending set.
 
 ---
 
-## Related Files
+## Related Documentation
 
-- [`kycDocuments.ts`](./kycDocuments.md) - Document upload and management
-- [`users.ts`](./users.md) - User status processing
-- [`aggregateHelpers.ts`](./aggregates.md) - Aggregate synchronization
-- [`auditLog.ts`](./auditLog.md) - Audit trail system
-- [`shared.ts`](./shared.md) - Enum and constant definitions
-
----
-
-## Quick Reference
-
-### KYC Document Requirements
-
-| Document Type    | Required?   | Description                                |
-| ---------------- | ----------- | ------------------------------------------ |
-| GOVERNMENT_ID    | ✅ Yes      | National ID, Passport, or Driver's License |
-| SELFIE_WITH_ID   | ✅ Yes      | Photo of user holding the government ID    |
-| PROOF_OF_ADDRESS | ❌ Optional | Utility bill, bank statement               |
-| BANK_STATEMENT   | ❌ Optional | Financial institution statement            |
-
-### User Status Transitions
-
-| From Status | Event                     | To Status |
-| ----------- | ------------------------- | --------- |
-| PENDING_KYC | verifyIdentity() approved | ACTIVE    |
-| PENDING_KYC | verifyIdentity() rejected | CLOSED    |
-| PENDING_KYC | adminReviewKyc() approved | ACTIVE    |
-| PENDING_KYC | adminReviewKyc() rejected | CLOSED    |
-
-### Simulation Behavior
-
-| Metric            | Value            |
-| ----------------- | ---------------- |
-| Approval Rate     | 80%              |
-| Network Delay     | 2 seconds        |
-| Rejection Reasons | 4 random options |
-
----
-
-## Changelog
-
-- **Initial Implementation**: Basic KYC verification pipeline
-- **Admin Review**: Added manual review workflow
-- **Aggregate Integration**: Synchronized user status aggregates
-- **Enhanced Audit**: Comprehensive audit logging for all operations
-- **Document Validation**: Stricter requirement checking
+- `./kycDocuments.md`
+- `./risk.md`
+- `./RISK_KYC_POLICY_SUMMARY.md`

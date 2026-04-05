@@ -5,8 +5,10 @@ import type {
   WithdrawalStatus,
   RiskEventType,
   RiskHoldScope,
+  DocumentType,
   RiskSeverity,
   Transaction,
+  AdminRole,
   TxnType,
 } from "@avm-daily/domain";
 
@@ -180,3 +182,58 @@ export type RecordSavingsPlanContributionDTO = {
   actorId?: string;
 };
 
+export type RequestWithdrawalDTO = {
+  userId: string;
+  amountKobo: bigint;
+  method?: WithdrawalMethod;
+  bankAccountId?: string;
+  pickupNote?: string;
+  reference?: string;
+};
+
+export type ApproveWithdrawalDTO = {
+  withdrawalId: string;
+  adminId: string;
+  adminRole: AdminRole;
+};
+
+export type RejectWithdrawalDTO = {
+  withdrawalId: string;
+  adminId: string;
+  adminRole: AdminRole;
+  reason: string;
+};
+
+export type ProcessWithdrawalDTO = {
+  withdrawalId: string;
+  adminId: string;
+  adminRole: AdminRole;
+};
+
+export type RunAutomatedKycDTO = {
+  userId: string;
+};
+
+export type ApplyKycDecisionDTO = {
+  userId: string;
+  approved: boolean;
+  reason?: string;
+  reviewedBy?: string;
+  providerReference?: string;
+  metadata?: Record<string, unknown>;
+};
+
+export type UploadKycDocumentDTO = {
+  userId: string;
+  documentType: DocumentType;
+  storageId?: string;
+  fileUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  mimeType?: string;
+};
+
+export type DeleteKycDocumentDTO = {
+  userId: string;
+  documentId: string;
+};

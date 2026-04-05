@@ -9,9 +9,6 @@ import type {
   UserSavingsPlan as UserSavingsPlanDomain,
 } from "@avm-daily/domain";
 
-import { DomainError } from "@avm-daily/domain";
-
-import type { MutationCtx } from "../_generated/server";
 import type {
   SavingsPlanTemplate as ConvexSavingsPlanTemplate,
   SavingsPlanTemplateId,
@@ -21,36 +18,13 @@ import type {
   UserId,
 } from "../types";
 
+import { DomainError } from "@avm-daily/domain";
+
+import { getInsertDb, getPatchDb } from "./utils";
 import { TABLE_NAMES } from "../shared";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function getInsertDb(ctx: Context): Pick<MutationCtx["db"], "insert"> {
-  const mutationDb = ctx.db as Partial<MutationCtx["db"]>;
-
-  if (typeof mutationDb.insert !== "function") {
-    throw new DomainError(
-      "Savings plan mutations require a mutation context",
-      "savings_plan_mutation_context_required",
-    );
-  }
-
-  return mutationDb as Pick<MutationCtx["db"], "insert">;
-}
-
-function getPatchDb(ctx: Context): Pick<MutationCtx["db"], "patch"> {
-  const mutationDb = ctx.db as Partial<MutationCtx["db"]>;
-
-  if (typeof mutationDb.patch !== "function") {
-    throw new DomainError(
-      "Savings plan mutations require a mutation context",
-      "savings_plan_mutation_context_required",
-    );
-  }
-
-  return mutationDb as Pick<MutationCtx["db"], "patch">;
 }
 
 function buildPatch<T extends Record<string, unknown>, K extends keyof T>(
@@ -160,7 +134,11 @@ export function createConvexSavingsPlanRepository(
     async create(
       plan: Omit<UserSavingsPlanDomain, "_id">,
     ): Promise<UserSavingsPlanDomain> {
-      const mutationDb = getInsertDb(ctx);
+      const mutationDb = getInsertDb(
+        ctx,
+        "Savings plan mutations require a mutation context",
+        "savings_plan_mutation_context_required",
+      );
       const id = await mutationDb.insert(TABLE_NAMES.USER_SAVINGS_PLANS, {
         user_id: plan.user_id as UserId,
         template_id: plan.template_id as SavingsPlanTemplateId,
@@ -198,7 +176,11 @@ export function createConvexSavingsPlanRepository(
         );
       }
 
-      const mutationDb = getPatchDb(ctx);
+      const mutationDb = getPatchDb(
+        ctx,
+        "Savings plan mutations require a mutation context",
+        "savings_plan_mutation_context_required",
+      );
       await mutationDb.patch(
         existing._id,
         buildPatch(
@@ -251,7 +233,11 @@ export function createConvexSavingsPlanRepository(
         );
       }
 
-      const mutationDb = getPatchDb(ctx);
+      const mutationDb = getPatchDb(
+        ctx,
+        "Savings plan mutations require a mutation context",
+        "savings_plan_mutation_context_required",
+      );
       await mutationDb.patch(existingPlan._id, {
         current_amount_kobo: currentAmountKobo,
         updated_at: updatedAt,
@@ -279,7 +265,11 @@ export function createConvexSavingsPlanTemplateRepository(
     async create(
       template: Omit<SavingsPlanTemplateDomain, "_id">,
     ): Promise<SavingsPlanTemplateDomain> {
-      const mutationDb = getInsertDb(ctx);
+      const mutationDb = getInsertDb(
+        ctx,
+        "Savings plan mutations require a mutation context",
+        "savings_plan_mutation_context_required",
+      );
       const id = await mutationDb.insert(TABLE_NAMES.SAVINGS_PLAN_TEMPLATES, {
         name: template.name,
         description: template.description,
@@ -314,7 +304,11 @@ export function createConvexSavingsPlanTemplateRepository(
         );
       }
 
-      const mutationDb = getPatchDb(ctx);
+      const mutationDb = getPatchDb(
+        ctx,
+        "Savings plan mutations require a mutation context",
+        "savings_plan_mutation_context_required",
+      );
       await mutationDb.patch(
         existing._id,
         buildPatch(

@@ -51,8 +51,8 @@ This directory contains comprehensive documentation for the financial operations
 - Withdrawal status flow (PENDING → APPROVED → PROCESSED)
 - Admin review process
 - Payment method handling
-- Rejection and refund logic
-- Queue management
+- Reservation release and process-time ledger deduction
+- Reservation-based request/approval/process behavior
 
 [📖 Full Documentation →](./withdrawals.md)
 
@@ -143,7 +143,7 @@ This directory contains comprehensive documentation for the financial operations
 
 - Required: Government ID, Selfie with ID
 - Optional: Proof of Address, Bank Statement
-- Max file size: 10MB
+- Max file size: 5MB
 - Allowed formats: JPG, PNG, PDF
 
 [📖 Full Documentation →](./kycDocuments.md)
@@ -159,7 +159,7 @@ This directory contains comprehensive documentation for the financial operations
 
 - Automated verification via external provider simulation
 - Manual admin review workflow
-- User status transitions (PENDING_KYC → ACTIVE/CLOSED)
+- User status transitions (pending_kyc → active or retryable pending_kyc)
 - Aggregate synchronization
 - Comprehensive audit logging
 
@@ -175,9 +175,9 @@ This directory contains comprehensive documentation for the financial operations
 
 1. User uploads required documents
 2. Automated provider verification (80% auto-approval)
-3. If approved → ACTIVE status
-4. If rejected → CLOSED status (can reapply)
-5. Admin can override at any time
+3. If approved → active status
+4. If rejected → pending_kyc with rejected docs retained
+5. Admin review uses the same decision path
 
 [📖 Full Documentation →](./kyc.md)
 

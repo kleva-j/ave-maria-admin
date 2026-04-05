@@ -1,49 +1,36 @@
-/**
- * KYC Document Management System
- * 
- * Handles secure document upload, storage, retrieval, and lifecycle management
- * for Know Your Customer (KYC) verification. Integrates with Convex file storage
- * and implements comprehensive access controls and audit logging.
- * 
- * @module kycDocuments
- */
+import type { KycDocumentId, StorageId } from "./types";
 
+import {
+  createDeleteKycDocumentUseCase,
+  createUploadKycDocumentUseCase,
+} from "@avm-daily/application/use-cases";
 import { ConvexError, v } from "convex/values";
 
+import { createConvexKycDocumentRepository } from "./adapters/kycAdapters";
+import { createConvexAuditLogService } from "./adapters/auditLogAdapter";
+import { createConvexUserRepository } from "./adapters/userAdapters";
 import { ensureAuthedUser, getAdminUser, getUser } from "./utils";
 import { mutation, query } from "./_generated/server";
-import { auditLog } from "./auditLog";
 import {
   bankAccountDocumentType,
-  ALLOWED_MIME_TYPES,
   ALLOWED_EXTENSIONS,
+  ALLOWED_MIME_TYPES,
   DOCUMENT_TYPES,
-  RESOURCE_TYPE,
   MAX_FILE_SIZE,
   TABLE_NAMES,
-  KYCStatus,
   kycStatus,
 } from "./shared";
 
-// Required documents for KYC verification (must all be submitted)
 const REQUIRED_KYC_DOCUMENTS = [
   DOCUMENT_TYPES.GOVERNMENT_ID,
   DOCUMENT_TYPES.SELFIE_WITH_ID,
 ] as const;
 
-// Optional documents for enhanced verification
 const OPTIONAL_KYC_DOCUMENTS = [
   DOCUMENT_TYPES.PROOF_OF_ADDRESS,
   DOCUMENT_TYPES.BANK_STATEMENT,
 ] as const;
 
-/**
- * Validates file name has allowed extension
- * Prevents executable or dangerous file uploads
- * 
- * @param fileName - Name of file being uploaded
- * @throws ConvexError if extension not in allowed list
- */
 function validateFileName(fileName: string) {
   const lower = fileName.toLowerCase();
   const valid = ALLOWED_EXTENSIONS.some((ext) => lower.endsWith(ext));
@@ -54,68 +41,44 @@ function validateFileName(fileName: string) {
   }
 }
 
-/**
- * Generates pre-signed upload URL for direct-to-storage upload
- * 
- * Workflow:
- * 1. Validate user authentication
- * 2. Validate file name and MIME type
- * 3. Generate single-use upload URL from Convex storage
- * 
- * @mutation
- * @requires User authentication
- * @param documentType - Type of document being uploaded
- * @param fileName - Original file name (validated for extension)
- * @param mimeType - File MIME type (must be in allowed list)
- * @returns Pre-signed upload URL for direct client upload
- * @throws If file type or MIME type invalid
- */
+function validateMimeType(mimeType: string) {
+  if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
+    throw new ConvexError(
+      `Invalid MIME type. Allowed: ${ALLOWED_MIME_TYPES.join(", ")}`,
+    );
+  }
+}
+
+function toConvexError(error: unknown): never {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message: unknown }).message === "string"
+  ) {
+    throw new ConvexError((error as { message: string }).message);
+  }
+
+  throw error;
+}
+
 export const getUploadUrl = mutation({
   args: {
     documentType: bankAccountDocumentType,
     fileName: v.string(),
     mimeType: v.string(),
   },
-  returns: v.object({
-    uploadUrl: v.string(),
-  }),
+  returns: v.object({ uploadUrl: v.string() }),
   handler: async (ctx, args) => {
-    // Validate user is authenticated
     await ensureAuthedUser(ctx);
-
-    // Validate file name and MIME type before generating URL
     validateFileName(args.fileName);
-    if (!ALLOWED_MIME_TYPES.includes(args.mimeType)) {
-      throw new ConvexError(
-        `Invalid MIME type. Allowed: ${ALLOWED_MIME_TYPES.join(", ")}`,
-      );
-    }
+    validateMimeType(args.mimeType);
 
-    // Generate pre-signed URL for direct storage upload
     const uploadUrl = await ctx.storage.generateUploadUrl();
     return { uploadUrl };
   },
 });
 
-/**
- * Creates database record after successful file upload to storage
- * 
- * Workflow:
- * 1. Validate user authentication and file properties
- * 2. Check for duplicate pending document of same type
- * 3. Create KYC document record with PENDING status
- * 4. Log audit event for compliance
- * 
- * @mutation
- * @requires User authentication
- * @param documentType - Type of document being uploaded
- * @param storageId - Convex storage ID from completed upload
- * @param fileName - Original file name
- * @param fileSize - File size in bytes (validated against MAX_FILE_SIZE)
- * @param mimeType - File MIME type (must be in allowed list)
- * @returns Created document object with metadata
- * @throws If file too large, invalid type, or duplicate pending exists
- */
 export const uploadDocument = mutation({
   args: {
     documentType: bankAccountDocumentType,
@@ -132,126 +95,72 @@ export const uploadDocument = mutation({
     file_size: v.optional(v.number()),
     mime_type: v.optional(v.string()),
     uploaded_at: v.optional(v.number()),
+    supersedes_document_id: v.optional(v.id("kyc_documents")),
     created_at: v.number(),
   }),
   handler: async (ctx, args) => {
-    // Get authenticated user
     const user = await getUser(ctx);
 
-    // Validate file size (max 10MB)
     if (args.fileSize > MAX_FILE_SIZE) {
       throw new ConvexError(
         `File too large. Maximum size: ${MAX_FILE_SIZE / (1024 * 1024)}MB`,
       );
     }
 
-    // Validate file properties
     validateFileName(args.fileName);
-    if (!ALLOWED_MIME_TYPES.includes(args.mimeType)) {
-      throw new ConvexError(
-        `Invalid MIME type. Allowed: ${ALLOWED_MIME_TYPES.join(", ")}`,
-      );
-    }
+    validateMimeType(args.mimeType);
 
-    // Prevent duplicate pending documents of same type
-    const existingPending = await ctx.db
-      .query(TABLE_NAMES.KYC_DOCUMENTS)
-      .withIndex("by_user_id_and_status", (q) =>
-        q.eq("user_id", user._id).eq("status", KYCStatus.PENDING),
-      )
-      .filter((q) => q.eq(q.field("document_type"), args.documentType))
-      .first();
-
-    if (existingPending) {
-      throw new ConvexError(
-        `A pending ${args.documentType} document already exists`,
-      );
-    }
-
-    // Create database record with PENDING status
-    const now = Date.now();
-    const documentId = await ctx.db.insert(TABLE_NAMES.KYC_DOCUMENTS, {
-      user_id: user._id,
-      document_type: args.documentType,
-      storage_id: args.storageId,
-      file_name: args.fileName,
-      file_size: args.fileSize,
-      mime_type: args.mimeType,
-      uploaded_at: now,
-      status: KYCStatus.PENDING,
-      created_at: now,
+    const uploadKycDocument = createUploadKycDocumentUseCase({
+      userRepository: createConvexUserRepository(ctx),
+      kycDocumentRepository: createConvexKycDocumentRepository(ctx),
+      auditLogService: createConvexAuditLogService(ctx),
     });
 
-    // Verify document was created successfully
-    const document = await ctx.db.get(documentId);
-    if (!document) {
-      throw new ConvexError("Failed to create KYC document");
+    try {
+      const document = await uploadKycDocument({
+        userId: String(user._id),
+        documentType: args.documentType,
+        storageId: String(args.storageId),
+        fileName: args.fileName,
+        fileSize: args.fileSize,
+        mimeType: args.mimeType,
+      });
+
+      return {
+        _id: document._id as KycDocumentId,
+        document_type: document.document_type,
+        status: document.status,
+        file_name: document.file_name,
+        file_size: document.file_size,
+        mime_type: document.mime_type,
+        uploaded_at: document.uploaded_at,
+        supersedes_document_id: document.supersedes_document_id as
+          | KycDocumentId
+          | undefined,
+        created_at: document.created_at,
+      };
+    } catch (error) {
+      toConvexError(error);
     }
-
-    // Log audit event for compliance tracking
-    await auditLog.log(ctx, {
-      action: "kyc.document_uploaded",
-      actorId: user._id,
-      resourceType: RESOURCE_TYPE.KYC_DOCUMENTS,
-      resourceId: document._id,
-      severity: "info",
-      metadata: {
-        user_id: user._id,
-        document_type: args.documentType,
-        file_name: args.fileName,
-        file_size: args.fileSize,
-        mime_type: args.mimeType,
-        storage_id: args.storageId,
-      },
-    });
-
-    return {
-      _id: document._id,
-      document_type: document.document_type,
-      status: document.status,
-      file_name: document.file_name,
-      file_size: document.file_size,
-      mime_type: document.mime_type,
-      uploaded_at: document.uploaded_at,
-      created_at: document.created_at,
-    };
   },
 });
 
-/**
- * Generates download URL for viewing KYC documents
- * 
- * Access Control:
- * - Admin users: Can view any document
- * - Regular users: Can only view their own documents
- * - Unauthenticated: Access denied
- * 
- * @query
- * @requires User or admin authentication
- * @param documentId - ID of document to access
- * @returns Download URL string
- * @throws If not authorized, document not found, or file unavailable
- */
 export const getDocumentUrl = query({
   args: { documentId: v.id("kyc_documents") },
   returns: v.string(),
   handler: async (ctx, args) => {
-    // Try to authenticate as user or admin
     const user = await getUser(ctx).catch(() => null);
     const admin = await getAdminUser(ctx).catch(() => null);
 
-    // Require at least one authentication method
     if (!user && !admin) {
       throw new ConvexError("Not authorized to access this document");
     }
 
-    // Get document and verify existence
     const document = await ctx.db.get(args.documentId);
     if (!document) {
       throw new ConvexError("Document not found");
     }
 
-    // Check ownership (unless admin)
     if (!admin && user && document.user_id !== user._id) {
       throw new ConvexError("Not authorized to access this document");
     }
@@ -272,13 +181,6 @@ export const getDocumentUrl = query({
   },
 });
 
-/**
- * Lists all KYC documents for the authenticated user
- * 
- * @query
- * @requires User authentication
- * @returns Array of document summaries, sorted by most recent first
- */
 export const listMyDocuments = query({
   args: {},
   returns: v.array(
@@ -293,11 +195,11 @@ export const listMyDocuments = query({
       reviewed_by: v.optional(v.id("admin_users")),
       reviewed_at: v.optional(v.number()),
       rejection_reason: v.optional(v.string()),
+      supersedes_document_id: v.optional(v.id("kyc_documents")),
       created_at: v.number(),
     }),
   ),
   handler: async (ctx) => {
-    // Get authenticated user
     const user = await getUser(ctx);
 
     const docs = await ctx.db
@@ -318,81 +220,49 @@ export const listMyDocuments = query({
       reviewed_by: doc.reviewed_by,
       reviewed_at: doc.reviewed_at,
       rejection_reason: doc.rejection_reason,
+      supersedes_document_id: doc.supersedes_document_id,
       created_at: doc.created_at,
     }));
   },
 });
 
-/**
- * Deletes a user's uploaded KYC document
- * 
- * Restrictions:
- * - User must be document owner
- * - Only PENDING or REJECTED documents can be deleted
- * - APPROVED documents require admin intervention
- * 
- * @mutation
- * @requires User authentication and ownership
- * @param documentId - ID of document to delete
- * @returns null on success
- * @throws If not authorized, document not found, or document is approved
- */
 export const deleteDocument = mutation({
   args: { documentId: v.id(TABLE_NAMES.KYC_DOCUMENTS) },
   returns: v.null(),
   handler: async (ctx, args) => {
-    // Get authenticated user
     const user = await getUser(ctx);
-    const document = await ctx.db.get(args.documentId);
-
-    // Verify document exists
-    if (!document) {
-      throw new ConvexError("Document not found");
-    }
-
-    // Verify ownership
-    if (document.user_id !== user._id) {
-      throw new ConvexError("Not authorized to delete this document");
-    }
-
-    // Prevent deletion of approved documents (compliance requirement)
-    if (document.status === KYCStatus.APPROVED) {
-      throw new ConvexError(
-        "Cannot delete approved documents. Please contact support.",
-      );
-    }
-
-    if (document.storage_id) {
-      await ctx.storage.delete(document.storage_id);
-    }
-
-    await ctx.db.delete(document._id);
-
-    await auditLog.log(ctx, {
-      action: "kyc.document_deleted",
-      actorId: user._id,
-      resourceType: RESOURCE_TYPE.KYC_DOCUMENTS,
-      resourceId: document._id,
-      severity: "warning",
-      metadata: {
-        user_id: user._id,
-        document_type: document.document_type,
-        file_name: document.file_name,
-        previous_status: document.status,
-        storage_id: document.storage_id,
-      },
+    const deleteKycDocument = createDeleteKycDocumentUseCase({
+      userRepository: createConvexUserRepository(ctx),
+      kycDocumentRepository: createConvexKycDocumentRepository(ctx),
+      auditLogService: createConvexAuditLogService(ctx),
     });
 
-    return null;
+    try {
+      const deleted = await deleteKycDocument({
+        userId: String(user._id),
+        documentId: String(args.documentId),
+      });
+
+      if (deleted.storage_id) {
+        try {
+          await ctx.storage.delete(deleted.storage_id as StorageId);
+        } catch (error) {
+          console.error("Failed to delete KYC document storage object", {
+            storage_id: deleted.storage_id,
+            user_id: String(user._id),
+            document_id: String(args.documentId),
+            error,
+          });
+        }
+      }
+
+      return null;
+    } catch (error) {
+      toConvexError(error);
+    }
   },
 });
 
-/**
- * Returns KYC document requirements for UI display
- * 
- * @query
- * @returns Object containing required/optional document types and validation rules
- */
 export const getKycRequirements = query({
   args: {},
   returns: v.object({

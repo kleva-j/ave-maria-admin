@@ -76,6 +76,17 @@ function makeInMemoryDeps(user: User, seedTransactions: Transaction[] = []) {
         };
       }
     },
+    updateStatus: async (id, status, updatedAt) => {
+      if (id !== currentUser._id) {
+        throw new Error("updateStatus: unknown user id");
+      }
+
+      currentUser = {
+        ...currentUser,
+        status,
+        updated_at: updatedAt,
+      };
+    },
   };
 
   const savingsPlanRepository: SavingsPlanRepository = {

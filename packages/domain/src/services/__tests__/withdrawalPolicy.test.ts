@@ -29,12 +29,12 @@ describe("withdrawalPolicy", () => {
       expect(result).toBe("Only pending withdrawals can be approved");
     });
 
-    it("should block reject on approved withdrawal", () => {
+    it("should allow reject on approved withdrawal", () => {
       const result = getWithdrawalStatusBlockedReason(
         { status: "approved" },
         "reject",
       );
-      expect(result).toBe("Only pending withdrawals can be rejected");
+      expect(result).toBeUndefined();
     });
 
     it("should block process on pending withdrawal", () => {
@@ -199,10 +199,15 @@ const cashBlockedRoles = allAdminRoles.filter(
 describe("Property 13: buildWithdrawalCapabilities invariants", () => {
   // Validates: Requirements 13.2
 
-  it("approve.allowed and reject.allowed are false when status is not PENDING", () => {
+  it("approve.allowed is false when status is not PENDING and reject.allowed is false when status is neither PENDING nor APPROVED", () => {
     const nonPendingStatuses = allWithdrawalStatuses.filter(
       (s) => s !== WithdrawalStatus.PENDING,
     );
+    const rejectBlockedStatuses: WithdrawalStatus[] =
+      allWithdrawalStatuses.filter(
+        (s) =>
+          s !== WithdrawalStatus.PENDING && s !== WithdrawalStatus.APPROVED,
+      );
     fc.assert(
       fc.property(
         fc.constantFrom(...allAdminRoles),
@@ -216,7 +221,10 @@ describe("Property 13: buildWithdrawalCapabilities invariants", () => {
             { has_active_hold: hasHold },
           );
           return (
-            caps.approve.allowed === false && caps.reject.allowed === false
+            caps.approve.allowed === false &&
+            (rejectBlockedStatuses.includes(status)
+              ? caps.reject.allowed === false
+              : true)
           );
         },
       ),

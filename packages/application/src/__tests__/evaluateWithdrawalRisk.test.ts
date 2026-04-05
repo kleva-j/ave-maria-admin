@@ -30,7 +30,14 @@ function makeRiskHoldRepository(): RiskHoldRepository {
 function makeWithdrawalRepository(): WithdrawalRepository {
   return {
     findById: async () => null,
+    findByReference: async () => null,
     findByUserId: async () => [],
+    create: async () => {
+      throw new Error("create not implemented in test stub");
+    },
+    update: async () => {
+      throw new Error("update not implemented in test stub");
+    },
   };
 }
 

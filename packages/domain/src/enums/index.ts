@@ -54,6 +54,15 @@ export const WithdrawalStatus = {
 export type WithdrawalStatus =
   (typeof WithdrawalStatus)[keyof typeof WithdrawalStatus];
 
+export const WithdrawalReservationStatus = {
+  ACTIVE: "active",
+  RELEASED: "released",
+  CONSUMED: "consumed",
+} as const;
+
+export type WithdrawalReservationStatus =
+  (typeof WithdrawalReservationStatus)[keyof typeof WithdrawalReservationStatus];
+
 export const WithdrawalAction = {
   APPROVE: "approve",
   REJECT: "reject",

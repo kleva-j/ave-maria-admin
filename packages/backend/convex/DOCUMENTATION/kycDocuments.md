@@ -11,7 +11,7 @@ The `kycDocuments.ts` module provides a complete document upload, storage, and r
 - Document metadata management
 - Access control enforcement
 - Audit trail maintenance
-- Document lifecycle management
+- Document lifecycle management, including rejected-document replacement
 
 ---
 
@@ -95,7 +95,6 @@ const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".pdf"] as const;
 ```typescript
 const ALLOWED_MIME_TYPES = [
   "image/jpeg",
-  "image/jpg",
   "image/png",
   "application/pdf",
 ] as const;
@@ -104,7 +103,7 @@ const ALLOWED_MIME_TYPES = [
 ### File Size Limit
 
 ```typescript
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 ```
 
 ---
@@ -161,7 +160,7 @@ if (!response.ok) {
 const storageId = extractStorageId(uploadUrl);
 ```
 
-**Important**: This step happens client-side, not through Convex mutations.
+**Important**: This step happens client-side, not through Convex mutations. After rejection, a fresh upload of the same document type is allowed as long as there is no existing pending document of that type.
 
 ---
 
@@ -196,6 +195,7 @@ const document = await ctx.runMutation(kycDocuments.uploadDocument, {
   file_size: 2048576,
   mime_type: "image/jpeg",
   uploaded_at: 1234567890000,
+  supersedes_document_id: Id<"kyc_documents"> | undefined,
   created_at: 1234567890000,
 }
 ```
@@ -291,7 +291,7 @@ Creates database record after successful upload.
 
 **Validation**:
 
-1. File size ≤ MAX_FILE_SIZE (10MB)
+1. File size ≤ MAX_FILE_SIZE (5MB)
 2. File name extension valid
 3. MIME type allowed
 4. No existing pending document of same type
@@ -587,7 +587,7 @@ Returns KYC document requirements for UI display.
 {
   required: KycDocumentType[];      // ["government_id", "selfie_with_id"]
   optional: KycDocumentType[];      // ["proof_of_address", "bank_statement"]
-  maxFileSize: number;              // 10485760 (10MB)
+  maxFileSize: number;              // 5242880 (5MB)
   allowedMimeTypes: string[];       // ["image/jpeg", "image/png", ...]
 }
 ```
@@ -664,7 +664,7 @@ throw new ConvexError(
 throw new ConvexError(
   `Invalid MIME type. Allowed: ${ALLOWED_MIME_TYPES.join(", ")}`
 );
-// Example: "Invalid MIME type. Allowed: image/jpeg, image/jpg, image/png, application/pdf"
+// Example: "Invalid MIME type. Allowed: image/jpeg, image/png, application/pdf"
 ```
 
 #### File Too Large
@@ -673,7 +673,7 @@ throw new ConvexError(
 throw new ConvexError(
   `File too large. Maximum size: ${MAX_FILE_SIZE / (1024 * 1024)}MB`
 );
-// Example: "File too large. Maximum size: 10MB"
+// Example: "File too large. Maximum size: 5MB"
 ```
 
 #### Duplicate Pending Document
@@ -1089,9 +1089,9 @@ const avgReviewTime =
 
 | Property   | Value                                             |
 | ---------- | ------------------------------------------------- |
-| Max Size   | 10 MB                                             |
+| Max Size   | 5 MB                                             |
 | Extensions | .jpg, .jpeg, .png, .pdf                           |
-| MIME Types | image/jpeg, image/jpg, image/png, application/pdf |
+| MIME Types | image/jpeg, image/png, application/pdf |
 
 ### Document Types
 

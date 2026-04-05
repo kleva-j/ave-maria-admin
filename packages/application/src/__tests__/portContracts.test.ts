@@ -1,7 +1,7 @@
-import * as fc from "fast-check";
-import * as fs from "node:fs";
 import * as path from "node:path";
 import * as ts from "typescript";
+import * as fc from "fast-check";
+import * as fs from "node:fs";
 
 import { describe, it, expect } from "vitest";
 
@@ -19,7 +19,11 @@ function collectTsFiles(dir: string): string[] {
     const fullPath = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       results.push(...collectTsFiles(fullPath));
-    } else if (entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts")) {
+    } else if (
+      entry.isFile() &&
+      entry.name.endsWith(".ts") &&
+      !entry.name.endsWith(".d.ts")
+    ) {
       results.push(fullPath);
     }
   }
@@ -41,7 +45,10 @@ function extractImportPaths(content: string): string[] {
   const readModuleSpecifier = (
     node: ts.Expression | undefined,
   ): string | undefined => {
-    if (node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))) {
+    if (
+      node &&
+      (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+    ) {
       return node.text;
     }
 
@@ -49,8 +56,13 @@ function extractImportPaths(content: string): string[] {
   };
 
   const visit = (node: ts.Node) => {
-    if (ts.isImportDeclaration(node) || (ts.isExportDeclaration(node) && node.moduleSpecifier)) {
-      const moduleSpecifier = readModuleSpecifier((node as ts.ImportDeclaration | ts.ExportDeclaration).moduleSpecifier);
+    if (
+      ts.isImportDeclaration(node) ||
+      (ts.isExportDeclaration(node) && node.moduleSpecifier)
+    ) {
+      const moduleSpecifier = readModuleSpecifier(
+        (node as ts.ImportDeclaration | ts.ExportDeclaration).moduleSpecifier,
+      );
       if (moduleSpecifier) {
         importPaths.push(moduleSpecifier);
       }
@@ -102,8 +114,18 @@ const arbitraryHoldRecord = fc.record({
 });
 
 const arbitraryWithdrawalRecord = fc.record({
-  requested_at: fc.integer({ min: 0 }),
+  _id: fc.uuid(),
+  reference: fc.string({ minLength: 1, maxLength: 36 }),
+  requested_by: arbitraryUserId,
   requested_amount_kobo: fc.bigInt({ min: 1n }),
+  method: fc.constantFrom("bank_transfer" as const, "cash" as const),
+  status: fc.constantFrom(
+    "pending" as const,
+    "approved" as const,
+    "rejected" as const,
+    "processed" as const,
+  ),
+  requested_at: fc.integer({ min: 0 }),
 });
 
 // ---------------------------------------------------------------------------
@@ -182,7 +204,14 @@ describe("Property 15: WithdrawalRepository behavioral contract", () => {
         async (userId, withdrawals) => {
           const repo: WithdrawalRepository = {
             findById: async () => null,
+            findByReference: async () => null,
             findByUserId: async () => withdrawals,
+            create: async () => {
+              throw new Error("create not implemented in contract stub");
+            },
+            update: async () => {
+              throw new Error("update not implemented in contract stub");
+            },
           };
 
           const results = await repo.findByUserId(userId);
@@ -203,7 +232,14 @@ describe("Property 15: WithdrawalRepository behavioral contract", () => {
       fc.asyncProperty(arbitraryUserId, async (userId) => {
         const repo: WithdrawalRepository = {
           findById: async () => null,
+          findByReference: async () => null,
           findByUserId: async () => [],
+          create: async () => {
+            throw new Error("create not implemented in contract stub");
+          },
+          update: async () => {
+            throw new Error("update not implemented in contract stub");
+          },
         };
 
         const results = await repo.findByUserId(userId);
@@ -251,13 +287,18 @@ describe("Property 1: Layer boundary — no upward imports", () => {
       for (const imp of imports) {
         for (const forbidden of DOMAIN_FORBIDDEN) {
           if (imp.includes(forbidden)) {
-            violations.push(`${path.relative(MONOREPO_ROOT, file)}: imports "${imp}"`);
+            violations.push(
+              `${path.relative(MONOREPO_ROOT, file)}: imports "${imp}"`,
+            );
           }
         }
       }
     }
 
-    expect(violations, `Layer boundary violations found:\n${violations.join("\n")}`).toEqual([]);
+    expect(
+      violations,
+      `Layer boundary violations found:\n${violations.join("\n")}`,
+    ).toEqual([]);
   });
 
   it("no file in packages/application/src imports from backend or presentation layers", () => {
@@ -270,13 +311,18 @@ describe("Property 1: Layer boundary — no upward imports", () => {
       for (const imp of imports) {
         for (const forbidden of APPLICATION_FORBIDDEN) {
           if (imp.includes(forbidden)) {
-            violations.push(`${path.relative(MONOREPO_ROOT, file)}: imports "${imp}"`);
+            violations.push(
+              `${path.relative(MONOREPO_ROOT, file)}: imports "${imp}"`,
+            );
           }
         }
       }
     }
 
-    expect(violations, `Layer boundary violations found:\n${violations.join("\n")}`).toEqual([]);
+    expect(
+      violations,
+      `Layer boundary violations found:\n${violations.join("\n")}`,
+    ).toEqual([]);
   });
 });
 
@@ -290,10 +336,7 @@ describe("Property 2: No Convex SDK in domain or application", () => {
   const domainSrc = path.join(MONOREPO_ROOT, "packages/domain/src");
   const applicationSrc = path.join(MONOREPO_ROOT, "packages/application/src");
 
-  const CONVEX_FORBIDDEN_PATTERNS = [
-    /^convex\//,
-    /^convex$/,
-  ];
+  const CONVEX_FORBIDDEN_PATTERNS = [/^convex\//, /^convex$/];
 
   function hasConvexImport(imports: string[]): string | null {
     for (const imp of imports) {
@@ -313,11 +356,16 @@ describe("Property 2: No Convex SDK in domain or application", () => {
       const imports = extractImportPaths(content);
       const hit = hasConvexImport(imports);
       if (hit) {
-        violations.push(`${path.relative(MONOREPO_ROOT, file)}: imports "${hit}"`);
+        violations.push(
+          `${path.relative(MONOREPO_ROOT, file)}: imports "${hit}"`,
+        );
       }
     }
 
-    expect(violations, `Convex SDK imports found in domain layer:\n${violations.join("\n")}`).toEqual([]);
+    expect(
+      violations,
+      `Convex SDK imports found in domain layer:\n${violations.join("\n")}`,
+    ).toEqual([]);
   });
 
   it("no file in packages/application/src imports from convex/*", () => {
@@ -329,10 +377,15 @@ describe("Property 2: No Convex SDK in domain or application", () => {
       const imports = extractImportPaths(content);
       const hit = hasConvexImport(imports);
       if (hit) {
-        violations.push(`${path.relative(MONOREPO_ROOT, file)}: imports "${hit}"`);
+        violations.push(
+          `${path.relative(MONOREPO_ROOT, file)}: imports "${hit}"`,
+        );
       }
     }
 
-    expect(violations, `Convex SDK imports found in application layer:\n${violations.join("\n")}`).toEqual([]);
+    expect(
+      violations,
+      `Convex SDK imports found in application layer:\n${violations.join("\n")}`,
+    ).toEqual([]);
   });
 });

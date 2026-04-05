@@ -10,18 +10,21 @@ import type {
   RiskEventService,
 } from "@avm-daily/application/ports";
 
-import type { MutationCtx } from "../_generated/server";
 import type { RiskEventType, RiskSeverity } from "../shared";
+import type { MutationCtx } from "../_generated/server";
 import type {
-  Context,
   UserRiskHoldId,
   UserRiskHold,
   AdminUserId,
   RiskEventId,
+  Context,
   UserId,
 } from "../types";
 
 import { DomainError } from "@avm-daily/domain";
+
+import { getInsertDb, getPatchDb } from "./utils";
+
 import {
   BankAccountEventType,
   RiskHoldStatus,
@@ -50,32 +53,6 @@ function assertSingleActiveWithdrawalHold(
   }
 }
 
-function getInsertDb(ctx: Context): Pick<MutationCtx["db"], "insert"> {
-  const mutationDb = ctx.db as Partial<MutationCtx["db"]>;
-
-  if (typeof mutationDb.insert !== "function") {
-    throw new DomainError(
-      "Risk hold mutations require a mutation context",
-      "risk_hold_mutation_context_required",
-    );
-  }
-
-  return mutationDb as Pick<MutationCtx["db"], "insert">;
-}
-
-function getPatchDb(ctx: Context): Pick<MutationCtx["db"], "patch"> {
-  const mutationDb = ctx.db as Partial<MutationCtx["db"]>;
-
-  if (typeof mutationDb.patch !== "function") {
-    throw new DomainError(
-      "Risk hold mutations require a mutation context",
-      "risk_hold_mutation_context_required",
-    );
-  }
-
-  return mutationDb as Pick<MutationCtx["db"], "patch">;
-}
-
 export function createConvexRiskHoldRepository(
   ctx: Context,
 ): RiskHoldRepository {
@@ -96,6 +73,7 @@ export function createConvexRiskHoldRepository(
       const matchingHolds = await activeWithdrawalHoldQuery(ctx, userId).take(
         2,
       );
+
       assertSingleActiveWithdrawalHold(userId, matchingHolds);
 
       return {
@@ -117,7 +95,11 @@ export function createConvexRiskHoldRepository(
       placed_by_admin_id: AdminUserId;
       placed_at: number;
     }): Promise<{ _id: UserRiskHoldId }> {
-      const mutationDb = getInsertDb(ctx);
+      const mutationDb = getInsertDb(
+        ctx,
+        "Risk hold mutations require a mutation context",
+        "risk_hold_mutation_context_required",
+      );
 
       if (
         hold.status === RiskHoldStatus.ACTIVE &&
@@ -127,6 +109,7 @@ export function createConvexRiskHoldRepository(
           ctx,
           hold.user_id,
         ).take(2);
+
         assertSingleActiveWithdrawalHold(hold.user_id, matchingHolds);
 
         if (matchingHolds.length === 1) {
@@ -153,7 +136,11 @@ export function createConvexRiskHoldRepository(
       releasedByAdminId: AdminUserId,
       releasedAt: number,
     ): Promise<void> {
-      const mutationDb = getPatchDb(ctx);
+      const mutationDb = getPatchDb(
+        ctx,
+        "Risk hold mutations require a mutation context",
+        "risk_hold_mutation_context_required",
+      );
 
       await mutationDb.patch(id, {
         status: RiskHoldStatus.RELEASED,
@@ -205,9 +192,7 @@ export function createConvexRiskEventRepository(
     } | null> {
       const events = await ctx.db
         .query(TABLE_NAMES.RISK_EVENTS)
-        .withIndex("by_user_id_and_created_at", (q) =>
-          q.eq("user_id", userId),
-        )
+        .withIndex("by_user_id_and_created_at", (q) => q.eq("user_id", userId))
         .order("desc")
         .take(1);
 

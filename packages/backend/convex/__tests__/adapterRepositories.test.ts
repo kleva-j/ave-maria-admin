@@ -454,10 +454,11 @@ describe("Convex adapter repositories", () => {
     const repo = createConvexWithdrawalRepository(ctx);
     const result = await repo.findById("withdrawal-1" as never);
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       _id: "withdrawal-1",
       status: "pending",
       method: WithdrawalMethod.BANK_TRANSFER,
+      reference: "legacy_withdrawal-1",
     });
   });
 

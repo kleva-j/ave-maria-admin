@@ -16,6 +16,7 @@ export const kyc_documents = defineTable({
   reviewed_by: v.optional(v.id("admin_users")),
   reviewed_at: v.optional(v.number()),
   rejection_reason: v.optional(v.string()),
+  supersedes_document_id: v.optional(v.id("kyc_documents")),
   created_at: v.number(),
 })
   .index("by_user_id", ["user_id"])

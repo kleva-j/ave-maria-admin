@@ -1,737 +1,524 @@
-# Withdrawal Processing Module Documentation
+# Withdrawal Feature Behavior
 
 ## Overview
 
-**File**: `/packages/backend/convex/withdrawals.ts`
+**Primary module**: `packages/backend/convex/withdrawals.ts`
 
-The withdrawal processing module manages the complete lifecycle of user withdrawal requests, from initiation through admin review to final payout processing. It implements a multi-step approval workflow with built-in risk controls and role-based permissions.
+The withdrawal feature is a reservation-based payout workflow.
 
----
+The current behavior is:
 
-## Key Responsibilities
+1. A user requests a withdrawal.
+2. The system validates balance, risk rules, and payout details.
+3. The system creates a withdrawal record and a reservation record.
+4. No ledger deduction happens yet.
+5. An admin approves or rejects the request.
+6. If approved, an admin processes the payout.
+7. Only at `process` time does the system post the negative withdrawal transaction to the ledger.
 
-### 1. **Withdrawal Lifecycle Management**
-
-- Request initiation by users
-- Admin review and approval/rejection
-- Final processing and payout confirmation
-- Status tracking throughout the workflow
-
-### 2. **Risk Control & Compliance**
-
-- Automated risk assessment (velocity checks, limits)
-- Role-based admin permissions
-- Cash withdrawal restrictions
-- Audit logging for all actions
-
-### 3. **Financial Operations**
-
-- Creates PENDING transactions (holds funds)
-- Processes reversals on rejection
-- Maintains ledger integrity
-- Syncs with aggregate tables for analytics
-
-### 4. **Payment Method Support**
-
-- Bank transfer withdrawals
-- Cash pickup withdrawals
-- Bank account verification requirements
-- Recipient details management
+This is an intentional change from the older "deduct on request, reverse on reject" model.
 
 ---
 
-## Withdrawal Workflow
+## Why This Design Exists
 
+The feature now separates three concerns cleanly:
+
+1. **Intent**
+   - The user wants to withdraw money.
+   - Stored as a `withdrawals` row.
+
+2. **Capacity reservation**
+   - The system must prevent over-withdrawal while the request is under review.
+   - Stored as a `withdrawal_reservations` row.
+
+3. **Final financial settlement**
+   - The ledger should only reflect money leaving the system after payout processing succeeds.
+   - Stored as a `transactions` row of type `withdrawal`.
+
+That separation reduces reversal complexity, keeps the ledger cleaner, and makes payout-provider integration easier.
+
+---
+
+## Core Modules
+
+### API / Orchestration
+- `packages/backend/convex/withdrawals.ts`
+
+### Domain rules
+- `packages/domain/src/services/withdrawalLifecycle.ts`
+- `packages/domain/src/services/withdrawalPolicy.ts`
+
+### Application use cases
+- `packages/application/src/use-cases/index.ts`
+
+### Backend adapters
+- `packages/backend/convex/adapters/withdrawalAdapter.ts`
+- `packages/backend/convex/adapters/withdrawalReservationAdapter.ts`
+- `packages/backend/convex/adapters/bankAccountAdapter.ts`
+- `packages/backend/convex/adapters/withdrawalPayoutAdapter.ts`
+
+### Ledger integration
+- `packages/backend/convex/transactions.ts`
+
+### Risk integration
+- `packages/backend/convex/risk.ts`
+- `packages/backend/convex/withdrawalPolicy.ts`
+
+---
+
+## Persistence Model
+
+### `withdrawals`
+
+A withdrawal row is the workflow record.
+
+Important fields:
+
+- `reference`
+- `requested_by`
+- `requested_amount_kobo`
+- `method`
+- `status`
+- `requested_at`
+- `approved_by`
+- `approved_at`
+- `processed_by`
+- `processed_at`
+- `transaction_id` (optional until processing succeeds)
+- `reservation_id` (optional during creation, then linked)
+- `payout_provider`
+- `payout_reference`
+- `last_processing_error`
+- `bank_account_details`
+- `cash_details`
+- `rejection_reason`
+
+### `withdrawal_reservations`
+
+A reservation row prevents the same balance from being used by multiple pending withdrawals.
+
+Important fields:
+
+- `withdrawal_id`
+- `user_id`
+- `amount_kobo`
+- `reference`
+- `status`
+- `created_at`
+- `released_at`
+- `consumed_at`
+
+Reservation statuses:
+
+- `active`
+- `released`
+- `consumed`
+
+### `transactions`
+
+The actual ledger entry for a withdrawal is created only during successful processing.
+
+Important implication:
+
+- `pending` and `approved` withdrawals may have no `transaction_id`.
+- `processed` withdrawals should have a linked `transaction_id`.
+
+---
+
+## Workflow State Machine
+
+```text
+request
+  -> withdrawal.status = pending
+  -> reservation.status = active
+  -> no transaction posted
+
+approve
+  -> withdrawal.status = approved
+  -> reservation.status = active
+  -> no transaction posted
+
+reject
+  -> withdrawal.status = rejected
+  -> reservation.status = released
+  -> no transaction posted
+
+process
+  -> payout executed
+  -> withdrawal ledger transaction posted
+  -> withdrawal.status = processed
+  -> reservation.status = consumed
 ```
-┌─────────────┐
-│   REQUEST   │ ← User initiates withdrawal
-│  (PENDING)  │
-└──────┬──────┘
-       │
-       ├────────────────┐
-       │                │
-  ┌────▼─────┐    ┌─────▼──────┐
-  │ APPROVE  │    │   REJECT   │ ← Admin reviews
-  │(APPROVED)│    │ (REJECTED) │
-  └────┬─────┘    └──────┬─────┘
-       │                 │
-  ┌────▼──────┐          │
-  │  PROCESS  │          │ ← Finance processes
-  │(PROCESSED)│          │
-  └───────────┘          │
-                         │
-                 ┌───────▼────────┐
-                 │ Auto-reversal  │ ← Refunds user
-                 └────────────────┘
+
+### Withdrawal statuses
+
+- `pending`
+  - user has requested the withdrawal
+  - admin review is still pending
+  - reservation is active
+  - no ledger deduction yet
+
+- `approved`
+  - admin has approved the withdrawal
+  - reservation is still active
+  - still no ledger deduction yet
+  - ready for payout execution
+
+- `rejected`
+  - admin rejected the withdrawal
+  - reservation is released
+  - no ledger reversal exists because no withdrawal transaction was ever posted
+  - terminal state
+
+- `processed`
+  - payout has been executed successfully
+  - reservation is consumed
+  - negative transaction has been posted to the ledger
+  - terminal state
+
+---
+
+## Request Behavior
+
+## Entry point
+
+- `withdrawals.request`
+
+## Preconditions
+
+1. User must be authenticated.
+2. User must be `active`.
+3. Amount must be greater than zero.
+4. Available balance must be sufficient after subtracting active reservations.
+5. Request must pass withdrawal risk checks.
+6. If method is `bank_transfer`, the user must have a verified bank account.
+7. If method is `cash`, a bank account must not be supplied.
+
+## Available balance rule
+
+The system does not look only at `total_balance_kobo`.
+It uses:
+
+- current total balance
+- current savings balance
+- sum of all **active** withdrawal reservations
+
+Effective available amount is:
+
+```text
+available = balance - active_reservations
 ```
+
+A new request is rejected if either effective total balance or effective savings balance would fall below the requested amount.
+
+## What gets written
+
+1. A new `withdrawals` row is created with:
+   - `status = pending`
+   - method-specific details
+   - stable `reference`
+
+2. A new `withdrawal_reservations` row is created with:
+   - `status = active`
+   - `reference = wres_<withdrawal_reference>`
+
+3. The withdrawal is patched with `reservation_id`.
+
+## What does **not** happen
+
+- No `transactions` withdrawal entry is created.
+- No user balance field is decreased.
+- No reversal is needed later if the request is rejected.
+
+---
+
+## Approval Behavior
+
+## Entry point
+
+- `withdrawals.approve`
+
+## Preconditions
+
+1. Caller must be an authenticated admin.
+2. Withdrawal must currently be `pending`.
+3. Admin role must be allowed for the action.
+4. For cash withdrawals, role gating is stricter.
+5. Existing admin risk checks still apply where configured.
+
+## What gets written
+
+The withdrawal is updated with:
+
+- `status = approved`
+- `approved_by`
+- `approved_at`
+- `rejection_reason = undefined`
+- `last_processing_error = undefined`
+
+## What does **not** happen
+
+- Reservation remains `active`.
+- No transaction is posted.
+- No payout provider is called.
+
+---
+
+## Rejection Behavior
+
+## Entry point
+
+- `withdrawals.reject`
+
+## Preconditions
+
+1. Caller must be an authenticated admin.
+2. Withdrawal may be `pending` or `approved`.
+3. Rejection reason is required.
+4. Admin role must be allowed for the action.
+5. For cash withdrawals, the same role gating used for approve/process also applies.
+
+## What gets written
+
+1. Reservation is updated to:
+   - `status = released`
+   - `released_at = now`
+
+2. Withdrawal is updated to:
+   - `status = rejected`
+   - `rejection_reason`
+   - `last_processing_error = undefined`
+
+## What does **not** happen
+
+- No reversal transaction is posted.
+- No balance update is needed, because nothing was deducted earlier.
+
+This is one of the most important behavior changes in the current design.
+
+---
+
+## Processing Behavior
+
+## Entry point
+
+- `withdrawals.process`
+
+## Preconditions
+
+1. Caller must be an authenticated admin.
+2. Withdrawal must be `approved`.
+3. Reservation must exist and still be `active`.
+4. Admin role must be allowed for the action.
+5. For cash withdrawals, restricted cash roles still apply.
+6. Admin hold/risk checks still run where configured.
+
+## Processing sequence
+
+The order matters:
+
+1. Load the approved withdrawal.
+2. Load the active reservation.
+3. Execute payout through the payout service.
+4. If payout succeeds, post the negative withdrawal ledger transaction.
+5. Mark the reservation `consumed`.
+6. Mark the withdrawal `processed` and attach payout + transaction metadata.
+
+## Payout service behavior
+
+Current implementation uses a stub provider:
+
+- adapter: `packages/backend/convex/adapters/withdrawalPayoutAdapter.ts`
+- provider name: `manual_ops`
+
+This is provider-ready by design. A real payout adapter can later replace the stub without changing the domain workflow.
+
+## Ledger posting behavior
+
+After payout success, the system posts a transaction with:
+
+- `type = withdrawal`
+- `amount_kobo = -requested_amount_kobo`
+- `reference = withdrawal.reference`
+- metadata including:
+  - `source = admin`
+  - `actor_id`
+  - `withdrawal_status = processed`
+  - `method`
+  - bank or cash details
+  - payout provider/reference
+
+## Failure behavior
+
+If payout execution throws:
+
+1. No withdrawal transaction is posted.
+2. Reservation remains active.
+3. Withdrawal remains in its prior workflow state.
+4. `last_processing_error` is updated.
+5. A processing failure audit log is written.
+
+This makes failed processing retryable.
 
 ---
 
 ## Withdrawal Methods
 
-### Bank Transfer
+## Bank transfer
 
-**Characteristics**:
+### Requirements
 
-- Requires verified bank account
-- Standard processing time: 1-3 business days
-- Lower risk profile
-- Default method
+- User must have a verified bank account.
+- If a `bank_account_id` is supplied, it must belong to the user and be verified.
+- If none is supplied, the system falls back to the user's primary verified bank account.
 
-**Requirements**:
+### Stored details
 
-- User must have `VERIFIED` bank account
-- Account details stored in `bank_account_details`
+`bank_account_details` contains:
 
-**Metadata Structure**:
+- `account_id`
+- `bank_name`
+- `account_name`
+- `account_number_last4`
 
-```typescript
-{
-  method: "bank_transfer",
-  bank_account: {
-    account_id: "ba_123",
-    bank_name: "Chase Bank",
-    account_name: "John Doe",
-    account_number_last4: "1234"
-  }
-}
-```
+## Cash withdrawal
 
-### Cash Pickup
+### Requirements
 
-**Characteristics**:
+- No bank account is required.
+- The request derives recipient details from the user profile and optional pickup note.
+- Cash actions are subject to stricter admin-role gating.
 
-- No bank account required
-- Immediate availability at pickup location
-- Higher scrutiny (role restrictions)
-- Special handling required
+### Stored details
 
-**Requirements**:
+`cash_details` contains:
 
-- Only certain admin roles can approve/process
-- Recipient details captured
-- Pickup note optional
-
-**Metadata Structure**:
-
-```typescript
-{
-  method: "cash",
-  cash_details: {
-    recipient_name: "John Doe",
-    recipient_phone: "+1234567890",
-    pickup_note: "Pickup at main branch"
-  }
-}
-```
+- `recipient_name`
+- `recipient_phone`
+- `pickup_note`
 
 ---
 
-## Status Flow
+## Role Gating
 
-### PENDING
+Cash withdrawals have stricter action permissions.
 
-**When**: User submits withdrawal request  
-**Transaction State**: Funds held (negative entry posted)  
-**Allowed Actions**:
+Current allowed roles for cash `approve`, `reject`, and `process` are:
 
-- Approve → moves to APPROVED
-- Reject → moves to REJECTED (funds refunded)
+- `super_admin`
+- `operations`
+- `finance`
 
-**Business Rules**:
+Blocked roles receive structured forbidden error payloads, and review queries expose server-computed action capabilities.
 
-- Validates sufficient balance
-- Checks velocity limits
-- Verifies bank account (if applicable)
-- Risk assessment performed
+This logic is driven by:
 
-### APPROVED
-
-**When**: Admin reviews and approves  
-**Transaction State**: Funds still held, ready for payout  
-**Allowed Actions**:
-
-- Process → moves to PROCESSED
-
-**Business Rules**:
-
-- Role-based permissions apply
-- Cash withdrawals require Finance/Operations role
-- Manual risk review recommended
-
-### REJECTED
-
-**When**: Admin denies the request  
-**Transaction State**: Reversal posted (funds refunded)  
-**Allowed Actions**: None (terminal state)
-
-**Business Rules**:
-
-- Rejection reason required
-- Automatic reversal created
-- User notified
-
-### PROCESSED
-
-**When**: Payout completed (money sent)  
-**Transaction State**: Final (no further changes)  
-**Allowed Actions**: None (terminal state)
-
-**Business Rules**:
-
-- Confirmation of external payout
-- Transaction complete
+- `packages/domain/src/services/withdrawalPolicy.ts`
+- `packages/backend/convex/withdrawalPolicy.ts`
 
 ---
 
-## Core Functions
+## Risk Integration
 
-### User-Facing Operations
+Withdrawal request flow is integrated with the risk engine.
 
-#### `request()`
+Risk checks may block a request for reasons such as:
 
-**Purpose**: Initiate a new withdrawal request
+- manual withdrawal hold
+- bank account cooldown after recent change
+- daily amount limit
+- daily count limit
+- short-window velocity limit
 
-**Process**:
+Admin action flows also preserve the existing hold/risk checks where already configured.
 
-1. Validate user status (must be ACTIVE)
-2. Check amount > 0 and within balance limits
-3. Resolve/validate bank account (for bank transfers)
-4. Run risk checks (velocity, daily limits, holds)
-5. Create PENDING transaction (holds funds)
-6. Insert withdrawal record
-7. **Sync with aggregate tables**
-8. Audit log the request
+Related modules:
 
-**Risk Checks**:
-
-```typescript
-await assertWithdrawalRequestAllowed(ctx, {
-  user,
-  method,
-  amountKobo: args.amount_kobo,
-  now,
-});
-```
-
-**Example Usage**:
-
-```typescript
-const withdrawal = await request(ctx, {
-  amount_kobo: 50000n, // ₦500.00
-  method: WithdrawalMethod.BANK_TRANSFER,
-  bank_account_id: "ba_123", // Optional - uses primary verified if not provided
-});
-
-// Returns withdrawal summary with status "pending"
-```
-
-**Error Scenarios**:
-
-- "Only active users can request withdrawals"
-- "Insufficient balance"
-- "Add and verify a bank account before withdrawing"
-- "Cash withdrawals do not require a bank account"
-- Risk check failures (velocity, limits, etc.)
+- `packages/backend/convex/risk.ts`
+- `packages/application/src/use-cases/index.ts`
 
 ---
 
-### Admin Operations
+## Read APIs
 
-#### `listForReview()`
+## `withdrawals.listMine`
 
-**Purpose**: Administrative view of withdrawal requests
+Returns the authenticated user's withdrawals.
 
-**Features**:
+Returned summary includes:
 
-- Optional status filter
-- Includes user details
-- Includes risk summary
-- Includes capability flags (what actions are allowed)
+- `_id`
+- `reference`
+- `transaction_id` (optional)
+- `transaction_reference` (optional)
+- `requested_amount_kobo`
+- `method`
+- `status`
+- `requested_at`
+- `approved_at`
+- `processed_at`
+- `rejection_reason`
+- `payout_provider`
+- `payout_reference`
+- `last_processing_error`
+- `bank_account` or `cash_details`
 
-**Response Structure**:
+## `withdrawals.listForReview`
 
-```typescript
-{
-  withdrawal: { /* withdrawal details */ },
-  user: {
-    _id: "user_123",
-    first_name: "John",
-    last_name: "Doe",
-    email: "john@example.com",
-    phone: "+1234567890",
-    status: "active"
-  },
-  risk: {
-    /* velocity, history, flags */
-  },
-  capabilities: {
-    approve: { allowed: true },
-    reject: { allowed: true },
-    process: { allowed: false, reason: "..." }
-  }
-}
-```
+Returns admin review rows with:
 
-#### `approve()`
+- normalized withdrawal summary
+- requesting user summary
+- risk summary
+- server-computed `capabilities`
 
-**Purpose**: Authorize a pending withdrawal
-
-**Process**:
-
-1. Verify admin authentication
-2. Check withdrawal is PENDING
-3. Validate admin role permissions (especially for cash)
-4. Patch status to APPROVED with timestamp
-5. **Sync aggregates after status change**
-6. Audit log the approval
-
-**Role-Based Permissions**:
-
-```typescript
-assertAdminCanHandleCashWithdrawal(
-  admin.role,
-  withdrawal,
-  WithdrawalAction.APPROVE,
-);
-```
-
-**Cash Withdrawal Allowed Roles**:
-
-- SUPER_ADMIN
-- OPERATIONS
-- FINANCE
-
-**Example**:
-
-```typescript
-await approve(ctx, { withdrawal_id: "wd_123" });
-// Returns updated withdrawal with status "approved"
-```
-
-#### `reject()`
-
-**Purpose**: Deny a pending withdrawal and refund the user
-
-**Process**:
-
-1. Verify admin authentication
-2. Check withdrawal is PENDING
-3. Validate admin role permissions
-4. **Create REVERSAL transaction** (refunds user)
-5. Patch status to REJECTED with reason
-6. **Sync aggregates after status change**
-7. Audit log with reversal reference
-
-**Critical**: The reversal automatically refunds the user's balance, undoing the hold.
-
-**Example**:
-
-```typescript
-await reject(ctx, {
-  withdrawal_id: "wd_123",
-  reason: "Suspicious activity detected",
-});
-// Returns updated withdrawal with status "rejected"
-```
-
-#### `process()`
-
-**Purpose**: Confirm payout completion
-
-**Process**:
-
-1. Verify admin authentication
-2. Check withdrawal is APPROVED (can't process unapproved)
-3. Validate admin role permissions
-4. Patch status to PROCESSED
-5. Audit log the completion
-
-**Note**: This is a status update only - actual payout happens externally.
-
-**Example**:
-
-```typescript
-await process(ctx, { withdrawal_id: "wd_123" });
-// Returns updated withdrawal with status "processed"
-```
+`capabilities` is authoritative for UI state and should be used to disable blocked admin actions.
 
 ---
 
-## Risk Controls
+## Audit and Aggregate Behavior
 
-### Velocity Checks
+Each workflow step writes audit information.
 
-Prevents rapid successive withdrawals that might indicate fraud:
+Expected actions include:
 
-- Maximum withdrawals per hour/day/week
-- Cooling-off periods between withdrawals
-- Unusual pattern detection
+- `withdrawal.requested`
+- `withdrawal.approved`
+- `withdrawal.rejected`
+- `withdrawal.processing_failed`
+- `withdrawal.processed`
 
-### Daily Limits
-
-Enforces maximum withdrawal amounts:
-
-- Per-user daily caps
-- Tiered limits based on KYC status
-- Cumulative amount tracking
-
-### Active Holds
-
-Detects other pending withdrawals to prevent overdrafts:
-
-- Checks for existing PENDING withdrawals
-- Ensures total holds ≤ available balance
-
-### Role-Based Permissions
-
-Restricts who can approve/process different withdrawal types:
-
-- Cash withdrawals → Finance/Operations only
-- Large amounts → Senior admin only
-- High-risk users → Enhanced review required
+Aggregate synchronization is also triggered on insert/update so analytics tables stay aligned with workflow state.
 
 ---
 
-## Aggregate Integration
+## Invariants
 
-All withdrawal mutations sync with `@convex-dev/aggregate`:
+These are the important invariants to preserve in future changes:
 
-```typescript
-// In request():
-const withdrawal = await ctx.db.get(withdrawalId);
-await syncWithdrawalInsert(ctx, withdrawal);
-
-// In approve()/reject():
-await syncWithdrawalUpdate(ctx, withdrawal, updated);
-```
-
-**Aggregates Updated**:
-
-- `totalWithdrawals` - Global count
-- `withdrawalsByStatus` - Count by status (pending, approved, rejected, processed)
-
-**Enables Queries Like**:
-
-```typescript
-// Dashboard metrics
-const pending = await withdrawalsByStatus.count(ctx, {
-  bounds: { prefix: ["pending"] },
-});
-
-const approved = await withdrawalsByStatus.count(ctx, {
-  bounds: { prefix: ["approved"] },
-});
-
-// Queue stats
-const total = await totalWithdrawals.count(ctx);
-```
+1. A request creates a reservation before any payout is processed.
+2. Balances are not deducted on request or approval.
+3. Only processing posts the negative withdrawal transaction.
+4. Rejection never posts a reversal in the current design.
+5. Only active reservations count against available balance.
+6. `processed` withdrawals should have a ledger transaction.
+7. `pending` and `approved` withdrawals may legitimately have no `transaction_id`.
+8. Cash role gating must stay server-side.
 
 ---
 
-## Helper Functions
+## Operational Notes
 
-### Bank Account Resolution
-
-#### `resolveWithdrawalBankAccount()`
-
-**Purpose**: Determine which bank account to use for withdrawal
-
-**Logic**:
-
-1. If `bankAccountId` provided → validate it exists and is verified
-2. If not provided → find user's primary verified account
-3. Fallback → any verified account
-4. Error if no verified account found
-
-**Validation**:
-
-- Account must belong to user
-- Account must be VERIFIED status
-- Primary account preferred
-
-### Data Normalization
-
-#### `maskBankAccount()`
-
-**Purpose**: Strip sensitive data from bank account details
-
-**What It Keeps**:
-
-- Bank name
-- Last 4 digits of account number
-- Account name (optional)
-
-**What It Removes**:
-
-- Full account number
-- Routing numbers
-- Other sensitive details
-
-#### `normalizeBankAccountDetails()`
-
-**Purpose**: Safely parse stored bank account data
-
-**Handles**:
-
-- Missing or malformed data
-- Legacy formats
-- Null/undefined values
-
-**Returns**: Safe default if parsing fails:
-
-```typescript
-{
-  bank_name: "Unknown bank",
-  account_name: undefined,
-  account_number_last4: "----"
-}
-```
-
-#### `buildCashDetails()`
-
-**Purpose**: Format recipient information for cash withdrawals
-
-**Fields**:
-
-- `recipient_name`: Full name from user profile
-- `recipient_phone`: Phone number from profile
-- `pickup_note`: Optional instructions
+1. A stuck `approved` withdrawal with an active reservation means payout has not succeeded yet.
+2. A `last_processing_error` indicates the payout phase failed after approval and can usually be retried.
+3. A `rejected` withdrawal should not be expected to have a reversal transaction in this model.
+4. Reconciliation should consider only posted ledger transactions, not workflow rows or reservations.
 
 ---
 
-## Transaction Linkage
-
-Every withdrawal creates a linked transaction:
-
-```typescript
-// Withdrawal creation flow:
-const postedTransaction = await postTransactionEntry(ctx, {
-  userId: user._id,
-  type: TxnType.WITHDRAWAL,
-  amountKobo: -args.amount_kobo, // Negative = money leaving
-  reference: `wdr_${Date.now()}_abc123`,
-  metadata: {
-    withdrawal_status: "pending",
-    method,
-    bank_account: bankAccountDetails,
-    cash_details: cashDetails,
-  },
-  source: TransactionSource.USER,
-  actorId: user._id,
-});
-
-const withdrawalId = await ctx.db.insert(TABLE_NAMES.WITHDRAWALS, {
-  transaction_id: postedTransaction.transaction._id, // ← Linkage
-  // ... other fields
-});
-```
-
-**Why Link?**:
-
-- Transaction holds the financial entry
-- Withdrawal holds the operational workflow
-- Separation of concerns
-- Enables reversal tracking
-
----
-
-## Error Handling
-
-### User Errors
-
-**"Only active users can request withdrawals"**
-
-- User status is not ACTIVE (pending_kyc, suspended, closed)
-- Solution: Complete KYC or resolve suspension
-
-**"Insufficient balance"**
-
-- Withdrawal amount > total_balance_kobo OR > savings_balance_kobo
-- Both balances must cover the withdrawal
-- Solution: Reduce amount or wait for more deposits
-
-**"Add and verify a bank account before withdrawing"**
-
-- No verified bank account on file
-- Solution: Add and verify bank account first
-
-### Admin Errors
-
-**"Only pending withdrawals can be approved"**
-
-- Withdrawal already approved/rejected/processed
-- Solution: Check current status before acting
-
-**"Cash withdrawal must be handled by authorized roles"**
-
-- Admin lacks Finance/Operations role
-- Solution: Escalate to authorized admin
-
-**"Linked transaction not found"**
-
-- Data integrity issue - transaction missing
-- Solution: Investigate data corruption
-
----
-
-## Query Endpoints
-
-### `listMine()`
-
-**Purpose**: Get current user's withdrawal history
-
-**Features**:
-
-- Filter to authenticated user only
-- Sorted by requested_at (newest first)
-- Includes full transaction references
-
-**Use Case**: User dashboard showing withdrawal history
-
-### `listForReview(status?)`
-
-**Purpose**: Admin withdrawal queue
-
-**Optional Filter**:
-
-- `status`: Filter to specific status (e.g., "pending")
-
-**Includes**:
-
-- Withdrawal details
-- User profile summary
-- Risk assessment
-- Action capabilities
-
-**Use Case**: Admin review interface
-
----
-
-## Best Practices
-
-### 1. Always Check Status Before Acting
-
-```typescript
-const withdrawal = await ctx.db.get(args.withdrawal_id);
-if (withdrawal.status !== WithdrawalStatus.PENDING) {
-  throw new ConvexError("Invalid status for this action");
-}
-```
-
-### 2. Capture Old State for Aggregates
-
-```typescript
-const oldWithdrawal = withdrawal;
-await ctx.db.patch(withdrawal._id, updates);
-const updated = await ctx.db.get(withdrawal._id);
-await syncWithdrawalUpdate(ctx, oldWithdrawal, updated);
-```
-
-### 3. Handle Cash Withdrawals Carefully
-
-```typescript
-assertAdminCanHandleCashWithdrawal(
-  admin.role,
-  withdrawal,
-  WithdrawalAction.APPROVE,
-);
-```
-
-### 4. Always Provide Rejection Reasons
-
-```typescript
-if (!args.approved && (!args.reason || args.reason.trim().length === 0)) {
-  throw new ConvexError("Rejection reasons is required");
-}
-```
-
-### 5. Link Transactions Properly
-
-```typescript
-metadata: {
-  withdrawal_status: WithdrawalStatus.PENDING,
-  method,
-  bank_account: bankAccountDetails,
-  cash_details: cashDetails,
-}
-```
-
----
-
-## Testing Checklist
-
-- [ ] Request withdrawal with sufficient balance → Success
-- [ ] Request withdrawal exceeding balance → Rejected
-- [ ] Request bank transfer without verified account → Error
-- [ ] Request cash withdrawal → Success
-- [ ] Approve pending withdrawal → Status = APPROVED
-- [ ] Reject pending withdrawal → Status = REJECTED + reversal created
-- [ ] Process approved withdrawal → Status = PROCESSED
-- [ ] Attempt to approve non-pending withdrawal → Error
-- [ ] Cash withdrawal approval by unauthorized role → Error
-- [ ] Duplicate withdrawal request (same amount/time) → Risk check triggered
-- [ ] Aggregate counts match reality
-- [ ] User balance refunded on rejection
-
----
-
-## Security Considerations
-
-### Authentication Required
-
-All endpoints require authentication:
-
-- Users → Own withdrawals only
-- Admins → All withdrawals (with role restrictions)
-
-### Audit Logging
-
-Every action logged:
-
-- Who performed it
-- What changed
-- When it happened
-- Why (for rejections)
-
-### Data Protection
-
-- Bank account numbers masked
-- Sensitive details stripped
-- Only last 4 digits stored/displayed
-
-### Role-Based Access Control
-
-- Cash withdrawals → Finance/Operations only
-- Large amounts → Enhanced permissions
-- High-risk users → Additional review
-
----
-
-## Performance Optimization
-
-### Fast Queries (O(log n))
-
-- Aggregate counts via `@convex-dev/aggregate`
-- Index-based lookups
-
-### Slower Queries (O(n))
-
-- `listForReview()` without status filter → collects all withdrawals
-- Risk assessment → scans user history
-
-**Optimization Tips**:
-
-- Always filter by status in production
-- Paginate large result sets
-- Cache risk summaries
-
----
-
-## Related Files
-
-- [`transactions.ts`](./transactions.ts) - Transaction processing
-- [`aggregateHelpers.ts`](./aggregateHelpers.ts) - Aggregate sync helpers
-- [`risk.ts`](./risk.ts) - Risk assessment logic
-- [`withdrawalPolicy.ts`](./withdrawalPolicy.ts) - Policy enforcement
-- [`shared.ts`](./shared.ts) - Types and constants
+## Related Documentation
+
+- `./transactions.md`
+- `./risk.md`
+- `./withdrawalPolicy.md`

@@ -4,6 +4,7 @@ import { transaction_reconciliation_issues } from "./schemas/transactionReconcil
 import { transaction_reconciliation_runs } from "./schemas/transactionReconciliationRuns";
 import { bank_account_document_comments } from "./schemas/bankAccountDocumentComments";
 import { user_bank_account_events } from "./schemas/userBankAccountEvents";
+import { withdrawal_reservations } from "./schemas/withdrawalReservations";
 import { bank_account_documents } from "./schemas/bankAccountDocuments";
 import { savings_plan_templates } from "./schemas/savingsPlanTemplates";
 import { admin_dashboard_kpis } from "./schemas/adminDashboardKpis";
@@ -34,6 +35,7 @@ export default defineSchema({
   [TABLE_NAMES.ADMIN_DASHBOARD_KPIS]: admin_dashboard_kpis,
   [TABLE_NAMES.BANK_ACCOUNT_DOCUMENTS]: bank_account_documents,
   [TABLE_NAMES.SAVINGS_PLAN_TEMPLATES]: savings_plan_templates,
+  [TABLE_NAMES.WITHDRAWAL_RESERVATIONS]: withdrawal_reservations,
   [TABLE_NAMES.USER_BANK_ACCOUNT_EVENTS]: user_bank_account_events,
   [TABLE_NAMES.BANK_ACCOUNT_DOCUMENT_COMMENTS]: bank_account_document_comments,
 });
