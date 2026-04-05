@@ -114,6 +114,19 @@ function makeInMemoryDeps(user: User, plan?: UserSavingsPlan) {
         savings_balance_kobo: savingsBalanceKobo,
       };
     },
+    updateStatus: async (id, status, updatedAt) => {
+      if (id !== currentUser._id) {
+        throw new Error(
+          `Unexpected user status update for ${id}; expected ${currentUser._id}`,
+        );
+      }
+
+      currentUser = {
+        ...currentUser,
+        status,
+        updated_at: updatedAt,
+      };
+    },
   };
 
   // Mutable plan amount

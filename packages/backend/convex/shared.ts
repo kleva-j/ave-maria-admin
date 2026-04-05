@@ -14,6 +14,7 @@ export const TABLE_NAMES = {
   ADMIN_DASHBOARD_KPIS: "admin_dashboard_kpis",
   BANK_ACCOUNT_DOCUMENTS: "bank_account_documents",
   SAVINGS_PLAN_TEMPLATES: "savings_plan_templates",
+  WITHDRAWAL_RESERVATIONS: "withdrawal_reservations",
   USER_BANK_ACCOUNT_EVENTS: "user_bank_account_events",
   BANK_ACCOUNT_DOCUMENT_COMMENTS: "bank_account_document_comments",
   TRANSACTION_RECONCILIATION_RUNS: "transaction_reconciliation_runs",
@@ -167,6 +168,18 @@ export const withdrawalStatus = v.union(
   v.literal(WithdrawalStatus.PROCESSED),
 );
 
+export const WithdrawalReservationStatus = {
+  ACTIVE: "active",
+  RELEASED: "released",
+  CONSUMED: "consumed",
+} as const;
+
+export const withdrawalReservationStatus = v.union(
+  v.literal(WithdrawalReservationStatus.ACTIVE),
+  v.literal(WithdrawalReservationStatus.RELEASED),
+  v.literal(WithdrawalReservationStatus.CONSUMED),
+);
+
 export const WithdrawalAction = {
   APPROVE: "approve",
   REJECT: "reject",
@@ -180,6 +193,8 @@ export const withdrawalAction = v.union(
 );
 
 export type WithdrawalStatus = typeof withdrawalStatus.type;
+export type WithdrawalReservationStatus =
+  typeof withdrawalReservationStatus.type;
 export type WithdrawalAction = typeof withdrawalAction.type;
 
 /**
@@ -301,9 +316,7 @@ export const RiskHoldScope = {
   WITHDRAWALS: "withdrawals",
 } as const;
 
-export const riskHoldScope = v.union(
-  v.literal(RiskHoldScope.WITHDRAWALS),
-);
+export const riskHoldScope = v.union(v.literal(RiskHoldScope.WITHDRAWALS));
 
 export type RiskHoldScope = typeof riskHoldScope.type;
 
@@ -414,6 +427,8 @@ export const RESOURCE_TYPE = {
   TRANSACTIONS: "transactions",
   WITHDRAWAL: "withdrawal",
   WITHDRAWALS: "withdrawals",
+  WITHDRAWAL_RESERVATION: "withdrawal_reservation",
+  WITHDRAWAL_RESERVATIONS: "withdrawal_reservations",
   SAVINGS_PLAN: "user_savings_plan",
   SAVINGS_PLANS: "user_savings_plans",
   SAVINGS_PLAN_TEMPLATE: "savings_plan_template",
@@ -443,6 +458,8 @@ export const resourceType = v.union(
   v.literal(RESOURCE_TYPE.TRANSACTIONS),
   v.literal(RESOURCE_TYPE.WITHDRAWAL),
   v.literal(RESOURCE_TYPE.WITHDRAWALS),
+  v.literal(RESOURCE_TYPE.WITHDRAWAL_RESERVATION),
+  v.literal(RESOURCE_TYPE.WITHDRAWAL_RESERVATIONS),
   v.literal(RESOURCE_TYPE.SAVINGS_PLAN),
   v.literal(RESOURCE_TYPE.SAVINGS_PLANS),
   v.literal(RESOURCE_TYPE.SAVINGS_PLAN_TEMPLATE),

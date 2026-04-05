@@ -5,16 +5,17 @@
 import type { UserRepository } from "@avm-daily/application/ports";
 import type { User as UserDomain } from "@avm-daily/domain";
 
-import type { QueryCtx, MutationCtx } from "../_generated/server";
-import type { User, UserId } from "../types";
+import type { User, UserId, Context } from "../types";
 
-type AnyCtx = QueryCtx & MutationCtx;
+import { getPatchDb } from "./utils";
 
 function docToUser(doc: User): UserDomain {
   return {
     _id: String(doc._id),
     email: doc.email ?? "",
     phone: doc.phone,
+    first_name: doc.first_name,
+    last_name: doc.last_name,
     status: doc.status,
     total_balance_kobo: doc.total_balance_kobo,
     savings_balance_kobo: doc.savings_balance_kobo,
@@ -22,7 +23,7 @@ function docToUser(doc: User): UserDomain {
   };
 }
 
-export function createConvexUserRepository(ctx: AnyCtx): UserRepository {
+export function createConvexUserRepository(ctx: Context): UserRepository {
   return {
     async findById(id: UserId): Promise<UserDomain | null> {
       const doc = await ctx.db.get(id);
@@ -35,9 +36,30 @@ export function createConvexUserRepository(ctx: AnyCtx): UserRepository {
       savingsBalanceKobo: bigint,
       updatedAt: number,
     ): Promise<void> {
-      await ctx.db.patch(id, {
+      const patchDb = getPatchDb(
+        ctx,
+        "User mutations require a mutation context",
+        "user_mutation_context_required",
+      );
+      await patchDb.patch(id, {
         total_balance_kobo: totalBalanceKobo,
         savings_balance_kobo: savingsBalanceKobo,
+        updated_at: updatedAt,
+      });
+    },
+
+    async updateStatus(
+      id: UserId,
+      status: UserDomain["status"],
+      updatedAt: number,
+    ): Promise<void> {
+      const patchDb = getPatchDb(
+        ctx,
+        "User mutations require a mutation context",
+        "user_mutation_context_required",
+      );
+      await patchDb.patch(id, {
+        status,
         updated_at: updatedAt,
       });
     },

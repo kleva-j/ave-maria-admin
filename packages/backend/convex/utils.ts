@@ -193,3 +193,14 @@ export function sortAccounts(accounts: UserBankAccount[]) {
     return b.created_at - a.created_at;
   });
 }
+
+/**
+ * Type guard to check if a value is a record object.
+ * Used for safe metadata parsing and validation.
+ *
+ * @param value - The value to check
+ * @returns True if the value is a non-null object (not an array)
+ */
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

@@ -76,6 +76,15 @@ function makeInMemoryDeps(user: User, seedTransactions: Transaction[] = []) {
         };
       }
     },
+    updateStatus: async (id, status, updatedAt) => {
+      if (id === currentUser._id) {
+        currentUser = {
+          ...currentUser,
+          status,
+          updated_at: updatedAt,
+        };
+      }
+    },
   };
 
   const savingsPlanRepository: SavingsPlanRepository = {

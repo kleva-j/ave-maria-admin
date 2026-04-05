@@ -1,4 +1,12 @@
-import type { SavingsPlanTemplate, UserSavingsPlan, Transaction, User } from "@avm-daily/domain";
+import type {
+  WithdrawalReservation,
+  SavingsPlanTemplate,
+  UserSavingsPlan,
+  Transaction,
+  KycDocument,
+  Withdrawal,
+  User,
+} from "@avm-daily/domain";
 
 // --- Transaction Ports (ISP: split read vs write) ---
 
@@ -24,28 +32,46 @@ export interface UserRepository {
     savingsBalanceKobo: bigint,
     updatedAt: number,
   ): Promise<void>;
+  updateStatus(
+    id: string,
+    status: User["status"],
+    updatedAt: number,
+  ): Promise<void>;
 }
 
 export type SavingsPlanUpdatePatch = Partial<
   Pick<
     UserSavingsPlan,
-    "custom_target_kobo" | "end_date" | "status" | "automation_enabled" | "updated_at"
+    | "custom_target_kobo"
+    | "end_date"
+    | "status"
+    | "automation_enabled"
+    | "updated_at"
   >
 >;
 
 export interface SavingsPlanRepository {
   findById(id: string): Promise<UserSavingsPlan | null>;
   findByUserId(userId: string): Promise<UserSavingsPlan[]>;
-  findByUserIdAndTemplateId(userId: string, templateId: string): Promise<UserSavingsPlan | null>;
+  findByUserIdAndTemplateId(
+    userId: string,
+    templateId: string,
+  ): Promise<UserSavingsPlan | null>;
   create(plan: Omit<UserSavingsPlan, "_id">): Promise<UserSavingsPlan>;
   update(id: string, patch: SavingsPlanUpdatePatch): Promise<UserSavingsPlan>;
-  updateAmount(id: string, currentAmountKobo: bigint, updatedAt: number): Promise<void>;
+  updateAmount(
+    id: string,
+    currentAmountKobo: bigint,
+    updatedAt: number,
+  ): Promise<void>;
 }
 
 export interface SavingsPlanTemplateRepository {
   findById(id: string): Promise<SavingsPlanTemplate | null>;
   findByName(name: string): Promise<SavingsPlanTemplate | null>;
-  create(template: Omit<SavingsPlanTemplate, "_id">): Promise<SavingsPlanTemplate>;
+  create(
+    template: Omit<SavingsPlanTemplate, "_id">,
+  ): Promise<SavingsPlanTemplate>;
   update(
     id: string,
     patch: Partial<Omit<SavingsPlanTemplate, "_id" | "created_at">>,
@@ -55,14 +81,66 @@ export interface SavingsPlanTemplateRepository {
 // --- Withdrawal Port ---
 
 export interface WithdrawalRepository {
-  findById(id: string): Promise<{
-    _id: string;
-    status: string;
-    method: string;
-  } | null>;
-  findByUserId(
+  findById(id: string): Promise<Withdrawal | null>;
+  findByReference(reference: string): Promise<Withdrawal | null>;
+  findByUserId(userId: string): Promise<Withdrawal[]>;
+  create(withdrawal: Omit<Withdrawal, "_id">): Promise<Withdrawal>;
+  update(
+    id: string,
+    patch: Partial<Omit<Withdrawal, "_id" | "requested_by" | "requested_at">>,
+  ): Promise<Withdrawal>;
+}
+
+export interface WithdrawalReservationRepository {
+  findById(id: string): Promise<WithdrawalReservation | null>;
+  findByReference(reference: string): Promise<WithdrawalReservation | null>;
+  findByUserId(userId: string): Promise<WithdrawalReservation[]>;
+  create(
+    reservation: Omit<WithdrawalReservation, "_id">,
+  ): Promise<WithdrawalReservation>;
+  update(
+    id: string,
+    patch: Partial<
+      Omit<
+        WithdrawalReservation,
+        "_id" | "user_id" | "withdrawal_id" | "created_at"
+      >
+    >,
+  ): Promise<WithdrawalReservation>;
+}
+
+export type VerifiedBankAccountRecord = {
+  account_id: string;
+  bank_name: string;
+  account_name?: string;
+  account_number_last4: string;
+};
+
+export interface BankAccountRepository {
+  findVerifiedByIdForUser(
     userId: string,
-  ): Promise<Array<{ requested_at: number; requested_amount_kobo: bigint }>>;
+    bankAccountId: string,
+  ): Promise<VerifiedBankAccountRecord | null>;
+  findPrimaryVerifiedForUser(
+    userId: string,
+  ): Promise<VerifiedBankAccountRecord | null>;
+}
+
+export interface KycDocumentRepository {
+  findById(id: string): Promise<KycDocument | null>;
+  findByUserId(userId: string): Promise<KycDocument[]>;
+  findByUserIdAndStatus(
+    userId: string,
+    status: KycDocument["status"],
+  ): Promise<KycDocument[]>;
+  create(document: Omit<KycDocument, "_id">): Promise<KycDocument>;
+  update(
+    id: string,
+    patch: Partial<
+      Omit<KycDocument, "_id" | "user_id" | "document_type" | "created_at">
+    >,
+  ): Promise<KycDocument>;
+  delete(id: string): Promise<void>;
 }
 
 // --- Risk Hold Port ---
@@ -81,7 +159,11 @@ export interface RiskHoldRepository {
     placed_by_admin_id: string;
     placed_at: number;
   }): Promise<{ _id: string }>;
-  release(id: string, releasedByAdminId: string, releasedAt: number): Promise<void>;
+  release(
+    id: string,
+    releasedByAdminId: string,
+    releasedAt: number,
+  ): Promise<void>;
 }
 
 // --- Risk Event Ports (ISP: bank-account events separated from risk events) ---
@@ -114,11 +196,41 @@ export interface RiskEventService {
   }): Promise<{ id: string }>;
 }
 
+export interface KycVerificationProvider {
+  verify(input: {
+    userId: string;
+    documentTypes: KycDocument["document_type"][];
+  }): Promise<{
+    approved: boolean;
+    reason: string;
+    providerReference?: string;
+    metadata?: Record<string, unknown>;
+  }>;
+}
+
+export interface WithdrawalPayoutService {
+  execute(input: {
+    withdrawalId: string;
+    userId: string;
+    method: Withdrawal["method"];
+    amountKobo: bigint;
+    reference: string;
+    bankAccountDetails?: Record<string, unknown>;
+    cashDetails?: Record<string, unknown>;
+  }): Promise<{
+    provider: string;
+    reference: string;
+    metadata?: Record<string, unknown>;
+  }>;
+}
+
 // --- Audit Log Port ---
 
 export type AuditLogChangeSnapshot = Record<string, unknown>;
 
-export interface AuditLogChangeParams<T extends AuditLogChangeSnapshot = AuditLogChangeSnapshot> {
+export interface AuditLogChangeParams<
+  T extends AuditLogChangeSnapshot = AuditLogChangeSnapshot,
+> {
   action: string;
   actorId?: string;
   resourceType: string;

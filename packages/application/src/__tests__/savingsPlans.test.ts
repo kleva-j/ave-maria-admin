@@ -101,6 +101,18 @@ function createUserRepository(users: User[]): UserRepository {
         updated_at: updatedAt,
       });
     },
+    updateStatus: async (id, status, updatedAt) => {
+      const user = store.get(id);
+      if (!user) {
+        throw new Error(`Unknown user: ${id}`);
+      }
+
+      store.set(id, {
+        ...user,
+        status,
+        updated_at: updatedAt,
+      });
+    },
   };
 }
 

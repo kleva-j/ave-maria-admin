@@ -1,67 +1,101 @@
 import type {
-  ChangeSavingsPlanStatusDTO,
-  CreateSavingsPlanDTO,
-  CreateSavingsPlanTemplateDTO,
+  SetSavingsPlanTemplateActiveStateDTO,
   RecordSavingsPlanContributionDTO,
+  CreateSavingsPlanTemplateDTO,
+  UpdateSavingsPlanSettingsDTO,
+  UpdateSavingsPlanTemplateDTO,
+  ChangeSavingsPlanStatusDTO,
+  WithdrawalCapabilitiesDTO,
   ReverseTransactionOutput,
   PostTransactionOutput,
   ReverseTransactionDTO,
+  ApproveWithdrawalDTO,
+  UploadKycDocumentDTO,
+  CreateSavingsPlanDTO,
+  DeleteKycDocumentDTO,
+  RequestWithdrawalDTO,
+  ProcessWithdrawalDTO,
+  ApplyKycDecisionDTO,
+  RejectWithdrawalDTO,
+  RunAutomatedKycDTO,
   PostTransactionDTO,
   RiskDecisionDTO,
-  SetSavingsPlanTemplateActiveStateDTO,
-  UpdateSavingsPlanSettingsDTO,
-  UpdateSavingsPlanTemplateDTO,
-  WithdrawalCapabilitiesDTO,
 } from "../dto";
 
 import {
   assertSavingsPlanCanAcceptContribution,
-  assertSavingsPlanIsMutable,
-  buildWithdrawalCapabilities,
   createSavingsPlanTemplateSnapshot,
+  findLatestRejectedDocumentForType,
   determineSavingsPlanClosedStatus,
-  DomainError,
-  DuplicateReferenceError,
+  assertWithdrawalBalanceAvailable,
+  assertUserCanRunKycVerification,
+  getDocumentStatusForKycDecision,
+  assertPositiveWithdrawalAmount,
+  assertWithdrawalCanBeProcessed,
   evaluateWithdrawalRiskDecision,
-  InsufficientBalanceError,
-  normalizeOptionalString,
-  resolvePlanDates,
-  RiskHoldScope,
+  assertWithdrawalCanBeApproved,
+  assertWithdrawalCanBeRejected,
+  assertKycDocumentCanBeDeleted,
+  buildWithdrawalCapabilities,
+  getUserStatusForKycDecision,
+  assertSavingsPlanIsMutable,
   TransactionValidationError,
-  TxnType,
+  assertKycVerificationReady,
+  normalizeWithdrawalMethod,
+  assertReservationIsActive,
+  assertKycRejectionReason,
+  InsufficientBalanceError,
+  DuplicateReferenceError,
+  normalizeOptionalString,
+  calculateReservedAmount,
+  WithdrawalBlockedError,
+  computeProjectionDelta,
   validateDurationDays,
+  validateTemplateName,
   validateInterestRate,
   validateTargetKobo,
-  validateTemplateName,
   VELOCITY_WINDOW_MS,
-  WithdrawalBlockedError,
   assertValidAmount,
-  computeProjectionDelta,
+  TransactionSource,
+  resolvePlanDates,
+  RiskHoldScope,
+  DomainError,
+  TxnType,
   DAY_MS,
 } from "@avm-daily/domain";
 
 import type {
-  AdminRole,
-  SavingsPlanTemplate,
-  Transaction,
-  User,
-  UserSavingsPlan,
-  WithdrawalMethod,
   WithdrawalRiskEvaluationInput,
+  WithdrawalReservation,
+  SavingsPlanTemplate,
   WithdrawalStatus,
+  WithdrawalAction,
+  WithdrawalMethod,
+  UserSavingsPlan,
+  KycDocument,
+  Transaction,
+  Withdrawal,
+  AdminRole,
+  User,
 } from "@avm-daily/domain";
 
 import type {
-  AuditLogService,
-  BankAccountEventRepository,
-  RiskEventService,
-  RiskHoldRepository,
-  SavingsPlanRepository,
+  WithdrawalReservationRepository,
   SavingsPlanTemplateRepository,
-  TransactionReadRepository,
+  BankAccountEventRepository,
   TransactionWriteRepository,
-  UserRepository,
+  TransactionReadRepository,
+  VerifiedBankAccountRecord,
+  WithdrawalPayoutService,
+  KycVerificationProvider,
+  BankAccountRepository,
+  SavingsPlanRepository,
+  KycDocumentRepository,
   WithdrawalRepository,
+  RiskHoldRepository,
+  RiskEventService,
+  AuditLogService,
+  UserRepository,
 } from "../ports";
 
 export type EvaluateWithdrawalRiskInput = {
@@ -629,6 +663,61 @@ function requireTemplate(
   return template;
 }
 
+function requireWithdrawal(
+  withdrawal: Withdrawal | null,
+  withdrawalId: string,
+): Withdrawal {
+  if (!withdrawal) {
+    throw new DomainError(
+      `Withdrawal not found: ${withdrawalId}`,
+      "withdrawal_not_found",
+    );
+  }
+
+  return withdrawal;
+}
+
+function requireWithdrawalReservation(
+  reservation: WithdrawalReservation | null,
+  reservationId: string,
+): WithdrawalReservation {
+  if (!reservation) {
+    throw new DomainError(
+      `Withdrawal reservation not found: ${reservationId}`,
+      "withdrawal_reservation_not_found",
+    );
+  }
+
+  return reservation;
+}
+
+function requireKycDocument(
+  document: KycDocument | null,
+  documentId: string,
+): KycDocument {
+  if (!document) {
+    throw new DomainError(
+      `KYC document not found: ${documentId}`,
+      "kyc_document_not_found",
+    );
+  }
+
+  return document;
+}
+
+function requireVerifiedBankAccount(
+  account: VerifiedBankAccountRecord | null,
+): VerifiedBankAccountRecord {
+  if (!account) {
+    throw new DomainError(
+      "Add and verify a bank account before withdrawing",
+      "withdrawal_bank_account_missing",
+    );
+  }
+
+  return account;
+}
+
 function ensureActiveUser(user: User): User {
   if (user.status !== "active") {
     throw new DomainError(
@@ -652,6 +741,37 @@ function normalizeTemplateCreateInput(input: CreateSavingsPlanTemplateDTO) {
     interest_rate: validateInterestRate(input.interestRate),
     automation_type: normalizeOptionalString(input.automationType),
   };
+}
+
+function buildCashWithdrawalDetails(
+  user: Pick<User, "first_name" | "last_name" | "phone">,
+  pickupNote?: string,
+) {
+  const recipientName = [user.first_name, user.last_name]
+    .filter((value): value is string =>
+      Boolean(value && value.trim().length > 0),
+    )
+    .join(" ")
+    .trim();
+
+  return {
+    recipient_name: recipientName || user.phone,
+    recipient_phone: user.phone,
+    pickup_note: normalizeOptionalString(pickupNote),
+  };
+}
+
+function createWorkflowReference(prefix: string) {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+function normalizeRequiredReason(reason: string | undefined, code: string) {
+  const normalized = normalizeOptionalString(reason);
+  if (!normalized) {
+    throw new DomainError("Rejection reason is required", code);
+  }
+
+  return normalized;
 }
 
 export function createCreateSavingsPlanTemplateUseCase(deps: {
@@ -1168,5 +1288,634 @@ export function createRecordSavingsPlanContributionUseCase(deps: {
     assertSavingsPlanCanAcceptContribution(plan);
 
     return await deps.postTransaction(transactionInput);
+  };
+}
+
+type AssertWithdrawalAllowedHandler = (
+  input: EvaluateWithdrawalRiskInput & { actorAdminId?: string },
+) => Promise<void>;
+
+type AssertWithdrawalAdminActionAllowedHandler = (input: {
+  userId: string;
+  adminId: string;
+  adminRole: AdminRole;
+  action: WithdrawalAction;
+  withdrawal: Withdrawal;
+}) => Promise<void>;
+
+export function createRequestWithdrawalUseCase(deps: {
+  userRepository: UserRepository;
+  withdrawalRepository: WithdrawalRepository;
+  withdrawalReservationRepository: WithdrawalReservationRepository;
+  bankAccountRepository: BankAccountRepository;
+  auditLogService: AuditLogService;
+  assertWithdrawalAllowed: AssertWithdrawalAllowedHandler;
+}) {
+  return async function requestWithdrawal(
+    input: RequestWithdrawalDTO,
+  ): Promise<{
+    withdrawal: Withdrawal;
+    reservation: WithdrawalReservation;
+  }> {
+    const user = requireUser(
+      await deps.userRepository.findById(input.userId),
+      input.userId,
+    );
+
+    if (user.status !== "active") {
+      throw new DomainError(
+        "Only active users can request withdrawals",
+        "user_not_active_for_withdrawal",
+      );
+    }
+
+    const method = normalizeWithdrawalMethod(input.method);
+    assertPositiveWithdrawalAmount(input.amountKobo);
+
+    if (method === "cash" && input.bankAccountId) {
+      throw new DomainError(
+        "Cash withdrawals do not require a bank account",
+        "withdrawal_bank_account_not_allowed",
+      );
+    }
+
+    const reservations =
+      await deps.withdrawalReservationRepository.findByUserId(user._id);
+    const reservedAmountKobo = calculateReservedAmount(reservations);
+    assertWithdrawalBalanceAvailable({
+      totalBalanceKobo: user.total_balance_kobo,
+      savingsBalanceKobo: user.savings_balance_kobo,
+      reservedAmountKobo,
+      requestedAmountKobo: input.amountKobo,
+    });
+
+    await deps.assertWithdrawalAllowed({
+      userId: user._id,
+      amountKobo: input.amountKobo,
+      method,
+      now: Date.now(),
+    });
+
+    let bankAccountDetails: VerifiedBankAccountRecord | undefined;
+    let cashDetails:
+      | {
+          recipient_name: string;
+          recipient_phone: string;
+          pickup_note?: string;
+        }
+      | undefined;
+
+    if (method === "bank_transfer") {
+      const bankAccount = input.bankAccountId
+        ? await deps.bankAccountRepository.findVerifiedByIdForUser(
+            user._id,
+            input.bankAccountId,
+          )
+        : await deps.bankAccountRepository.findPrimaryVerifiedForUser(user._id);
+
+      bankAccountDetails = requireVerifiedBankAccount(bankAccount);
+    } else {
+      cashDetails = buildCashWithdrawalDetails(user, input.pickupNote);
+    }
+
+    const reference =
+      normalizeOptionalString(input.reference) ??
+      createWorkflowReference(method === "cash" ? "cwdr" : "wdr");
+
+    const existing = await deps.withdrawalRepository.findByReference(reference);
+    if (existing) {
+      throw new DomainError(
+        "Withdrawal reference already exists",
+        "withdrawal_reference_taken",
+      );
+    }
+
+    const now = Date.now();
+    const createdWithdrawal = await deps.withdrawalRepository.create({
+      reference,
+      requested_by: user._id,
+      requested_amount_kobo: input.amountKobo,
+      method,
+      status: "pending",
+      requested_at: now,
+      bank_account_details: bankAccountDetails,
+      cash_details: cashDetails,
+    });
+
+    const reservation = await deps.withdrawalReservationRepository.create({
+      withdrawal_id: createdWithdrawal._id,
+      user_id: user._id,
+      amount_kobo: input.amountKobo,
+      reference: `wres_${reference}`,
+      status: "active",
+      created_at: now,
+    });
+
+    const withdrawal = await deps.withdrawalRepository.update(
+      createdWithdrawal._id,
+      {
+        reservation_id: reservation._id,
+      },
+    );
+
+    await deps.auditLogService.log({
+      action: "withdrawal.requested",
+      actorId: user._id,
+      resourceType: "withdrawals",
+      resourceId: withdrawal._id,
+      severity: "info",
+      metadata: {
+        reference,
+        method,
+        amount_kobo: input.amountKobo.toString(),
+        reservation_id: reservation._id,
+      },
+    });
+
+    return { withdrawal, reservation };
+  };
+}
+
+export function createApproveWithdrawalUseCase(deps: {
+  withdrawalRepository: WithdrawalRepository;
+  auditLogService: AuditLogService;
+  assertAdminActionAllowed: AssertWithdrawalAdminActionAllowedHandler;
+}) {
+  return async function approveWithdrawal(
+    input: ApproveWithdrawalDTO,
+  ): Promise<Withdrawal> {
+    const withdrawal = requireWithdrawal(
+      await deps.withdrawalRepository.findById(input.withdrawalId),
+      input.withdrawalId,
+    );
+
+    assertWithdrawalCanBeApproved(withdrawal.status);
+    await deps.assertAdminActionAllowed({
+      userId: withdrawal.requested_by,
+      adminId: input.adminId,
+      adminRole: input.adminRole,
+      action: "approve",
+      withdrawal,
+    });
+
+    const updated = await deps.withdrawalRepository.update(withdrawal._id, {
+      status: "approved",
+      approved_by: input.adminId,
+      approved_at: Date.now(),
+      rejection_reason: undefined,
+      last_processing_error: undefined,
+    });
+
+    await deps.auditLogService.logChange({
+      action: "withdrawal.approved",
+      actorId: input.adminId,
+      resourceType: "withdrawals",
+      resourceId: updated._id,
+      before: {
+        status: withdrawal.status,
+        approved_by: withdrawal.approved_by,
+        approved_at: withdrawal.approved_at,
+      },
+      after: {
+        status: updated.status,
+        approved_by: updated.approved_by,
+        approved_at: updated.approved_at,
+      },
+      severity: "info",
+    });
+
+    return updated;
+  };
+}
+
+export function createRejectWithdrawalUseCase(deps: {
+  withdrawalRepository: WithdrawalRepository;
+  withdrawalReservationRepository: WithdrawalReservationRepository;
+  auditLogService: AuditLogService;
+  assertAdminActionAllowed: AssertWithdrawalAdminActionAllowedHandler;
+}) {
+  return async function rejectWithdrawal(input: RejectWithdrawalDTO): Promise<{
+    withdrawal: Withdrawal;
+    reservation: WithdrawalReservation;
+  }> {
+    const withdrawal = requireWithdrawal(
+      await deps.withdrawalRepository.findById(input.withdrawalId),
+      input.withdrawalId,
+    );
+
+    assertWithdrawalCanBeRejected(withdrawal.status);
+    const rejectionReason = normalizeRequiredReason(
+      input.reason,
+      "withdrawal_rejection_reason_required",
+    );
+
+    await deps.assertAdminActionAllowed({
+      userId: withdrawal.requested_by,
+      adminId: input.adminId,
+      adminRole: input.adminRole,
+      action: "reject",
+      withdrawal,
+    });
+
+    const reservation = requireWithdrawalReservation(
+      await deps.withdrawalReservationRepository.findById(
+        withdrawal.reservation_id ?? "",
+      ),
+      withdrawal.reservation_id ?? "",
+    );
+    assertReservationIsActive(reservation);
+
+    const now = Date.now();
+    const releasedReservation =
+      await deps.withdrawalReservationRepository.update(reservation._id, {
+        status: "released",
+        released_at: now,
+      });
+
+    const updated = await deps.withdrawalRepository.update(withdrawal._id, {
+      status: "rejected",
+      rejection_reason: rejectionReason,
+      last_processing_error: undefined,
+    });
+
+    await deps.auditLogService.logChange({
+      action: "withdrawal.rejected",
+      actorId: input.adminId,
+      resourceType: "withdrawals",
+      resourceId: updated._id,
+      before: {
+        status: withdrawal.status,
+        rejection_reason: withdrawal.rejection_reason,
+      },
+      after: {
+        status: updated.status,
+        rejection_reason: updated.rejection_reason,
+        reservation_status: releasedReservation.status,
+      },
+      severity: "warning",
+    });
+
+    return { withdrawal: updated, reservation: releasedReservation };
+  };
+}
+
+export function createProcessWithdrawalUseCase(deps: {
+  withdrawalRepository: WithdrawalRepository;
+  withdrawalReservationRepository: WithdrawalReservationRepository;
+  payoutService: WithdrawalPayoutService;
+  postTransaction: (
+    input: PostTransactionDTO,
+  ) => Promise<PostTransactionOutput>;
+  auditLogService: AuditLogService;
+  assertAdminActionAllowed: AssertWithdrawalAdminActionAllowedHandler;
+}) {
+  return async function processWithdrawal(
+    input: ProcessWithdrawalDTO,
+  ): Promise<{
+    withdrawal: Withdrawal;
+    reservation: WithdrawalReservation;
+    transaction: Transaction;
+  }> {
+    const withdrawal = requireWithdrawal(
+      await deps.withdrawalRepository.findById(input.withdrawalId),
+      input.withdrawalId,
+    );
+
+    assertWithdrawalCanBeProcessed(withdrawal.status);
+    await deps.assertAdminActionAllowed({
+      userId: withdrawal.requested_by,
+      adminId: input.adminId,
+      adminRole: input.adminRole,
+      action: "process",
+      withdrawal,
+    });
+
+    const reservation = requireWithdrawalReservation(
+      await deps.withdrawalReservationRepository.findById(
+        withdrawal.reservation_id ?? "",
+      ),
+      withdrawal.reservation_id ?? "",
+    );
+    assertReservationIsActive(reservation);
+
+    let payoutResult:
+      | {
+          provider: string;
+          reference: string;
+          metadata?: Record<string, unknown>;
+        }
+      | undefined;
+
+    try {
+      payoutResult = await deps.payoutService.execute({
+        withdrawalId: withdrawal._id,
+        userId: withdrawal.requested_by,
+        method: withdrawal.method,
+        amountKobo: withdrawal.requested_amount_kobo,
+        reference: withdrawal.reference,
+        bankAccountDetails: withdrawal.bank_account_details,
+        cashDetails: withdrawal.cash_details,
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : "Withdrawal payout failed";
+
+      const failed = await deps.withdrawalRepository.update(withdrawal._id, {
+        last_processing_error: message,
+      });
+
+      await deps.auditLogService.logChange({
+        action: "withdrawal.processing_failed",
+        actorId: input.adminId,
+        resourceType: "withdrawals",
+        resourceId: failed._id,
+        before: {
+          status: withdrawal.status,
+          last_processing_error: withdrawal.last_processing_error,
+        },
+        after: {
+          status: failed.status,
+          last_processing_error: failed.last_processing_error,
+        },
+        severity: "warning",
+      });
+
+      throw error;
+    }
+
+    const transactionResult = await deps.postTransaction({
+      userId: withdrawal.requested_by,
+      type: TxnType.WITHDRAWAL,
+      amountKobo: -withdrawal.requested_amount_kobo,
+      reference: withdrawal.reference,
+      metadata: {
+        source: TransactionSource.ADMIN,
+        actor_id: input.adminId,
+        withdrawal_status: "processed",
+        method: withdrawal.method,
+        bank_account: withdrawal.bank_account_details,
+        cash_details: withdrawal.cash_details,
+        payout_provider: payoutResult.provider,
+        payout_reference: payoutResult.reference,
+        ...(payoutResult.metadata ?? {}),
+      },
+      source: TransactionSource.ADMIN,
+      actorId: input.adminId,
+    });
+
+    const now = Date.now();
+    const consumedReservation =
+      await deps.withdrawalReservationRepository.update(reservation._id, {
+        status: "consumed",
+        consumed_at: now,
+      });
+
+    const updatedWithdrawal = await deps.withdrawalRepository.update(
+      withdrawal._id,
+      {
+        status: "processed",
+        transaction_id: transactionResult.transaction._id,
+        processed_by: input.adminId,
+        processed_at: now,
+        payout_provider: payoutResult.provider,
+        payout_reference: payoutResult.reference,
+        last_processing_error: undefined,
+      },
+    );
+
+    await deps.auditLogService.logChange({
+      action: "withdrawal.processed",
+      actorId: input.adminId,
+      resourceType: "withdrawals",
+      resourceId: updatedWithdrawal._id,
+      before: {
+        status: withdrawal.status,
+        transaction_id: withdrawal.transaction_id,
+      },
+      after: {
+        status: updatedWithdrawal.status,
+        transaction_id: updatedWithdrawal.transaction_id,
+        payout_provider: updatedWithdrawal.payout_provider,
+        payout_reference: updatedWithdrawal.payout_reference,
+      },
+      severity: "info",
+    });
+
+    return {
+      withdrawal: updatedWithdrawal,
+      reservation: consumedReservation,
+      transaction: transactionResult.transaction,
+    };
+  };
+}
+
+export function createUploadKycDocumentUseCase(deps: {
+  userRepository: UserRepository;
+  kycDocumentRepository: KycDocumentRepository;
+  auditLogService: AuditLogService;
+}) {
+  return async function uploadKycDocument(
+    input: UploadKycDocumentDTO,
+  ): Promise<KycDocument> {
+    const user = requireUser(
+      await deps.userRepository.findById(input.userId),
+      input.userId,
+    );
+    assertUserCanRunKycVerification(user.status);
+
+    const documents = await deps.kycDocumentRepository.findByUserId(user._id);
+    const duplicatePending = documents.find(
+      (document) =>
+        document.document_type === input.documentType &&
+        document.status === "pending",
+    );
+    if (duplicatePending) {
+      throw new DomainError(
+        `A pending ${input.documentType} document already exists`,
+        "kyc_pending_document_already_exists",
+      );
+    }
+
+    const superseded = findLatestRejectedDocumentForType(
+      documents,
+      input.documentType,
+    );
+    const now = Date.now();
+    const created = await deps.kycDocumentRepository.create({
+      user_id: user._id,
+      document_type: input.documentType,
+      file_url: normalizeOptionalString(input.fileUrl),
+      storage_id: input.storageId,
+      file_name: normalizeOptionalString(input.fileName),
+      file_size: input.fileSize,
+      mime_type: normalizeOptionalString(input.mimeType),
+      uploaded_at: now,
+      status: "pending",
+      supersedes_document_id: superseded?._id,
+      created_at: now,
+    });
+
+    await deps.auditLogService.log({
+      action: "kyc.document_uploaded",
+      actorId: user._id,
+      resourceType: "kyc_documents",
+      resourceId: created._id,
+      severity: "info",
+      metadata: {
+        document_type: created.document_type,
+        storage_id: created.storage_id,
+        supersedes_document_id: created.supersedes_document_id,
+      },
+    });
+
+    return created;
+  };
+}
+
+export function createDeleteKycDocumentUseCase(deps: {
+  userRepository: UserRepository;
+  kycDocumentRepository: KycDocumentRepository;
+  auditLogService: AuditLogService;
+}) {
+  return async function deleteKycDocument(
+    input: DeleteKycDocumentDTO,
+  ): Promise<KycDocument> {
+    requireUser(await deps.userRepository.findById(input.userId), input.userId);
+    const document = requireKycDocument(
+      await deps.kycDocumentRepository.findById(input.documentId),
+      input.documentId,
+    );
+
+    if (document.user_id !== input.userId) {
+      throw new DomainError(
+        "Not authorized to delete this document",
+        "kyc_document_ownership_mismatch",
+      );
+    }
+
+    assertKycDocumentCanBeDeleted(document.status);
+    await deps.kycDocumentRepository.delete(document._id);
+
+    await deps.auditLogService.log({
+      action: "kyc.document_deleted",
+      actorId: input.userId,
+      resourceType: "kyc_documents",
+      resourceId: document._id,
+      severity: "warning",
+      metadata: {
+        document_type: document.document_type,
+        previous_status: document.status,
+      },
+    });
+
+    return document;
+  };
+}
+
+export function createRunAutomatedKycUseCase(deps: {
+  userRepository: UserRepository;
+  kycDocumentRepository: KycDocumentRepository;
+  kycVerificationProvider: KycVerificationProvider;
+}) {
+  return async function runAutomatedKyc(input: RunAutomatedKycDTO): Promise<{
+    approved: boolean;
+    reason: string;
+    providerReference?: string;
+    metadata?: Record<string, unknown>;
+    documents: KycDocument[];
+  }> {
+    const user = requireUser(
+      await deps.userRepository.findById(input.userId),
+      input.userId,
+    );
+    assertUserCanRunKycVerification(user.status);
+
+    const documents = await deps.kycDocumentRepository.findByUserIdAndStatus(
+      user._id,
+      "pending",
+    );
+    assertKycVerificationReady(documents);
+
+    const result = await deps.kycVerificationProvider.verify({
+      userId: user._id,
+      documentTypes: documents.map((document) => document.document_type),
+    });
+
+    return {
+      approved: result.approved,
+      reason: result.reason,
+      providerReference: result.providerReference,
+      metadata: result.metadata,
+      documents,
+    };
+  };
+}
+
+export function createApplyKycDecisionUseCase(deps: {
+  userRepository: UserRepository;
+  kycDocumentRepository: KycDocumentRepository;
+  auditLogService: AuditLogService;
+}) {
+  return async function applyKycDecision(input: ApplyKycDecisionDTO): Promise<{
+    userId: string;
+    newStatus: User["status"];
+    documentsReviewed: number;
+  }> {
+    const user = requireUser(
+      await deps.userRepository.findById(input.userId),
+      input.userId,
+    );
+    assertUserCanRunKycVerification(user.status);
+
+    const pendingDocuments =
+      await deps.kycDocumentRepository.findByUserIdAndStatus(
+        user._id,
+        "pending",
+      );
+    assertKycVerificationReady(pendingDocuments);
+
+    const rejectionReason = input.approved
+      ? undefined
+      : assertKycRejectionReason(input.reason);
+    const nextStatus = getUserStatusForKycDecision(input.approved);
+    const nextDocumentStatus = getDocumentStatusForKycDecision(input.approved);
+    const now = Date.now();
+
+    await deps.userRepository.updateStatus(user._id, nextStatus, now);
+    await Promise.all(
+      pendingDocuments.map((document) =>
+        deps.kycDocumentRepository.update(document._id, {
+          status: nextDocumentStatus,
+          reviewed_by: input.reviewedBy,
+          reviewed_at: now,
+          rejection_reason: rejectionReason,
+        }),
+      ),
+    );
+
+    await deps.auditLogService.logChange({
+      action: "kyc.decision_applied",
+      actorId: input.reviewedBy,
+      resourceType: "users",
+      resourceId: user._id,
+      before: {
+        status: user.status,
+      },
+      after: {
+        status: nextStatus,
+        approved: input.approved,
+        reason: rejectionReason,
+        documents_reviewed: pendingDocuments.length,
+        provider_reference: input.providerReference,
+        ...(input.metadata ?? {}),
+      },
+      severity: input.approved ? "info" : "warning",
+    });
+
+    return {
+      userId: user._id,
+      newStatus: nextStatus,
+      documentsReviewed: pendingDocuments.length,
+    };
   };
 }

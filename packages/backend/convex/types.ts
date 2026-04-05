@@ -41,6 +41,8 @@ export type Transaction = Doc<"transactions">;
 export type TransactionId = Id<"transactions">;
 export type Withdrawal = Doc<"withdrawals">;
 export type WithdrawalId = Id<"withdrawals">;
+export type WithdrawalReservation = Doc<"withdrawal_reservations">;
+export type WithdrawalReservationId = Id<"withdrawal_reservations">;
 export type TransactionReconciliationRun =
   Doc<"transaction_reconciliation_runs">;
 export type TransactionReconciliationRunId =

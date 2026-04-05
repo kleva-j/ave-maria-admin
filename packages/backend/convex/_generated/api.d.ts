@@ -9,11 +9,16 @@
  */
 
 import type * as adapters_auditLogAdapter from "../adapters/auditLogAdapter.js";
+import type * as adapters_bankAccountAdapter from "../adapters/bankAccountAdapter.js";
+import type * as adapters_kycAdapters from "../adapters/kycAdapters.js";
 import type * as adapters_riskAdapters from "../adapters/riskAdapters.js";
 import type * as adapters_savingsPlanAdapters from "../adapters/savingsPlanAdapters.js";
 import type * as adapters_transactionAdapters from "../adapters/transactionAdapters.js";
 import type * as adapters_userAdapters from "../adapters/userAdapters.js";
+import type * as adapters_utils from "../adapters/utils.js";
 import type * as adapters_withdrawalAdapter from "../adapters/withdrawalAdapter.js";
+import type * as adapters_withdrawalPayoutAdapter from "../adapters/withdrawalPayoutAdapter.js";
+import type * as adapters_withdrawalReservationAdapter from "../adapters/withdrawalReservationAdapter.js";
 import type * as admin from "../admin.js";
 import type * as aggregateHelpers from "../aggregateHelpers.js";
 import type * as aggregates from "../aggregates.js";
@@ -28,6 +33,7 @@ import type * as init from "../init.js";
 import type * as kpis from "../kpis.js";
 import type * as kyc from "../kyc.js";
 import type * as kycDocuments from "../kycDocuments.js";
+import type * as kycInternal from "../kycInternal.js";
 import type * as risk from "../risk.js";
 import type * as savingsPlanRules from "../savingsPlanRules.js";
 import type * as savingsPlanTemplates from "../savingsPlanTemplates.js";
@@ -47,6 +53,7 @@ import type * as schemas_userBankAccounts from "../schemas/userBankAccounts.js";
 import type * as schemas_userRiskHolds from "../schemas/userRiskHolds.js";
 import type * as schemas_userSavingsPlans from "../schemas/userSavingsPlans.js";
 import type * as schemas_users from "../schemas/users.js";
+import type * as schemas_withdrawalReservations from "../schemas/withdrawalReservations.js";
 import type * as schemas_withdrawals from "../schemas/withdrawals.js";
 import type * as shared from "../shared.js";
 import type * as transactions from "../transactions.js";
@@ -66,11 +73,16 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   "adapters/auditLogAdapter": typeof adapters_auditLogAdapter;
+  "adapters/bankAccountAdapter": typeof adapters_bankAccountAdapter;
+  "adapters/kycAdapters": typeof adapters_kycAdapters;
   "adapters/riskAdapters": typeof adapters_riskAdapters;
   "adapters/savingsPlanAdapters": typeof adapters_savingsPlanAdapters;
   "adapters/transactionAdapters": typeof adapters_transactionAdapters;
   "adapters/userAdapters": typeof adapters_userAdapters;
+  "adapters/utils": typeof adapters_utils;
   "adapters/withdrawalAdapter": typeof adapters_withdrawalAdapter;
+  "adapters/withdrawalPayoutAdapter": typeof adapters_withdrawalPayoutAdapter;
+  "adapters/withdrawalReservationAdapter": typeof adapters_withdrawalReservationAdapter;
   admin: typeof admin;
   aggregateHelpers: typeof aggregateHelpers;
   aggregates: typeof aggregates;
@@ -85,6 +97,7 @@ declare const fullApi: ApiFromModules<{
   kpis: typeof kpis;
   kyc: typeof kyc;
   kycDocuments: typeof kycDocuments;
+  kycInternal: typeof kycInternal;
   risk: typeof risk;
   savingsPlanRules: typeof savingsPlanRules;
   savingsPlanTemplates: typeof savingsPlanTemplates;
@@ -104,6 +117,7 @@ declare const fullApi: ApiFromModules<{
   "schemas/userRiskHolds": typeof schemas_userRiskHolds;
   "schemas/userSavingsPlans": typeof schemas_userSavingsPlans;
   "schemas/users": typeof schemas_users;
+  "schemas/withdrawalReservations": typeof schemas_withdrawalReservations;
   "schemas/withdrawals": typeof schemas_withdrawals;
   shared: typeof shared;
   transactions: typeof transactions;

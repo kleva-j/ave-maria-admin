@@ -70,9 +70,10 @@ export function getWithdrawalStatusBlockedReason(
         ? undefined
         : "Only pending withdrawals can be approved";
     case WA.REJECT:
-      return withdrawal.status === WS.PENDING
+      return withdrawal.status === WS.PENDING ||
+        withdrawal.status === WS.APPROVED
         ? undefined
-        : "Only pending withdrawals can be rejected";
+        : "Only pending or approved withdrawals can be rejected";
     case WA.PROCESS:
       return withdrawal.status === WS.APPROVED
         ? undefined

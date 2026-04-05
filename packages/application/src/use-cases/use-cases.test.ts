@@ -7,9 +7,9 @@ import {
 } from "./index";
 
 import type {
+  BankAccountEventRepository,
   WithdrawalRepository,
   RiskHoldRepository,
-  BankAccountEventRepository,
   RiskEventService,
   AuditLogService,
 } from "../ports";
@@ -27,7 +27,10 @@ const createMockWithdrawalRepository = (
   overrides: Partial<WithdrawalRepository> = {},
 ): WithdrawalRepository => ({
   findById: vi.fn(),
+  findByReference: vi.fn(),
   findByUserId: vi.fn(),
+  create: vi.fn(),
+  update: vi.fn(),
   ...overrides,
 });
 

@@ -1,14 +1,17 @@
 import type {
   TransactionReconciliationIssueStatus,
   TransactionReconciliationIssueType,
+  WithdrawalReservationStatus,
   WithdrawalStatus,
   WithdrawalMethod,
   RiskHoldStatus,
   RiskHoldScope,
   RiskEventType,
   RiskSeverity,
+  DocumentType,
   PlanStatus,
   UserStatus,
+  KycStatus,
   AdminRole,
   TxnType,
 } from "../enums";
@@ -17,6 +20,8 @@ export interface User {
   _id: string;
   email: string;
   phone: string;
+  first_name?: string;
+  last_name?: string;
   total_balance_kobo: bigint;
   savings_balance_kobo: bigint;
   status: UserStatus;
@@ -73,15 +78,54 @@ export interface Transaction {
 
 export interface Withdrawal {
   _id: string;
+  reference: string;
+  transaction_id?: string;
+  reservation_id?: string;
   requested_by: string;
   requested_amount_kobo: bigint;
   method: WithdrawalMethod;
   status: WithdrawalStatus;
   requested_at: number;
-  processed_at?: number;
+  approved_at?: number;
   approved_by?: string;
-  rejected_by?: string;
+  processed_at?: number;
+  processed_by?: string;
+  payout_provider?: string;
+  payout_reference?: string;
+  bank_account_details?: Record<string, unknown>;
+  cash_details?: Record<string, unknown>;
   rejection_reason?: string;
+  last_processing_error?: string;
+}
+
+export interface WithdrawalReservation {
+  _id: string;
+  withdrawal_id: string;
+  user_id: string;
+  amount_kobo: bigint;
+  reference: string;
+  status: WithdrawalReservationStatus;
+  created_at: number;
+  released_at?: number;
+  consumed_at?: number;
+}
+
+export interface KycDocument {
+  _id: string;
+  user_id: string;
+  document_type: DocumentType;
+  file_url?: string;
+  storage_id?: string;
+  file_name?: string;
+  file_size?: number;
+  mime_type?: string;
+  uploaded_at?: number;
+  status: KycStatus;
+  reviewed_by?: string;
+  reviewed_at?: number;
+  rejection_reason?: string;
+  supersedes_document_id?: string;
+  created_at: number;
 }
 
 export interface UserRiskHold {

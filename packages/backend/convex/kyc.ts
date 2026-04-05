@@ -1,58 +1,101 @@
-/**
- * KYC Identity Verification Pipeline
- *
- * Implements automated identity verification through simulated third-party providers
- * and manual admin review workflows. Handles user status transitions based on
- * KYC results with comprehensive audit logging and aggregate synchronization.
- *
- * @module kyc
- */
-import type { KycData, KycDocument, KycDocumentId, UserId } from "./types";
-import type { KycDocumentType } from "./shared";
+import type {
+  KycDocument as ConvexKycDocument,
+  User as ConvexUser,
+  UserId,
+} from "./types";
 
-import { ConvexError, v } from "convex/values";
+import type {
+  KycDocument as DomainKycDocument,
+  User as DomainUser,
+} from "@avm-daily/domain";
 
-import { syncUserUpdate } from "./aggregateHelpers";
-import { getAdminUser, getUser } from "./utils";
+import type {
+  KycDocumentRepository,
+  UserRepository,
+} from "@avm-daily/application/ports";
+
+import { createRunAutomatedKycUseCase } from "@avm-daily/application/use-cases";
+import { v } from "convex/values";
+
+import { action, mutation, query } from "./_generated/server";
+import { KYCStatus, TABLE_NAMES } from "./shared";
 import { internal } from "./_generated/api";
-import { auditLog } from "./auditLog";
-import {
-  DOCUMENT_TYPES,
-  RESOURCE_TYPE,
-  TABLE_NAMES,
-  UserStatus,
-  KYCStatus,
-} from "./shared";
+import { getAdminUser } from "./utils";
 
-import {
-  internalAction,
-  internalQuery,
-  mutation,
-  action,
-  query,
-} from "./_generated/server";
+function toDomainUser(user: ConvexUser): DomainUser {
+  return {
+    _id: String(user._id),
+    email: user.email ?? "",
+    phone: user.phone,
+    first_name: user.first_name,
+    last_name: user.last_name,
+    total_balance_kobo: user.total_balance_kobo,
+    savings_balance_kobo: user.savings_balance_kobo,
+    status: user.status,
+    updated_at: user.updated_at,
+  };
+}
 
-// Document types required for KYC verification (must all be submitted)
-const REQUIRED_KYC_DOCUMENTS = [
-  DOCUMENT_TYPES.GOVERNMENT_ID,
-  DOCUMENT_TYPES.SELFIE_WITH_ID,
-] as const;
+function toDomainKycDocument(document: ConvexKycDocument): DomainKycDocument {
+  return {
+    _id: String(document._id),
+    user_id: String(document.user_id),
+    document_type: document.document_type,
+    file_url: document.file_url,
+    storage_id: document.storage_id ? String(document.storage_id) : undefined,
+    file_name: document.file_name,
+    file_size: document.file_size,
+    mime_type: document.mime_type,
+    uploaded_at: document.uploaded_at,
+    status: document.status,
+    reviewed_by: document.reviewed_by
+      ? String(document.reviewed_by)
+      : undefined,
+    reviewed_at: document.reviewed_at,
+    rejection_reason: document.rejection_reason,
+    supersedes_document_id: document.supersedes_document_id
+      ? String(document.supersedes_document_id)
+      : undefined,
+    created_at: document.created_at,
+  };
+}
 
-/**
- * Main action to trigger the complete KYC identity verification process
- *
- * Workflow:
- * 1. Fetch user data and pending documents
- * 2. Validate document requirements (government ID + selfie with ID)
- * 3. Call external KYC provider (simulated)
- * 4. Process verification result
- * 5. Update user status and sync aggregates
- *
- * @action
- * @requires User authentication
- * @returns Verification result with approval status and reason
- * @throws If no documents, missing required docs, or user not in PENDING_KYC
- */
+function createStaticUserRepository(user: ConvexUser): UserRepository {
+  const domainUser = toDomainUser(user);
+
+  return {
+    findById: async (id) => (domainUser._id === id ? domainUser : null),
+    updateBalance: async () => undefined,
+    updateStatus: async () => undefined,
+  };
+}
+
+function createStaticKycDocumentRepository(
+  documents: ConvexKycDocument[],
+): KycDocumentRepository {
+  const domainDocuments = documents.map(toDomainKycDocument);
+
+  return {
+    findById: async (id) =>
+      domainDocuments.find((document) => document._id === id) ?? null,
+    findByUserId: async (userId) =>
+      domainDocuments.filter((document) => document.user_id === userId),
+    findByUserIdAndStatus: async (userId, status) =>
+      domainDocuments.filter(
+        (document) => document.user_id === userId && document.status === status,
+      ),
+    create: async () => {
+      throw new Error("Not supported in action context");
+    },
+    update: async () => {
+      throw new Error("Not supported in action context");
+    },
+    delete: async () => {
+      throw new Error("Not supported in action context");
+    },
+  };
+}
+
 export const verifyIdentity = action({
   args: {},
   returns: v.object({
@@ -60,134 +103,50 @@ export const verifyIdentity = action({
     reason: v.string(),
     userId: v.id("users"),
   }),
-  handler: async (ctx) => {
-    // Step 1: Fetch user data and pending documents for authenticated user
-    const data: KycData = await ctx.runQuery(internal.kyc.getViewerKycData);
+  handler: async (
+    ctx,
+  ): Promise<{
+    approved: boolean;
+    reason: string;
+    userId: UserId;
+  }> => {
+    const data: {
+      user: ConvexUser;
+      documents: ConvexKycDocument[];
+    } = await ctx.runQuery(internal.kycInternal.getViewerKycData);
 
-    // Validate documents exist
-    if (data.documents.length === 0) {
-      throw new ConvexError("No pending KYC documents found to verify");
-    }
-
-    // Validate user is in correct status
-    if (data.user.status !== UserStatus.PENDING_KYC) {
-      throw new ConvexError("User is not in pending_kyc status");
-    }
-
-    // Step 2: Validate required documents are present
-    const submittedTypes = new Set(
-      data.documents.map((d: KycDocument) => d.document_type),
-    );
-    const missingRequired = REQUIRED_KYC_DOCUMENTS.filter(
-      (docType) => !submittedTypes.has(docType),
-    );
-
-    if (missingRequired.length > 0) {
-      throw new ConvexError(
-        `Missing required KYC documents: ${missingRequired.join(", ")}`,
-      );
-    }
-
-    // Step 3: Call external provider (simulated with 80% approval rate)
-    const result: { approved: boolean; reason: string } = await ctx.runAction(
-      internal.kyc.simulateKycProvider,
-      {
-        userId: data.user._id,
-        documentTypes: data.documents.map((d: KycDocument) => d.document_type),
+    const runAutomatedKyc = createRunAutomatedKycUseCase({
+      userRepository: createStaticUserRepository(data.user),
+      kycDocumentRepository: createStaticKycDocumentRepository(data.documents),
+      kycVerificationProvider: {
+        verify: async (input) =>
+          await ctx.runAction(internal.kycInternal.simulateKycProvider, {
+            userId: data.user._id,
+            documentTypes: input.documentTypes,
+          }),
       },
-    );
+    });
 
-    // Step 4: Process KYC result via internal mutation (updates user status)
+    const result = await runAutomatedKyc({
+      userId: String(data.user._id),
+    });
+
     await ctx.runMutation(internal.users.processKycResult, {
       userId: data.user._id,
       approved: result.approved,
       reason: result.reason,
+      providerReference: result.providerReference,
+      metadata: result.metadata,
     });
 
-    // Step 5: Return verification outcome to caller
-    return { ...result, userId: data.user._id };
-  },
-});
-
-/**
- * Simulates a third-party KYC provider API call (e.g., Smile Identity, Dojah)
- *
- * Simulation characteristics:
- * - 2 second network latency simulation
- * - 80% automatic approval rate
- * - Random rejection reasons for denials
- *
- * @internalAction
- * @param userId - User being verified
- * @param documentTypes - Array of document types submitted
- * @returns Verification result with approval status and reason
- */
-export const simulateKycProvider = internalAction({
-  args: {
-    userId: v.id("users"),
-    documentTypes: v.array(v.string()),
-  },
-  returns: v.object({
-    approved: v.boolean(),
-    reason: v.string(),
-  }),
-  handler: async () => {
-    // Simulate network latency (2 seconds)
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-
-    // Simulate 80% approval rate
-    const isApproved = Math.random() < 0.8;
-
-    if (isApproved) {
-      return { approved: true, reason: "Automatically verified by provider" };
-    }
-
-    const reasons = [
-      "Document illegible or blurry",
-      "Face mismatch with government ID",
-      "ID expired or invalid",
-      "Suspected fraudulent document",
-    ];
     return {
-      approved: false,
-      reason: reasons[Math.floor(Math.random() * reasons.length)],
+      approved: result.approved,
+      reason: result.reason,
+      userId: data.user._id,
     };
   },
 });
 
-/**
- * Internal query to fetch authenticated user's KYC data safely for actions
- *
- * @internalQuery
- * @returns User record and pending KYC documents
- */
-export const getViewerKycData = internalQuery({
-  args: {},
-  handler: async (ctx) => {
-    // Get authenticated user
-    const user = await getUser(ctx);
-
-    const documents = await ctx.db
-      .query(TABLE_NAMES.KYC_DOCUMENTS)
-      .withIndex("by_user_id_and_status", (q) =>
-        q.eq("user_id", user._id).eq("status", KYCStatus.PENDING),
-      )
-      .collect();
-
-    return { user, documents };
-  },
-});
-
-/**
- * Admin query to list all users awaiting KYC review
- *
- * Returns users grouped by their pending documents, sorted by
- * oldest submission first (first-come-first-serve queue).
- *
- * @query
- * @requires Admin authentication
- * @returns Array of users with their pending document details
- */
 export const adminListPendingKyc = query({
   args: {},
   returns: v.array(
@@ -207,12 +166,12 @@ export const adminListPendingKyc = query({
           file_name: v.optional(v.string()),
           file_size: v.optional(v.number()),
           mime_type: v.optional(v.string()),
+          supersedes_document_id: v.optional(v.id("kyc_documents")),
         }),
       ),
     }),
   ),
   handler: async (ctx) => {
-    // Validate admin authentication
     await getAdminUser(ctx);
 
     const pendingDocs = await ctx.db
@@ -220,18 +179,17 @@ export const adminListPendingKyc = query({
       .withIndex("by_status", (q) => q.eq("status", KYCStatus.PENDING))
       .collect();
 
-    const grouped = new Map<UserId, KycDocument[]>();
+    const grouped = new Map<UserId, typeof pendingDocs>();
     for (const doc of pendingDocs) {
-      const key = doc.user_id;
-      const current = grouped.get(key);
+      const current = grouped.get(doc.user_id);
       if (current) {
         current.push(doc);
       } else {
-        grouped.set(key, [doc]);
+        grouped.set(doc.user_id, [doc]);
       }
     }
 
-    const rows: {
+    const rows = [] as {
       user_id: UserId;
       first_name: string;
       last_name: string;
@@ -239,22 +197,22 @@ export const adminListPendingKyc = query({
       phone: string;
       status: string;
       pending_documents: {
-        document_id: KycDocumentId;
-        document_type: KycDocumentType;
+        document_id: (typeof pendingDocs)[number]["_id"];
+        document_type: (typeof pendingDocs)[number]["document_type"];
         created_at: number;
         uploaded_at: number | undefined;
         file_name: string | undefined;
         file_size: number | undefined;
         mime_type: string | undefined;
+        supersedes_document_id: (typeof pendingDocs)[number]["supersedes_document_id"];
       }[];
-    }[] = [];
+    }[];
 
     for (const [userId, docs] of grouped) {
       const user = await ctx.db.get(userId);
       if (!user) continue;
 
       docs.sort((a, b) => a.created_at - b.created_at);
-
       rows.push({
         user_id: user._id,
         first_name: user.first_name,
@@ -270,6 +228,7 @@ export const adminListPendingKyc = query({
           file_name: doc.file_name,
           file_size: doc.file_size,
           mime_type: doc.mime_type,
+          supersedes_document_id: doc.supersedes_document_id,
         })),
       });
     }
@@ -286,25 +245,6 @@ export const adminListPendingKyc = query({
   },
 });
 
-/**
- * Admin mutation to manually review and approve/reject KYC submissions
- *
- * Workflow:
- * 1. Validate admin authentication
- * 2. Verify user is in PENDING_KYC status
- * 3. Require rejection reason if denying
- * 4. Process KYC result (updates user status)
- * 5. Sync user aggregates for analytics
- * 6. Log comprehensive audit trail
- *
- * @mutation
- * @requires Admin authentication
- * @param userId - User being reviewed
- * @param approved - Approval decision
- * @param reason - Optional reason (required if rejected)
- * @returns Result with new user status and documents reviewed count
- * @throws If user not found, wrong status, or missing rejection reason
- */
 export const adminReviewKyc = mutation({
   args: {
     userId: v.id("users"),
@@ -316,73 +256,31 @@ export const adminReviewKyc = mutation({
     newStatus: v.string(),
     documentsReviewed: v.number(),
   }),
-  handler: async (ctx, args) => {
-    // Validate admin authentication
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    userId: UserId;
+    newStatus: string;
+    documentsReviewed: number;
+  }> => {
     const admin = await getAdminUser(ctx);
 
-    const user = await ctx.db.get(args.userId);
-    if (!user) {
-      throw new ConvexError("User not found");
-    }
-
-    if (user.status !== UserStatus.PENDING_KYC) {
-      throw new ConvexError("User is not in pending_kyc status");
-    }
-
-    if (!args.approved && (!args.reason || args.reason.trim().length === 0)) {
-      throw new ConvexError("Rejection reason is required");
-    }
-
-    const pendingDocs = await ctx.db
-      .query(TABLE_NAMES.KYC_DOCUMENTS)
-      .withIndex("by_user_id_and_status", (q) =>
-        q.eq("user_id", args.userId).eq("status", KYCStatus.PENDING),
-      )
-      .collect();
-
-    if (pendingDocs.length === 0) {
-      throw new ConvexError("No pending KYC documents to review");
-    }
-
-    const nextUserStatus = args.approved
-      ? UserStatus.ACTIVE
-      : UserStatus.CLOSED;
-
-    // Get old user state before updating
-    const oldUser = user;
-
-    await ctx.runMutation(internal.users.processKycResult, {
+    const result: {
+      userId: string;
+      newStatus: string;
+      documentsReviewed: number;
+    } = await ctx.runMutation(internal.users.processKycResult, {
       userId: args.userId,
       approved: args.approved,
       reason: args.reason,
       reviewedBy: admin._id,
     });
 
-    // Get updated user and sync aggregates
-    const updatedUser = await ctx.db.get(args.userId);
-    if (updatedUser) {
-      await syncUserUpdate(ctx, oldUser, updatedUser);
-    }
-
-    await auditLog.logChange(ctx, {
-      action: "kyc.reviewed",
-      actorId: admin._id,
-      resourceType: RESOURCE_TYPE.USERS,
-      resourceId: user._id,
-      before: { status: user.status },
-      after: {
-        status: nextUserStatus,
-        approved: args.approved,
-        reason: args.reason,
-        documents_reviewed: pendingDocs.length,
-      },
-      severity: args.approved ? "info" : "warning",
-    });
-
     return {
-      userId: user._id,
-      newStatus: nextUserStatus,
-      documentsReviewed: pendingDocs.length,
+      userId: args.userId,
+      newStatus: result.newStatus,
+      documentsReviewed: result.documentsReviewed,
     };
   },
 });

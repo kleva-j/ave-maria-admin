@@ -26,36 +26,34 @@
 import type { MutationCtx } from "./_generated/server";
 import type {
   UserSavingsPlanId,
-  UserSavingsPlan,
   TransactionId,
   AdminUserId,
   Transaction,
   Context,
   UserId,
-  User,
 } from "./types";
 
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 
 import { internalMutation, query } from "./_generated/server";
-import { getAdminUser, getUser } from "./utils";
+import { getAdminUser, getUser, isRecord } from "./utils";
 import { auditLog } from "./auditLog";
 
 import {
-  createPostTransactionUseCase,
   createReverseTransactionUseCase,
+  createPostTransactionUseCase,
 } from "@avm-daily/application/use-cases";
 
 import {
-  createConvexTransactionReadRepository,
   createConvexTransactionWriteRepository,
+  createConvexTransactionReadRepository,
 } from "./adapters/transactionAdapters";
 
-import { createConvexUserRepository } from "./adapters/userAdapters";
-import { createConvexSavingsPlanRepository } from "./adapters/savingsPlanAdapters";
-
 import { DomainError, computeProjectionDelta } from "@avm-daily/domain";
+
+import { createConvexSavingsPlanRepository } from "./adapters/savingsPlanAdapters";
+import { createConvexUserRepository } from "./adapters/userAdapters";
 
 // Re-export computeProjectionDelta from domain (single source of truth)
 export { computeProjectionDelta } from "@avm-daily/domain";
@@ -72,7 +70,6 @@ import {
   TransactionReconciliationRunStatus,
   transactionSource,
   TransactionSource,
-  WithdrawalMethod,
   RESOURCE_TYPE,
   TABLE_NAMES,
   TxnType,
@@ -220,17 +217,6 @@ type TransactionListFilters = {
   dateFrom?: number;
   dateTo?: number;
 };
-
-/**
- * Type guard to check if a value is a record object.
- * Used for safe metadata parsing and validation.
- *
- * @param value - The value to check
- * @returns True if the value is a non-null object (not an array)
- */
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /**
  * Safely extracts and validates metadata as a record object.
