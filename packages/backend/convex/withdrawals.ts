@@ -221,12 +221,20 @@ function toPostTransactionOutput(
       : {};
 
   if (Array.isArray(metadata)) {
+    const elementTypes = Array.from(
+      new Set(
+        metadata.map((item) =>
+          Array.isArray(item) ? "array" : item === null ? "null" : typeof item,
+        ),
+      ),
+    );
+
     console.warn(
       "[withdrawals] transaction metadata was an array; coercing to empty object",
       {
         reference: result.transaction.reference,
         length: metadata.length,
-        preview: JSON.stringify(metadata.slice(0, 3)),
+        element_types: elementTypes,
       },
     );
   }
