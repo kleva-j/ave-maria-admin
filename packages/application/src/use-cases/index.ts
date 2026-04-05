@@ -774,6 +774,30 @@ function normalizeRequiredReason(reason: string | undefined, code: string) {
   return normalized;
 }
 
+const withdrawalSettlementRetryDelaysMs = [0, 25, 100] as const;
+
+async function retryWithdrawalSettlementUpdate<T>(
+  operation: string,
+  execute: () => Promise<T>,
+): Promise<T> {
+  let lastError: unknown;
+
+  for (const [attempt, delayMs] of withdrawalSettlementRetryDelaysMs.entries()) {
+    if (delayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+
+    try {
+      return await execute();
+    } catch (error) {
+      lastError = error;
+      console.warn(`[${operation}] attempt ${attempt + 1} failed`, error);
+    }
+  }
+
+  throw lastError;
+}
+
 export function createCreateSavingsPlanTemplateUseCase(deps: {
   savingsPlanTemplateRepository: SavingsPlanTemplateRepository;
   auditLogService: AuditLogService;
@@ -1664,23 +1688,27 @@ export function createProcessWithdrawalUseCase(deps: {
     });
 
     const now = Date.now();
-    const consumedReservation =
-      await deps.withdrawalReservationRepository.update(reservation._id, {
-        status: "consumed",
-        consumed_at: now,
-      });
+    const updatedWithdrawal = await retryWithdrawalSettlementUpdate(
+      "withdrawal.process.updateWithdrawal",
+      async () =>
+        await deps.withdrawalRepository.update(withdrawal._id, {
+          status: "processed",
+          transaction_id: transactionResult.transaction._id,
+          processed_by: input.adminId,
+          processed_at: now,
+          payout_provider: payoutResult.provider,
+          payout_reference: payoutResult.reference,
+          last_processing_error: undefined,
+        }),
+    );
 
-    const updatedWithdrawal = await deps.withdrawalRepository.update(
-      withdrawal._id,
-      {
-        status: "processed",
-        transaction_id: transactionResult.transaction._id,
-        processed_by: input.adminId,
-        processed_at: now,
-        payout_provider: payoutResult.provider,
-        payout_reference: payoutResult.reference,
-        last_processing_error: undefined,
-      },
+    const consumedReservation = await retryWithdrawalSettlementUpdate(
+      "withdrawal.process.consumeReservation",
+      async () =>
+        await deps.withdrawalReservationRepository.update(reservation._id, {
+          status: "consumed",
+          consumed_at: now,
+        }),
     );
 
     await deps.auditLogService.logChange({

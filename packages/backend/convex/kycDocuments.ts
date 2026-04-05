@@ -244,7 +244,16 @@ export const deleteDocument = mutation({
       });
 
       if (deleted.storage_id) {
-        await ctx.storage.delete(deleted.storage_id as StorageId);
+        try {
+          await ctx.storage.delete(deleted.storage_id as StorageId);
+        } catch (error) {
+          console.error("Failed to delete KYC document storage object", {
+            storage_id: deleted.storage_id,
+            user_id: String(user._id),
+            document_id: String(args.documentId),
+            error,
+          });
+        }
       }
 
       return null;

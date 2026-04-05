@@ -8,6 +8,10 @@ import { DomainError } from "@avm-daily/domain";
 import { getInsertDb, getPatchDb, getDeleteDb } from "./utils";
 import { TABLE_NAMES } from "../shared";
 
+type KycDocumentPatch = Partial<
+  Omit<KycDocumentDomain, "_id" | "user_id" | "document_type" | "created_at">
+>;
+
 function docToKycDocument(doc: KycDocument): KycDocumentDomain {
   return {
     _id: String(doc._id),
@@ -116,7 +120,10 @@ export function createConvexKycDocumentRepository(
       return docToKycDocument(doc);
     },
 
-    async update(id: KycDocumentId, patch): Promise<KycDocumentDomain> {
+    async update(
+      id: KycDocumentId,
+      patch: KycDocumentPatch,
+    ): Promise<KycDocumentDomain> {
       const existing = await ctx.db.get(id);
       if (!existing) {
         throw new DomainError(

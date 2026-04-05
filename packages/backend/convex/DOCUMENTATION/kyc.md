@@ -4,9 +4,9 @@
 
 **Primary modules**:
 
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/kyc.ts`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/kycDocuments.ts`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/kycInternal.ts`
+- `packages/backend/convex/kyc.ts`
+- `packages/backend/convex/kycDocuments.ts`
+- `packages/backend/convex/kycInternal.ts`
 
 The KYC feature is a document-backed identity verification pipeline with two decision paths:
 
@@ -34,22 +34,22 @@ This is different from the older model that moved rejected users to `closed`.
 ## Core Modules
 
 ### API / Orchestration
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/kyc.ts`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/kycDocuments.ts`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/users.ts`
+- `packages/backend/convex/kyc.ts`
+- `packages/backend/convex/kycDocuments.ts`
+- `packages/backend/convex/users.ts`
 
 ### Internal provider/query helpers
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/kycInternal.ts`
+- `packages/backend/convex/kycInternal.ts`
 
 ### Domain rules
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/domain/src/services/kycPolicy.ts`
+- `packages/domain/src/services/kycPolicy.ts`
 
 ### Application use cases
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/application/src/use-cases/index.ts`
+- `packages/application/src/use-cases/index.ts`
 
 ### Backend adapters
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/adapters/kycAdapters.ts`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/adapters/userAdapters.ts`
+- `packages/backend/convex/adapters/kycAdapters.ts`
+- `packages/backend/convex/adapters/userAdapters.ts`
 
 ---
 
@@ -390,7 +390,7 @@ Document URL access is controlled in `kycDocuments.getDocumentUrl`:
 
 Validation is enforced before finalizing uploads.
 
-Current constraints come from shared constants in `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/shared.ts`.
+Current constraints come from shared constants in `packages/backend/convex/shared.ts`.
 
 Important points:
 
@@ -450,6 +450,6 @@ These are the main invariants to preserve in future changes:
 
 ## Related Documentation
 
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/DOCUMENTATION/kycDocuments.md`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/DOCUMENTATION/risk.md`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/DOCUMENTATION/RISK_KYC_POLICY_SUMMARY.md`
+- `./kycDocuments.md`
+- `./risk.md`
+- `./RISK_KYC_POLICY_SUMMARY.md`

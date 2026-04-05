@@ -4,8 +4,10 @@ import type { MutationCtx } from "./_generated/server";
 import type { AdminRole } from "./shared";
 import type {
   UserBankAccountId,
+  UserSavingsPlanId,
   TransactionId,
   WithdrawalId,
+  AdminUserId,
   Withdrawal,
   Context,
   UserId,
@@ -50,6 +52,7 @@ import {
 } from "./shared";
 
 import {
+  getCashWithdrawalRoleBlockedMessage,
   getCashWithdrawalForbiddenData,
   buildWithdrawalCapabilities,
 } from "./withdrawalPolicy";
@@ -184,6 +187,24 @@ function fallbackWithdrawalReference(
   );
 }
 
+function toUserId(id: string): UserId {
+  return id as UserId;
+}
+
+function toAdminUserId(id: string): AdminUserId {
+  return id as AdminUserId;
+}
+
+function toOptionalUserSavingsPlanId(
+  id?: string,
+): UserSavingsPlanId | undefined {
+  return id ? (id as UserSavingsPlanId) : undefined;
+}
+
+function toOptionalTransactionId(id?: string): TransactionId | undefined {
+  return id ? (id as TransactionId) : undefined;
+}
+
 function toPostTransactionOutput(
   result: Awaited<ReturnType<typeof postTransactionEntry>>,
 ): PostTransactionOutput {
@@ -268,16 +289,20 @@ async function assertAdminCanHandleAction(
     };
   },
 ) {
+  const risk = await buildWithdrawalRiskSummary(ctx, toUserId(input.userId));
   const capabilities = buildWithdrawalCapabilities(
     input.adminRole,
     {
       status: input.withdrawal.status,
       method: input.withdrawal.method,
     },
-    { has_active_hold: false },
+    risk,
   );
   const capability = capabilities[input.action];
-  if (!capability.allowed) {
+  const cashRoleBlocked =
+    !capability.allowed &&
+    capability.reason === getCashWithdrawalRoleBlockedMessage(input.action);
+  if (cashRoleBlocked) {
     throw new ConvexError(getCashWithdrawalForbiddenData(input.action));
   }
 
@@ -286,8 +311,16 @@ async function assertAdminCanHandleAction(
     input.action === WithdrawalAction.PROCESS
   ) {
     await assertWithdrawalAdminActionAllowed(ctx, {
-      userId: input.userId as UserId,
-      actorAdminId: input.adminId as never,
+      userId: toUserId(input.userId),
+      actorAdminId: toAdminUserId(input.adminId),
+    });
+  }
+
+  if (!capability.allowed) {
+    throw new ConvexError({
+      code: "withdrawal_action_blocked",
+      action: input.action,
+      message: capability.reason ?? "Withdrawal action is blocked",
     });
   }
 }
@@ -546,18 +579,18 @@ export const process = mutation({
         postTransaction: async (input) =>
           toPostTransactionOutput(
             await postTransactionEntry(ctx, {
-              userId: input.userId as UserId,
-              userPlanId: input.userPlanId as never,
+              userId: toUserId(input.userId),
+              userPlanId: toOptionalUserSavingsPlanId(input.userPlanId),
               type: input.type,
               amountKobo: input.amountKobo,
               reference: input.reference,
               metadata: input.metadata,
               source: input.source,
-              actorId: input.actorId as never,
+              actorId: input.actorId ? toAdminUserId(input.actorId) : undefined,
               createdAt: input.createdAt,
-              reversalOfTransactionId: input.reversalOfTransactionId as
-                | TransactionId
-                | undefined,
+              reversalOfTransactionId: toOptionalTransactionId(
+                input.reversalOfTransactionId,
+              ),
             }),
           ),
         auditLogService: createConvexAuditLogService(ctx),

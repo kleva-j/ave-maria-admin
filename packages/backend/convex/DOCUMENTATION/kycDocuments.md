@@ -291,7 +291,7 @@ Creates database record after successful upload.
 
 **Validation**:
 
-1. File size ≤ MAX_FILE_SIZE (10MB)
+1. File size ≤ MAX_FILE_SIZE (5MB)
 2. File name extension valid
 3. MIME type allowed
 4. No existing pending document of same type
@@ -587,7 +587,7 @@ Returns KYC document requirements for UI display.
 {
   required: KycDocumentType[];      // ["government_id", "selfie_with_id"]
   optional: KycDocumentType[];      // ["proof_of_address", "bank_statement"]
-  maxFileSize: number;              // 10485760 (10MB)
+  maxFileSize: number;              // 5242880 (5MB)
   allowedMimeTypes: string[];       // ["image/jpeg", "image/png", ...]
 }
 ```
@@ -664,7 +664,7 @@ throw new ConvexError(
 throw new ConvexError(
   `Invalid MIME type. Allowed: ${ALLOWED_MIME_TYPES.join(", ")}`
 );
-// Example: "Invalid MIME type. Allowed: image/jpeg, image/jpg, image/png, application/pdf"
+// Example: "Invalid MIME type. Allowed: image/jpeg, image/png, application/pdf"
 ```
 
 #### File Too Large
@@ -1089,9 +1089,9 @@ const avgReviewTime =
 
 | Property   | Value                                             |
 | ---------- | ------------------------------------------------- |
-| Max Size   | 10 MB                                             |
+| Max Size   | 5 MB                                             |
 | Extensions | .jpg, .jpeg, .png, .pdf                           |
-| MIME Types | image/jpeg, image/jpg, image/png, application/pdf |
+| MIME Types | image/jpeg, image/png, application/pdf |
 
 ### Document Types
 

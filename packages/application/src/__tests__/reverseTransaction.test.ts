@@ -77,13 +77,15 @@ function makeInMemoryDeps(user: User, seedTransactions: Transaction[] = []) {
       }
     },
     updateStatus: async (id, status, updatedAt) => {
-      if (id === currentUser._id) {
-        currentUser = {
-          ...currentUser,
-          status,
-          updated_at: updatedAt,
-        };
+      if (id !== currentUser._id) {
+        throw new Error("updateStatus: unknown user id");
       }
+
+      currentUser = {
+        ...currentUser,
+        status,
+        updated_at: updatedAt,
+      };
     },
   };
 

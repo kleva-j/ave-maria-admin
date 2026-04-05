@@ -3,6 +3,21 @@ import type { Context } from "../types";
 
 import { DomainError } from "@avm-daily/domain";
 
+type MutationDbMethod = "insert" | "patch" | "delete";
+
+function getMutationDb<M extends MutationDbMethod>(
+  ctx: Context,
+  method: M,
+  errorMessage: string,
+  errorCode: string,
+): Pick<MutationCtx["db"], M> {
+  const mutationDb = ctx.db as Partial<MutationCtx["db"]>;
+  if (typeof mutationDb[method] !== "function") {
+    throw new DomainError(errorMessage, errorCode);
+  }
+  return mutationDb as Pick<MutationCtx["db"], M>;
+}
+
 /**
  * Validates mutation context and returns a database interface with insert capabilities.
  *
@@ -17,11 +32,7 @@ export function getInsertDb(
   errorMessage: string,
   errorCode: string,
 ): Pick<MutationCtx["db"], "insert"> {
-  const mutationDb = ctx.db as Partial<MutationCtx["db"]>;
-  if (typeof mutationDb.insert !== "function") {
-    throw new DomainError(errorMessage, errorCode);
-  }
-  return mutationDb as Pick<MutationCtx["db"], "insert">;
+  return getMutationDb(ctx, "insert", errorMessage, errorCode);
 }
 
 /**
@@ -38,11 +49,7 @@ export function getPatchDb(
   errorMessage: string,
   errorCode: string,
 ): Pick<MutationCtx["db"], "patch"> {
-  const mutationDb = ctx.db as Partial<MutationCtx["db"]>;
-  if (typeof mutationDb.patch !== "function") {
-    throw new DomainError(errorMessage, errorCode);
-  }
-  return mutationDb as Pick<MutationCtx["db"], "patch">;
+  return getMutationDb(ctx, "patch", errorMessage, errorCode);
 }
 
 /**
@@ -59,9 +66,5 @@ export function getDeleteDb(
   errorMessage: string,
   errorCode: string,
 ): Pick<MutationCtx["db"], "delete"> {
-  const mutationDb = ctx.db as Partial<MutationCtx["db"]>;
-  if (typeof mutationDb.delete !== "function") {
-    throw new DomainError(errorMessage, errorCode);
-  }
-  return mutationDb as Pick<MutationCtx["db"], "delete">;
+  return getMutationDb(ctx, "delete", errorMessage, errorCode);
 }

@@ -12,7 +12,7 @@ import { getPatchDb } from "./utils";
 function docToUser(doc: User): UserDomain {
   return {
     _id: String(doc._id),
-    email: doc.email ?? "",
+    email: doc.email,
     phone: doc.phone,
     first_name: doc.first_name,
     last_name: doc.last_name,

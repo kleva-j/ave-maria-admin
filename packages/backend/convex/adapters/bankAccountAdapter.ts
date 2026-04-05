@@ -10,6 +10,10 @@ import { TABLE_NAMES, BankAccountVerificationStatus } from "../shared";
 
 type AnyCtx = QueryCtx | MutationCtx;
 
+function maskAccountNumberLast4(accountNumber: string) {
+  return accountNumber.length >= 4 ? accountNumber.slice(-4) : "****";
+}
+
 function toVerifiedBankAccountRecord(account: {
   _id: UserBankAccountId;
   bank_name: string;
@@ -20,7 +24,7 @@ function toVerifiedBankAccountRecord(account: {
     account_id: String(account._id),
     bank_name: account.bank_name,
     account_name: account.account_name,
-    account_number_last4: account.account_number.slice(-4),
+    account_number_last4: maskAccountNumberLast4(account.account_number),
   };
 }
 

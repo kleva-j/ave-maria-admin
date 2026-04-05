@@ -94,7 +94,7 @@ export function createConvexWithdrawalRepository(
         reference: withdrawal.reference,
         requested_by: withdrawal.requested_by as Withdrawal["requested_by"],
         requested_amount_kobo: withdrawal.requested_amount_kobo,
-        method: withdrawal.method,
+        method: normalizeMethod(withdrawal.method),
         status: withdrawal.status,
         requested_at: withdrawal.requested_at,
         ...(withdrawal.transaction_id
@@ -190,7 +190,9 @@ export function createConvexWithdrawalRepository(
         ...(patch.requested_amount_kobo !== undefined
           ? { requested_amount_kobo: patch.requested_amount_kobo }
           : {}),
-        ...(patch.method !== undefined ? { method: patch.method } : {}),
+        ...(patch.method !== undefined
+          ? { method: normalizeMethod(patch.method) }
+          : {}),
         ...(patch.status !== undefined ? { status: patch.status } : {}),
         ...(patch.approved_by !== undefined
           ? { approved_by: patch.approved_by as Withdrawal["approved_by"] }

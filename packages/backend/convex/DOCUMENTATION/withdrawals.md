@@ -2,7 +2,7 @@
 
 ## Overview
 
-**Primary module**: `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/withdrawals.ts`
+**Primary module**: `packages/backend/convex/withdrawals.ts`
 
 The withdrawal feature is a reservation-based payout workflow.
 
@@ -43,27 +43,27 @@ That separation reduces reversal complexity, keeps the ledger cleaner, and makes
 ## Core Modules
 
 ### API / Orchestration
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/withdrawals.ts`
+- `packages/backend/convex/withdrawals.ts`
 
 ### Domain rules
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/domain/src/services/withdrawalLifecycle.ts`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/domain/src/services/withdrawalPolicy.ts`
+- `packages/domain/src/services/withdrawalLifecycle.ts`
+- `packages/domain/src/services/withdrawalPolicy.ts`
 
 ### Application use cases
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/application/src/use-cases/index.ts`
+- `packages/application/src/use-cases/index.ts`
 
 ### Backend adapters
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/adapters/withdrawalAdapter.ts`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/adapters/withdrawalReservationAdapter.ts`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/adapters/bankAccountAdapter.ts`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/adapters/withdrawalPayoutAdapter.ts`
+- `packages/backend/convex/adapters/withdrawalAdapter.ts`
+- `packages/backend/convex/adapters/withdrawalReservationAdapter.ts`
+- `packages/backend/convex/adapters/bankAccountAdapter.ts`
+- `packages/backend/convex/adapters/withdrawalPayoutAdapter.ts`
 
 ### Ledger integration
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/transactions.ts`
+- `packages/backend/convex/transactions.ts`
 
 ### Risk integration
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/risk.ts`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/withdrawalPolicy.ts`
+- `packages/backend/convex/risk.ts`
+- `packages/backend/convex/withdrawalPolicy.ts`
 
 ---
 
@@ -329,7 +329,7 @@ The order matters:
 
 Current implementation uses a stub provider:
 
-- adapter: `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/adapters/withdrawalPayoutAdapter.ts`
+- adapter: `packages/backend/convex/adapters/withdrawalPayoutAdapter.ts`
 - provider name: `manual_ops`
 
 This is provider-ready by design. A real payout adapter can later replace the stub without changing the domain workflow.
@@ -414,8 +414,8 @@ Blocked roles receive structured forbidden error payloads, and review queries ex
 
 This logic is driven by:
 
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/domain/src/services/withdrawalPolicy.ts`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/withdrawalPolicy.ts`
+- `packages/domain/src/services/withdrawalPolicy.ts`
+- `packages/backend/convex/withdrawalPolicy.ts`
 
 ---
 
@@ -435,8 +435,8 @@ Admin action flows also preserve the existing hold/risk checks where already con
 
 Related modules:
 
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/risk.ts`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/application/src/use-cases/index.ts`
+- `packages/backend/convex/risk.ts`
+- `packages/application/src/use-cases/index.ts`
 
 ---
 
@@ -519,6 +519,6 @@ These are the important invariants to preserve in future changes:
 
 ## Related Documentation
 
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/DOCUMENTATION/transactions.md`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/DOCUMENTATION/risk.md`
-- `/Users/michael/Private/projects/better-t-stack/avm-daily/packages/backend/convex/DOCUMENTATION/withdrawalPolicy.md`
+- `./transactions.md`
+- `./risk.md`
+- `./withdrawalPolicy.md`

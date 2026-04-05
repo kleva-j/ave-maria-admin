@@ -55,6 +55,9 @@ describe("withdrawal lifecycle domain rules", () => {
 
   it("allows rejecting approved withdrawals but blocks processed ones", () => {
     expect(() =>
+      assertWithdrawalCanBeRejected(WithdrawalStatus.PENDING),
+    ).not.toThrow();
+    expect(() =>
       assertWithdrawalCanBeRejected(WithdrawalStatus.APPROVED),
     ).not.toThrow();
     expect(() =>
@@ -89,7 +92,7 @@ describe("kyc policy domain rules", () => {
     expect(getUserStatusForKycDecision(false)).toBe(UserStatus.PENDING_KYC);
   });
 
-  it("retains rejected documents for supersession and blocks approved deletions", () => {
+  it("finds the most recent rejected document for a document type", () => {
     expect(
       findLatestRejectedDocumentForType(
         [
@@ -109,7 +112,9 @@ describe("kyc policy domain rules", () => {
         DocumentType.GOVERNMENT_ID,
       ),
     ).toMatchObject({ _id: "doc-2" });
+  });
 
+  it("allows deleting rejected documents but blocks approved ones", () => {
     expect(() => assertKycDocumentCanBeDeleted(KycStatus.APPROVED)).toThrow(
       "Cannot delete approved documents",
     );

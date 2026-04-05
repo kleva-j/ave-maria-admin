@@ -14,6 +14,13 @@ import { DomainError } from "@avm-daily/domain";
 import { getInsertDb, getPatchDb } from "./utils";
 import { TABLE_NAMES } from "../shared";
 
+type WithdrawalReservationPatch = Partial<
+  Omit<
+    WithdrawalReservationDomain,
+    "_id" | "user_id" | "withdrawal_id" | "created_at"
+  >
+>;
+
 function docToReservation(
   doc: WithdrawalReservation,
 ): WithdrawalReservationDomain {
@@ -99,7 +106,7 @@ export function createConvexWithdrawalReservationRepository(
 
     async update(
       id: WithdrawalReservationId,
-      patch,
+      patch: WithdrawalReservationPatch,
     ): Promise<WithdrawalReservationDomain> {
       const existing = await ctx.db.get(id);
       if (!existing) {
