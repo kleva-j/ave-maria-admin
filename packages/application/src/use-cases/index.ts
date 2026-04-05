@@ -1667,25 +1667,29 @@ export function createProcessWithdrawalUseCase(deps: {
       throw error;
     }
 
-    const transactionResult = await deps.postTransaction({
-      userId: withdrawal.requested_by,
-      type: TxnType.WITHDRAWAL,
-      amountKobo: -withdrawal.requested_amount_kobo,
-      reference: withdrawal.reference,
-      metadata: {
-        source: TransactionSource.ADMIN,
-        actor_id: input.adminId,
-        withdrawal_status: "processed",
-        method: withdrawal.method,
-        bank_account: withdrawal.bank_account_details,
-        cash_details: withdrawal.cash_details,
-        payout_provider: payoutResult.provider,
-        payout_reference: payoutResult.reference,
-        ...(payoutResult.metadata ?? {}),
-      },
-      source: TransactionSource.ADMIN,
-      actorId: input.adminId,
-    });
+    const transactionResult = await retryWithdrawalSettlementUpdate(
+      "withdrawal.process.postTransaction",
+      async () =>
+        await deps.postTransaction({
+          userId: withdrawal.requested_by,
+          type: TxnType.WITHDRAWAL,
+          amountKobo: -withdrawal.requested_amount_kobo,
+          reference: withdrawal.reference,
+          metadata: {
+            source: TransactionSource.ADMIN,
+            actor_id: input.adminId,
+            withdrawal_status: "processed",
+            method: withdrawal.method,
+            bank_account: withdrawal.bank_account_details,
+            cash_details: withdrawal.cash_details,
+            payout_provider: payoutResult.provider,
+            payout_reference: payoutResult.reference,
+            ...(payoutResult.metadata ?? {}),
+          },
+          source: TransactionSource.ADMIN,
+          actorId: input.adminId,
+        }),
+    );
 
     const now = Date.now();
     const updatedWithdrawal = await retryWithdrawalSettlementUpdate(

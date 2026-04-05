@@ -191,6 +191,13 @@ export function createConvexKycDocumentRepository(
         "KYC document mutations require a mutation context",
         "kyc_document_mutation_context_required",
       );
+      const existing = await ctx.db.get(id);
+      if (!existing) {
+        throw new DomainError(
+          "KYC document not found",
+          "kyc_document_not_found",
+        );
+      }
       await deleteDb.delete(id);
     },
   };

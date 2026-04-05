@@ -171,9 +171,15 @@ function normalizeCashDetails(details: unknown) {
 }
 
 function normalizeWithdrawalMethodValue(withdrawal: Withdrawal) {
-  return withdrawal.method === WithdrawalMethod.CASH
-    ? WithdrawalMethod.CASH
-    : WithdrawalMethod.BANK_TRANSFER;
+  switch (withdrawal.method) {
+    case WithdrawalMethod.CASH:
+      return WithdrawalMethod.CASH;
+    case undefined:
+    case WithdrawalMethod.BANK_TRANSFER:
+      return WithdrawalMethod.BANK_TRANSFER;
+    default:
+      throw new Error(`Unknown withdrawal method: ${String(withdrawal.method)}`);
+  }
 }
 
 function fallbackWithdrawalReference(
@@ -208,6 +214,23 @@ function toOptionalTransactionId(id?: string): TransactionId | undefined {
 function toPostTransactionOutput(
   result: Awaited<ReturnType<typeof postTransactionEntry>>,
 ): PostTransactionOutput {
+  const metadata = result.transaction.metadata;
+  const normalizedMetadata =
+    metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? { ...metadata }
+      : {};
+
+  if (Array.isArray(metadata)) {
+    console.warn(
+      "[withdrawals] transaction metadata was an array; coercing to empty object",
+      {
+        reference: result.transaction.reference,
+        length: metadata.length,
+        preview: JSON.stringify(metadata.slice(0, 3)),
+      },
+    );
+  }
+
   return {
     idempotent: result.idempotent,
     transaction: {
@@ -224,12 +247,7 @@ function toPostTransactionOutput(
         : undefined,
       reversal_of_reference: result.transaction.reversal_of_reference,
       reversal_of_type: result.transaction.reversal_of_type,
-      metadata:
-        result.transaction.metadata &&
-        typeof result.transaction.metadata === "object" &&
-        !Array.isArray(result.transaction.metadata)
-          ? { ...result.transaction.metadata }
-          : {},
+      metadata: normalizedMetadata,
       created_at: result.transaction.created_at,
     },
   };
@@ -346,7 +364,7 @@ function buildRequestWithdrawalUseCase(ctx: MutationCtx) {
     bankAccountRepository: createConvexBankAccountRepository(ctx),
     auditLogService: createConvexAuditLogService(ctx),
     assertWithdrawalAllowed: async (input) => {
-      const user = await ctx.db.get(input.userId as UserId);
+      const user = await ctx.db.get(toUserId(input.userId));
       if (!user) {
         throw new ConvexError("User not found");
       }
@@ -432,7 +450,7 @@ export const listForReview = query({
             _id: user._id,
             first_name: user.first_name,
             last_name: user.last_name,
-            email: user.email,
+            email: user.email ?? undefined,
             phone: user.phone,
             status: user.status,
           },
