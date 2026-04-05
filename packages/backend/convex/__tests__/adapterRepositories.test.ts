@@ -374,6 +374,48 @@ describe("Convex adapter repositories", () => {
     expect(updated.is_active).toBe(false);
   });
 
+  it("preserves explicit undefined fields when clearing template values", async () => {
+    const template = {
+      _id: "template-1",
+      name: "Japa",
+      description: "Relocation goal",
+      default_target_kobo: 100_000n,
+      duration_days: 30,
+      interest_rate: 0,
+      automation_type: "weekly",
+      is_active: true,
+      created_at: 1,
+    };
+    const get = vi
+      .fn()
+      .mockResolvedValueOnce(template)
+      .mockResolvedValueOnce({
+        ...template,
+        description: undefined,
+        automation_type: undefined,
+      });
+    const patch = vi.fn().mockResolvedValue(undefined);
+    const ctx = {
+      db: {
+        get,
+        patch,
+      },
+    } as any;
+
+    const repo = createConvexSavingsPlanTemplateRepository(ctx);
+    const updated = await repo.update("template-1", {
+      description: undefined,
+      automation_type: undefined,
+    });
+
+    expect(patch).toHaveBeenCalledWith("template-1", {
+      description: undefined,
+      automation_type: undefined,
+    });
+    expect(updated.description).toBeUndefined();
+    expect(updated.automation_type).toBeUndefined();
+  });
+
   it("throws when updateMetadata is called for a missing transaction", async () => {
     const get = vi.fn().mockResolvedValue(null);
     const patch = vi.fn();

@@ -1,5 +1,6 @@
 import type {
   SavingsPlanTemplateRepository,
+  SavingsPlanUpdatePatch,
   SavingsPlanRepository,
 } from "@avm-daily/application/ports";
 
@@ -53,15 +54,14 @@ function getPatchDb(ctx: Context): Pick<MutationCtx["db"], "patch"> {
 }
 
 function buildPatch<T extends Record<string, unknown>, K extends keyof T>(
-  patch: T,
+  patch: Partial<Pick<T, K>>,
   allowedKeys: readonly K[],
 ) {
   const nextPatch: Partial<Pick<T, K>> = {};
 
   for (const key of allowedKeys) {
-    const value = patch[key];
-    if (value !== undefined) {
-      nextPatch[key] = value;
+    if (Object.prototype.hasOwnProperty.call(patch, key)) {
+      nextPatch[key] = patch[key];
     }
   }
 
@@ -188,9 +188,7 @@ export function createConvexSavingsPlanRepository(
 
     async update(
       id: UserSavingsPlanId,
-      patch: Partial<
-        Omit<UserSavingsPlanDomain, "_id" | "user_id" | "created_at">
-      >,
+      patch: SavingsPlanUpdatePatch,
     ): Promise<UserSavingsPlanDomain> {
       const existing = await ctx.db.get(id);
       if (!existing) {
@@ -205,25 +203,25 @@ export function createConvexSavingsPlanRepository(
         existing._id,
         buildPatch(
           {
-            template_id: patch.template_id as SavingsPlanTemplateId | undefined,
-            custom_target_kobo: patch.custom_target_kobo,
-            current_amount_kobo: patch.current_amount_kobo,
-            start_date: patch.start_date,
-            end_date: patch.end_date,
-            status: patch.status,
-            automation_enabled: patch.automation_enabled,
-            metadata: patch.metadata,
-            updated_at: patch.updated_at,
+            ...(patch.custom_target_kobo !== undefined
+              ? { custom_target_kobo: patch.custom_target_kobo }
+              : {}),
+            ...(patch.end_date !== undefined
+              ? { end_date: patch.end_date }
+              : {}),
+            ...(patch.status !== undefined ? { status: patch.status } : {}),
+            ...(patch.automation_enabled !== undefined
+              ? { automation_enabled: patch.automation_enabled }
+              : {}),
+            ...(patch.updated_at !== undefined
+              ? { updated_at: patch.updated_at }
+              : {}),
           },
           [
-            "template_id",
             "custom_target_kobo",
-            "current_amount_kobo",
-            "start_date",
             "end_date",
             "status",
             "automation_enabled",
-            "metadata",
             "updated_at",
           ] as const,
         ),
@@ -321,13 +319,30 @@ export function createConvexSavingsPlanTemplateRepository(
         existing._id,
         buildPatch(
           {
-            name: patch.name,
-            description: patch.description,
-            default_target_kobo: patch.default_target_kobo,
-            duration_days: patch.duration_days,
-            interest_rate: patch.interest_rate,
-            automation_type: patch.automation_type,
-            is_active: patch.is_active,
+            ...(Object.prototype.hasOwnProperty.call(patch, "name")
+              ? { name: patch.name }
+              : {}),
+            ...(Object.prototype.hasOwnProperty.call(patch, "description")
+              ? { description: patch.description }
+              : {}),
+            ...(Object.prototype.hasOwnProperty.call(
+              patch,
+              "default_target_kobo",
+            )
+              ? { default_target_kobo: patch.default_target_kobo }
+              : {}),
+            ...(Object.prototype.hasOwnProperty.call(patch, "duration_days")
+              ? { duration_days: patch.duration_days }
+              : {}),
+            ...(Object.prototype.hasOwnProperty.call(patch, "interest_rate")
+              ? { interest_rate: patch.interest_rate }
+              : {}),
+            ...(Object.prototype.hasOwnProperty.call(patch, "automation_type")
+              ? { automation_type: patch.automation_type }
+              : {}),
+            ...(Object.prototype.hasOwnProperty.call(patch, "is_active")
+              ? { is_active: patch.is_active }
+              : {}),
           },
           [
             "name",
