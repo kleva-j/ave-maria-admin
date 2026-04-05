@@ -1,19 +1,20 @@
-import {
-  createCreateSavingsPlanTemplateUseCase,
-  createSetSavingsPlanTemplateActiveStateUseCase,
-  createUpdateSavingsPlanTemplateUseCase,
-} from "@avm-daily/application/use-cases";
-import { DomainError } from "@avm-daily/domain";
+import type { MutationCtx } from "./_generated/server";
+import type { SavingsPlanTemplateId } from "./types";
 
+import { DomainError } from "@avm-daily/domain";
 import { ConvexError, v } from "convex/values";
 
-import { mutation, query } from "./_generated/server";
-import type { MutationCtx } from "./_generated/server";
-import { createConvexAuditLogService } from "./adapters/auditLogAdapter";
+import {
+  createSetSavingsPlanTemplateActiveStateUseCase,
+  createCreateSavingsPlanTemplateUseCase,
+  createUpdateSavingsPlanTemplateUseCase,
+} from "@avm-daily/application/use-cases";
+
 import { createConvexSavingsPlanTemplateRepository } from "./adapters/savingsPlanAdapters";
-import type { SavingsPlanTemplateId } from "./types";
-import { TABLE_NAMES } from "./shared";
+import { createConvexAuditLogService } from "./adapters/auditLogAdapter";
+import { mutation, query } from "./_generated/server";
 import { getAdminUser } from "./utils";
+import { TABLE_NAMES } from "./shared";
 
 const savingsPlanTemplateValidator = v.object({
   _id: v.id("savings_plan_templates"),
@@ -66,11 +67,11 @@ export const listForAdmin = query({
   handler: async (ctx) => {
     await getAdminUser(ctx);
 
-    const templates = await ctx.db
+    return await ctx.db
       .query(TABLE_NAMES.SAVINGS_PLAN_TEMPLATES)
+      .withIndex("by_created_at")
+      .order("desc")
       .collect();
-
-    return templates.sort((a, b) => b.created_at - a.created_at);
   },
 });
 

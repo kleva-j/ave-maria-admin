@@ -16,9 +16,13 @@ export const user_savings_plans = defineTable({
   created_at: v.number(),
   updated_at: v.number(),
 })
+  .index("by_created_at", ["created_at"])
   .index("by_user_id", ["user_id"])
+  .index("by_user_id_and_created_at", ["user_id", "created_at"])
   .index("by_user_id_and_status", ["user_id", "status"])
   .index("by_user_id_and_template_id", ["user_id", "template_id"])
   .index("by_template_id", ["template_id"])
+  .index("by_template_id_and_created_at", ["template_id", "created_at"])
   .index("by_status", ["status"])
+  .index("by_status_and_created_at", ["status", "created_at"])
   .index("by_end_date", ["end_date"]);

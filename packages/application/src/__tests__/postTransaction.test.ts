@@ -64,7 +64,9 @@ const arbitraryPostTransactionInput = fc.record({
   >(TransactionSource.USER, TransactionSource.ADMIN, TransactionSource.SYSTEM),
   metadata: fc.option(
     fc.dictionary(fc.string({ minLength: 1, maxLength: 16 }), fc.string()),
-    { nil: undefined },
+    {
+      nil: undefined,
+    },
   ),
 });
 
@@ -122,6 +124,12 @@ function makeInMemoryDeps(user: User, plan?: UserSavingsPlan) {
       currentPlan && currentPlan._id === id ? { ...currentPlan } : null,
     findByUserId: async (uid) =>
       currentPlan && currentPlan.user_id === uid ? [{ ...currentPlan }] : [],
+    findByUserIdAndTemplateId: async (uid, templateId) =>
+      currentPlan &&
+      currentPlan.user_id === uid &&
+      currentPlan.template_id === templateId
+        ? { ...currentPlan }
+        : null,
     create: async (plan) => {
       currentPlan = { ...plan, _id: `plan-${Date.now()}` };
       return { ...currentPlan };

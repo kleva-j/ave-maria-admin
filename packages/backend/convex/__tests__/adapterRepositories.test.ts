@@ -265,6 +265,44 @@ describe("Convex adapter repositories", () => {
     expect(updated.status).toBe("paused");
   });
 
+  it("finds a savings plan by the user and template index", async () => {
+    const plan = {
+      _id: "plan-1",
+      user_id: "user-1",
+      template_id: "template-1",
+      custom_target_kobo: 100_000n,
+      current_amount_kobo: 0n,
+      start_date: "2026-04-04",
+      end_date: "2026-05-04",
+      status: PlanStatus.ACTIVE,
+      automation_enabled: false,
+      metadata: {},
+      created_at: 1,
+      updated_at: 1,
+    };
+    const first = vi.fn().mockResolvedValue(plan);
+    const withIndex = vi.fn(() => ({ first }));
+    const query = vi.fn(() => ({ withIndex }));
+    const ctx = {
+      db: {
+        query,
+      },
+    } as any;
+
+    const repo = createConvexSavingsPlanRepository(ctx);
+    const found = await repo.findByUserIdAndTemplateId(
+      "user-1" as never,
+      "template-1" as never,
+    );
+
+    expect(query).toHaveBeenCalledWith(TABLE_NAMES.USER_SAVINGS_PLANS);
+    expect(withIndex).toHaveBeenCalledWith(
+      "by_user_id_and_template_id",
+      expect.any(Function),
+    );
+    expect(found?._id).toBe("plan-1");
+  });
+
   it("finds, creates, and updates savings plan templates through the adapter", async () => {
     const template = {
       _id: "template-1",

@@ -382,6 +382,28 @@ function buildComparablePayloadFromTx(tx: Transaction) {
   };
 }
 
+async function findIdempotentTransaction(
+  transactionReadRepository: TransactionReadRepository,
+  input: PostTransactionDTO,
+) {
+  const existing = await transactionReadRepository.findByReference(
+    input.reference,
+  );
+
+  if (!existing) {
+    return null;
+  }
+
+  const existingPayload = buildComparablePayloadFromTx(existing);
+  const inputPayload = buildComparablePayload(input);
+
+  if (stableStringify(existingPayload) === stableStringify(inputPayload)) {
+    return existing;
+  }
+
+  throw new DuplicateReferenceError(input.reference);
+}
+
 export type PostTransactionDeps = {
   transactionReadRepository: TransactionReadRepository;
   transactionWriteRepository: TransactionWriteRepository;
@@ -400,21 +422,12 @@ export function createPostTransactionUseCase(deps: PostTransactionDeps) {
     }
 
     // 2. Look up existing transaction with same reference
-    const existing = await deps.transactionReadRepository.findByReference(
-      input.reference,
+    const existing = await findIdempotentTransaction(
+      deps.transactionReadRepository,
+      input,
     );
-
     if (existing) {
-      // 3. If found and payload matches → idempotent return
-      const existingPayload = buildComparablePayloadFromTx(existing);
-      const inputPayload = buildComparablePayload(input);
-
-      if (stableStringify(existingPayload) === stableStringify(inputPayload)) {
-        return { transaction: existing, idempotent: true };
-      }
-
-      // 4. If found and payload differs → throw DuplicateReferenceError
-      throw new DuplicateReferenceError(input.reference);
+      return { transaction: existing, idempotent: true };
     }
 
     // 5. Validate amount sign
@@ -789,7 +802,9 @@ export function createSetSavingsPlanTemplateActiveStateUseCase(deps: {
 
     const updated = await deps.savingsPlanTemplateRepository.update(
       existing._id,
-      { is_active: input.isActive },
+      {
+        is_active: input.isActive,
+      },
     );
 
     await deps.auditLogService.logChange({
@@ -818,7 +833,10 @@ export function createCreateSavingsPlanUseCase(deps: {
     input: CreateSavingsPlanDTO,
   ): Promise<UserSavingsPlan> {
     const user = ensureActiveUser(
-      requireUser(await deps.userRepository.findById(input.userId), input.userId),
+      requireUser(
+        await deps.userRepository.findById(input.userId),
+        input.userId,
+      ),
     );
     const template = requireTemplate(
       await deps.savingsPlanTemplateRepository.findById(input.templateId),
@@ -829,6 +847,19 @@ export function createCreateSavingsPlanUseCase(deps: {
       throw new DomainError(
         "Savings plan template is not active",
         "savings_plan_template_inactive",
+      );
+    }
+
+    const existingPlan =
+      await deps.savingsPlanRepository.findByUserIdAndTemplateId(
+        user._id,
+        template._id,
+      );
+
+    if (existingPlan) {
+      throw new DomainError(
+        "A savings plan for this template already exists",
+        "savings_plan_already_exists",
       );
     }
 
@@ -889,7 +920,10 @@ export function createPauseSavingsPlanUseCase(deps: {
     input: ChangeSavingsPlanStatusDTO,
   ): Promise<UserSavingsPlan> {
     ensureActiveUser(
-      requireUser(await deps.userRepository.findById(input.userId), input.userId),
+      requireUser(
+        await deps.userRepository.findById(input.userId),
+        input.userId,
+      ),
     );
     const plan = requireOwnedSavingsPlan(
       requireSavingsPlan(
@@ -934,7 +968,10 @@ export function createResumeSavingsPlanUseCase(deps: {
     input: ChangeSavingsPlanStatusDTO,
   ): Promise<UserSavingsPlan> {
     ensureActiveUser(
-      requireUser(await deps.userRepository.findById(input.userId), input.userId),
+      requireUser(
+        await deps.userRepository.findById(input.userId),
+        input.userId,
+      ),
     );
     const plan = requireOwnedSavingsPlan(
       requireSavingsPlan(
@@ -979,7 +1016,10 @@ export function createUpdateSavingsPlanSettingsUseCase(deps: {
     input: UpdateSavingsPlanSettingsDTO,
   ): Promise<UserSavingsPlan> {
     ensureActiveUser(
-      requireUser(await deps.userRepository.findById(input.userId), input.userId),
+      requireUser(
+        await deps.userRepository.findById(input.userId),
+        input.userId,
+      ),
     );
     const plan = requireOwnedSavingsPlan(
       requireSavingsPlan(
@@ -1010,7 +1050,7 @@ export function createUpdateSavingsPlanSettingsUseCase(deps: {
     }
 
     const nextEndDate = input.endDate ?? plan.end_date;
-    resolvePlanDates({
+    const { endDate } = resolvePlanDates({
       durationDays: 1,
       startDate: plan.start_date,
       endDate: nextEndDate,
@@ -1019,7 +1059,7 @@ export function createUpdateSavingsPlanSettingsUseCase(deps: {
 
     const updated = await deps.savingsPlanRepository.update(plan._id, {
       custom_target_kobo: nextTargetKobo,
-      end_date: nextEndDate,
+      end_date: endDate,
       updated_at: Date.now(),
     });
 
@@ -1052,7 +1092,10 @@ export function createCloseSavingsPlanUseCase(deps: {
     input: ChangeSavingsPlanStatusDTO,
   ): Promise<UserSavingsPlan> {
     ensureActiveUser(
-      requireUser(await deps.userRepository.findById(input.userId), input.userId),
+      requireUser(
+        await deps.userRepository.findById(input.userId),
+        input.userId,
+      ),
     );
     const plan = requireOwnedSavingsPlan(
       requireSavingsPlan(
@@ -1085,6 +1128,7 @@ export function createCloseSavingsPlanUseCase(deps: {
 
 export function createRecordSavingsPlanContributionUseCase(deps: {
   savingsPlanRepository: SavingsPlanRepository;
+  transactionReadRepository: TransactionReadRepository;
   postTransaction: (
     input: PostTransactionDTO,
   ) => Promise<PostTransactionOutput>;
@@ -1101,9 +1145,7 @@ export function createRecordSavingsPlanContributionUseCase(deps: {
       ),
       input.userId,
     );
-    assertSavingsPlanCanAcceptContribution(plan);
-
-    return await deps.postTransaction({
+    const transactionInput: PostTransactionDTO = {
       userId: input.userId,
       userPlanId: plan._id,
       type: TxnType.CONTRIBUTION,
@@ -1112,7 +1154,19 @@ export function createRecordSavingsPlanContributionUseCase(deps: {
       metadata: input.metadata,
       source: input.source,
       actorId: input.actorId,
-    });
+    };
+
+    const existing = await findIdempotentTransaction(
+      deps.transactionReadRepository,
+      transactionInput,
+    );
+
+    if (existing) {
+      return { transaction: existing, idempotent: true };
+    }
+
+    assertSavingsPlanCanAcceptContribution(plan);
+
+    return await deps.postTransaction(transactionInput);
   };
 }
-

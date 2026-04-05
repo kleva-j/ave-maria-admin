@@ -52,6 +52,22 @@ function getPatchDb(ctx: Context): Pick<MutationCtx["db"], "patch"> {
   return mutationDb as Pick<MutationCtx["db"], "patch">;
 }
 
+function buildPatch<T extends Record<string, unknown>, K extends keyof T>(
+  patch: T,
+  allowedKeys: readonly K[],
+) {
+  const nextPatch: Partial<Pick<T, K>> = {};
+
+  for (const key of allowedKeys) {
+    const value = patch[key];
+    if (value !== undefined) {
+      nextPatch[key] = value;
+    }
+  }
+
+  return nextPatch;
+}
+
 function docToSavingsPlan(doc: UserSavingsPlan): UserSavingsPlanDomain {
   return {
     _id: doc._id,
@@ -125,6 +141,22 @@ export function createConvexSavingsPlanRepository(
       return docs.map(docToSavingsPlan);
     },
 
+    async findByUserIdAndTemplateId(
+      userId: UserId,
+      templateId: SavingsPlanTemplateId,
+    ): Promise<UserSavingsPlanDomain | null> {
+      const doc = await ctx.db
+        .query(TABLE_NAMES.USER_SAVINGS_PLANS)
+        .withIndex("by_user_id_and_template_id", (q) =>
+          q
+            .eq("user_id", userId as UserId)
+            .eq("template_id", templateId as SavingsPlanTemplateId),
+        )
+        .first();
+
+      return doc ? docToSavingsPlan(doc) : null;
+    },
+
     async create(
       plan: Omit<UserSavingsPlanDomain, "_id">,
     ): Promise<UserSavingsPlanDomain> {
@@ -169,29 +201,33 @@ export function createConvexSavingsPlanRepository(
       }
 
       const mutationDb = getPatchDb(ctx);
-      await mutationDb.patch(existing._id, {
-        ...(patch.template_id !== undefined
-          ? { template_id: patch.template_id as SavingsPlanTemplateId }
-          : {}),
-        ...(patch.custom_target_kobo !== undefined
-          ? { custom_target_kobo: patch.custom_target_kobo }
-          : {}),
-        ...(patch.current_amount_kobo !== undefined
-          ? { current_amount_kobo: patch.current_amount_kobo }
-          : {}),
-        ...(patch.start_date !== undefined
-          ? { start_date: patch.start_date }
-          : {}),
-        ...(patch.end_date !== undefined ? { end_date: patch.end_date } : {}),
-        ...(patch.status !== undefined ? { status: patch.status } : {}),
-        ...(patch.automation_enabled !== undefined
-          ? { automation_enabled: patch.automation_enabled }
-          : {}),
-        ...(patch.metadata !== undefined ? { metadata: patch.metadata } : {}),
-        ...(patch.updated_at !== undefined
-          ? { updated_at: patch.updated_at }
-          : {}),
-      });
+      await mutationDb.patch(
+        existing._id,
+        buildPatch(
+          {
+            template_id: patch.template_id as SavingsPlanTemplateId | undefined,
+            custom_target_kobo: patch.custom_target_kobo,
+            current_amount_kobo: patch.current_amount_kobo,
+            start_date: patch.start_date,
+            end_date: patch.end_date,
+            status: patch.status,
+            automation_enabled: patch.automation_enabled,
+            metadata: patch.metadata,
+            updated_at: patch.updated_at,
+          },
+          [
+            "template_id",
+            "custom_target_kobo",
+            "current_amount_kobo",
+            "start_date",
+            "end_date",
+            "status",
+            "automation_enabled",
+            "metadata",
+            "updated_at",
+          ] as const,
+        ),
+      );
 
       const updated = await ctx.db.get(existing._id);
       if (!updated) {
@@ -281,27 +317,29 @@ export function createConvexSavingsPlanTemplateRepository(
       }
 
       const mutationDb = getPatchDb(ctx);
-      await mutationDb.patch(existing._id, {
-        ...(patch.name !== undefined ? { name: patch.name } : {}),
-        ...(patch.description !== undefined
-          ? { description: patch.description }
-          : {}),
-        ...(patch.default_target_kobo !== undefined
-          ? { default_target_kobo: patch.default_target_kobo }
-          : {}),
-        ...(patch.duration_days !== undefined
-          ? { duration_days: patch.duration_days }
-          : {}),
-        ...(patch.interest_rate !== undefined
-          ? { interest_rate: patch.interest_rate }
-          : {}),
-        ...(patch.automation_type !== undefined
-          ? { automation_type: patch.automation_type }
-          : {}),
-        ...(patch.is_active !== undefined
-          ? { is_active: patch.is_active }
-          : {}),
-      });
+      await mutationDb.patch(
+        existing._id,
+        buildPatch(
+          {
+            name: patch.name,
+            description: patch.description,
+            default_target_kobo: patch.default_target_kobo,
+            duration_days: patch.duration_days,
+            interest_rate: patch.interest_rate,
+            automation_type: patch.automation_type,
+            is_active: patch.is_active,
+          },
+          [
+            "name",
+            "description",
+            "default_target_kobo",
+            "duration_days",
+            "interest_rate",
+            "automation_type",
+            "is_active",
+          ] as const,
+        ),
+      );
 
       const updated = await ctx.db.get(existing._id);
       if (!updated) {

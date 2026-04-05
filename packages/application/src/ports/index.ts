@@ -34,6 +34,10 @@ export interface UserRepository {
 export interface SavingsPlanRepository {
   findById(id: string): Promise<UserSavingsPlan | null>;
   findByUserId(userId: string): Promise<UserSavingsPlan[]>;
+  findByUserIdAndTemplateId(
+    userId: string,
+    templateId: string,
+  ): Promise<UserSavingsPlan | null>;
   create(plan: Omit<UserSavingsPlan, "_id">): Promise<UserSavingsPlan>;
   update(
     id: string,
@@ -149,7 +153,7 @@ export interface AuditLogService {
     severity: string;
     metadata?: Record<string, unknown>;
   }): Promise<void>;
-  logChange<
-    T extends AuditLogChangeSnapshot = AuditLogChangeSnapshot,
-  >(params: AuditLogChangeParams<T>): Promise<void>;
+  logChange<T extends AuditLogChangeSnapshot = AuditLogChangeSnapshot>(
+    params: AuditLogChangeParams<T>,
+  ): Promise<void>;
 }

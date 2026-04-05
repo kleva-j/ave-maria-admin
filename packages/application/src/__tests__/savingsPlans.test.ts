@@ -1,18 +1,19 @@
 import { describe, expect, it, vi } from "vitest";
 
 import type {
-  SavingsPlanTemplateRepository,
-  SavingsPlanRepository,
-  AuditLogService,
-  UserRepository,
-} from "../ports/index.js";
-
-import type {
   SavingsPlanTemplate,
   UserSavingsPlan,
   Transaction,
   User,
 } from "@avm-daily/domain";
+
+import type {
+  SavingsPlanTemplateRepository,
+  TransactionReadRepository,
+  SavingsPlanRepository,
+  AuditLogService,
+  UserRepository,
+} from "../ports/index.js";
 
 import { DomainError, TransactionSource, TxnType } from "@avm-daily/domain";
 
@@ -165,6 +166,12 @@ function createPlanRepository(
       [...store.values()]
         .filter((plan) => plan.user_id === userId)
         .map((plan) => ({ ...plan })),
+    findByUserIdAndTemplateId: async (userId, templateId) => {
+      const plan = [...store.values()].find(
+        (item) => item.user_id === userId && item.template_id === templateId,
+      );
+      return plan ? { ...plan } : null;
+    },
     create: async (plan) => {
       const created = { ...plan, _id: `plan-${++counter}` };
       store.set(created._id, created);
@@ -265,6 +272,25 @@ describe("savings plan application use cases", () => {
       duration_days: template.duration_days,
     });
     expect(auditLogService.logChange).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects creating a duplicate savings plan for the same user and template", async () => {
+    const user = createUser();
+    const template = createTemplate();
+    const existingPlan = createPlan();
+    const createPlanUseCase = createCreateSavingsPlanUseCase({
+      userRepository: createUserRepository([user]),
+      savingsPlanRepository: createPlanRepository([existingPlan]),
+      savingsPlanTemplateRepository: createTemplateRepository([template]),
+      auditLogService: createAuditLogService(),
+    });
+
+    await expect(
+      createPlanUseCase({
+        userId: user._id,
+        templateId: template._id,
+      }),
+    ).rejects.toMatchObject({ code: "savings_plan_already_exists" });
   });
 
   it("rejects plan creation for inactive templates and inactive users", async () => {
@@ -383,6 +409,12 @@ describe("savings plan application use cases", () => {
   it("records contributions only for active plans and delegates to the transaction engine", async () => {
     const activePlan = createPlan();
     const pausedPlan = createPlan({ _id: "plan-2", status: "paused" });
+    const transactionReadRepository: TransactionReadRepository = {
+      findByReference: async () => null,
+      findById: async () => null,
+      findByUserId: async () => [],
+      findByReversalOfTransactionId: async () => [],
+    };
     const postTransaction = vi.fn(
       async (): Promise<{ transaction: Transaction; idempotent: boolean }> => ({
         transaction: {
@@ -402,6 +434,7 @@ describe("savings plan application use cases", () => {
     const planRepository = createPlanRepository([activePlan, pausedPlan]);
     const recordContribution = createRecordSavingsPlanContributionUseCase({
       savingsPlanRepository: planRepository,
+      transactionReadRepository,
       postTransaction,
     });
 
@@ -436,5 +469,51 @@ describe("savings plan application use cases", () => {
       actorId: "admin-1",
     });
     expect(result.transaction.reference).toBe("ref-1");
+  });
+
+  it("returns the original contribution on an idempotent retry before checking plan mutability", async () => {
+    const pausedPlan = createPlan({ status: "paused" });
+    const existingTransaction: Transaction = {
+      _id: "tx-1",
+      user_id: pausedPlan.user_id,
+      user_plan_id: pausedPlan._id,
+      type: TxnType.CONTRIBUTION,
+      amount_kobo: 25_000n,
+      reference: "ref-paused",
+      metadata: { channel: "admin_console" },
+      created_at: 10,
+    };
+    const transactionReadRepository: TransactionReadRepository = {
+      findByReference: async (reference) =>
+        reference === existingTransaction.reference
+          ? existingTransaction
+          : null,
+      findById: async () => null,
+      findByUserId: async () => [],
+      findByReversalOfTransactionId: async () => [],
+    };
+    const postTransaction = vi.fn();
+
+    const recordContribution = createRecordSavingsPlanContributionUseCase({
+      savingsPlanRepository: createPlanRepository([pausedPlan]),
+      transactionReadRepository,
+      postTransaction,
+    });
+
+    const result = await recordContribution({
+      userId: pausedPlan.user_id,
+      planId: pausedPlan._id,
+      amountKobo: 25_000n,
+      reference: existingTransaction.reference,
+      metadata: { channel: "admin_console" },
+      source: TransactionSource.ADMIN,
+      actorId: "admin-1",
+    });
+
+    expect(result).toEqual({
+      transaction: existingTransaction,
+      idempotent: true,
+    });
+    expect(postTransaction).not.toHaveBeenCalled();
   });
 });
