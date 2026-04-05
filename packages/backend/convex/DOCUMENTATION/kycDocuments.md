@@ -11,7 +11,7 @@ The `kycDocuments.ts` module provides a complete document upload, storage, and r
 - Document metadata management
 - Access control enforcement
 - Audit trail maintenance
-- Document lifecycle management
+- Document lifecycle management, including rejected-document replacement
 
 ---
 
@@ -95,7 +95,6 @@ const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".pdf"] as const;
 ```typescript
 const ALLOWED_MIME_TYPES = [
   "image/jpeg",
-  "image/jpg",
   "image/png",
   "application/pdf",
 ] as const;
@@ -104,7 +103,7 @@ const ALLOWED_MIME_TYPES = [
 ### File Size Limit
 
 ```typescript
-const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 ```
 
 ---
@@ -161,7 +160,7 @@ if (!response.ok) {
 const storageId = extractStorageId(uploadUrl);
 ```
 
-**Important**: This step happens client-side, not through Convex mutations.
+**Important**: This step happens client-side, not through Convex mutations. After rejection, a fresh upload of the same document type is allowed as long as there is no existing pending document of that type.
 
 ---
 
@@ -196,6 +195,7 @@ const document = await ctx.runMutation(kycDocuments.uploadDocument, {
   file_size: 2048576,
   mime_type: "image/jpeg",
   uploaded_at: 1234567890000,
+  supersedes_document_id: Id<"kyc_documents"> | undefined,
   created_at: 1234567890000,
 }
 ```
@@ -673,7 +673,7 @@ throw new ConvexError(
 throw new ConvexError(
   `File too large. Maximum size: ${MAX_FILE_SIZE / (1024 * 1024)}MB`
 );
-// Example: "File too large. Maximum size: 10MB"
+// Example: "File too large. Maximum size: 5MB"
 ```
 
 #### Duplicate Pending Document
