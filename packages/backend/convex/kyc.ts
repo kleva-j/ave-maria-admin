@@ -65,8 +65,12 @@ function createStaticUserRepository(user: ConvexUser): UserRepository {
 
   return {
     findById: async (id) => (domainUser._id === id ? domainUser : null),
-    updateBalance: async () => undefined,
-    updateStatus: async () => undefined,
+    updateBalance: async () => {
+      throw new Error("updateBalance not supported");
+    },
+    updateStatus: async () => {
+      throw new Error("updateStatus not supported");
+    },
   };
 }
 
@@ -208,8 +212,21 @@ export const adminListPendingKyc = query({
       }[];
     }[];
 
+    const userIds = Array.from(grouped.keys());
+    const users = await Promise.all(
+      userIds.map((userId) => ctx.db.get(userId)),
+    );
+    const usersById = new Map<UserId, ConvexUser>();
+
+    for (const [index, userId] of userIds.entries()) {
+      const user = users[index];
+      if (user) {
+        usersById.set(userId, user);
+      }
+    }
+
     for (const [userId, docs] of grouped) {
-      const user = await ctx.db.get(userId);
+      const user = usersById.get(userId);
       if (!user) continue;
 
       docs.sort((a, b) => a.created_at - b.created_at);

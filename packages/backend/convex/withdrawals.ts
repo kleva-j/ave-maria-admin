@@ -178,7 +178,9 @@ function normalizeWithdrawalMethodValue(withdrawal: Withdrawal) {
     case WithdrawalMethod.BANK_TRANSFER:
       return WithdrawalMethod.BANK_TRANSFER;
     default:
-      throw new Error(`Unknown withdrawal method: ${String(withdrawal.method)}`);
+      throw new Error(
+        `Unknown withdrawal method: ${String(withdrawal.method)}`,
+      );
   }
 }
 
@@ -332,6 +334,14 @@ async function assertAdminCanHandleAction(
     throw new ConvexError(getCashWithdrawalForbiddenData(input.action));
   }
 
+  if (!capability.allowed) {
+    throw new ConvexError({
+      code: "withdrawal_action_blocked",
+      action: input.action,
+      message: capability.reason ?? "Withdrawal action is blocked",
+    });
+  }
+
   if (
     input.action === WithdrawalAction.APPROVE ||
     input.action === WithdrawalAction.PROCESS
@@ -339,14 +349,6 @@ async function assertAdminCanHandleAction(
     await assertWithdrawalAdminActionAllowed(ctx, {
       userId: toUserId(input.userId),
       actorAdminId: toAdminUserId(input.adminId),
-    });
-  }
-
-  if (!capability.allowed) {
-    throw new ConvexError({
-      code: "withdrawal_action_blocked",
-      action: input.action,
-      message: capability.reason ?? "Withdrawal action is blocked",
     });
   }
 }
