@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { createApplyKycDecisionUseCase } from "@avm-daily/application/use-cases";
 import { AuditActions } from "convex-audit-log";
 
+import { createConvexEventOutboxService } from "./adapters/eventOutboxAdapter";
 import { RESOURCE_TYPE, TABLE_NAMES, EVENT_TYPE, UserStatus } from "./shared";
 import { createConvexKycDocumentRepository } from "./adapters/kycAdapters";
 import { createConvexAuditLogService } from "./adapters/auditLogAdapter";
@@ -206,6 +207,7 @@ export const processKycResult = internalMutation({
       userRepository: createConvexUserRepository(ctx),
       kycDocumentRepository: createConvexKycDocumentRepository(ctx),
       auditLogService: createConvexAuditLogService(ctx),
+      eventOutboxService: createConvexEventOutboxService(ctx),
     });
 
     const result = await applyKycDecision({

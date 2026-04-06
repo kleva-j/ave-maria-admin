@@ -28,6 +28,7 @@ import { createManualWithdrawalPayoutService } from "./adapters/withdrawalPayout
 import { createConvexBankAccountRepository } from "./adapters/bankAccountAdapter";
 import { syncWithdrawalInsert, syncWithdrawalUpdate } from "./aggregateHelpers";
 import { createConvexWithdrawalRepository } from "./adapters/withdrawalAdapter";
+import { createConvexEventOutboxService } from "./adapters/eventOutboxAdapter";
 import { createConvexAuditLogService } from "./adapters/auditLogAdapter";
 import { createConvexUserRepository } from "./adapters/userAdapters";
 import { postTransactionEntry } from "./transactions";
@@ -373,6 +374,7 @@ function buildRequestWithdrawalUseCase(ctx: MutationCtx) {
       createConvexWithdrawalReservationRepository(ctx),
     bankAccountRepository: createConvexBankAccountRepository(ctx),
     auditLogService: createConvexAuditLogService(ctx),
+    eventOutboxService: createConvexEventOutboxService(ctx),
     assertWithdrawalAllowed: async (input) => {
       const user = await ctx.db.get(toUserId(input.userId));
       if (!user) {
@@ -532,6 +534,7 @@ export const approve = mutation({
       const approveWithdrawal = createApproveWithdrawalUseCase({
         withdrawalRepository: createConvexWithdrawalRepository(ctx),
         auditLogService: createConvexAuditLogService(ctx),
+        eventOutboxService: createConvexEventOutboxService(ctx),
         assertAdminActionAllowed: buildAdminActionAssertion(ctx),
       });
 
@@ -569,6 +572,7 @@ export const reject = mutation({
         withdrawalReservationRepository:
           createConvexWithdrawalReservationRepository(ctx),
         auditLogService: createConvexAuditLogService(ctx),
+        eventOutboxService: createConvexEventOutboxService(ctx),
         assertAdminActionAllowed: buildAdminActionAssertion(ctx),
       });
 
@@ -622,6 +626,7 @@ export const process = mutation({
             }),
           ),
         auditLogService: createConvexAuditLogService(ctx),
+        eventOutboxService: createConvexEventOutboxService(ctx),
         assertAdminActionAllowed: buildAdminActionAssertion(ctx),
       });
 

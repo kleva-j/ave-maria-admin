@@ -38,6 +38,7 @@ import { ConvexError, v } from "convex/values";
 
 import { internalMutation, query } from "./_generated/server";
 import { getAdminUser, getUser, isRecord } from "./utils";
+import { appendNotificationEvents } from "./adminAlerts";
 import { auditLog } from "./auditLog";
 
 import {
@@ -971,7 +972,6 @@ export const runReconciliation = internalMutation({
   args: {},
   returns: reconciliationRunValidator,
   handler: async (ctx) => {
-    const admin = await getAdminUser(ctx);
     const startedAt = Date.now();
 
     const runId = await ctx.db.insert(
@@ -990,7 +990,6 @@ export const runReconciliation = internalMutation({
 
     await auditLog.log(ctx, {
       action: "transaction.reconciliation.started",
-      actorId: admin._id,
       resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
       resourceId: runId,
       severity: "info",
@@ -1200,11 +1199,31 @@ export const runReconciliation = internalMutation({
         },
       });
 
+      await appendNotificationEvents(ctx, [
+        {
+          eventType: "reconciliation_run_completed",
+          sourceKind: "system",
+          resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
+          resourceId: String(runId),
+          dedupeKey: `reconciliation_run_completed:${runId}:${completedAt}`,
+          occurredAt: completedAt,
+          payload: {
+            run_id: String(runId),
+            issue_count: issues.length,
+            user_count: users.length,
+            plan_count: plans.length,
+            transaction_count: allTransactions.length,
+            completed_at: completedAt,
+          },
+        },
+      ]);
+
       return run;
     } catch (error) {
+      const completedAt = Date.now();
       await ctx.db.patch(runId, {
         status: TransactionReconciliationRunStatus.FAILED,
-        completed_at: Date.now(),
+        completed_at: completedAt,
       });
 
       await auditLog.log(ctx, {
@@ -1216,6 +1235,22 @@ export const runReconciliation = internalMutation({
           error: error instanceof Error ? error.message : "Unknown error",
         },
       });
+
+      await appendNotificationEvents(ctx, [
+        {
+          eventType: "reconciliation_run_failed",
+          sourceKind: "system",
+          resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
+          resourceId: String(runId),
+          dedupeKey: `reconciliation_run_failed:${runId}:${completedAt}`,
+          occurredAt: completedAt,
+          payload: {
+            run_id: String(runId),
+            error: error instanceof Error ? error.message : "Unknown error",
+            failed_at: completedAt,
+          },
+        },
+      ]);
 
       throw error;
     }

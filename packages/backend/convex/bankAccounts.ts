@@ -21,6 +21,7 @@ import type { MutationCtx } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 
 import { sortAccounts, getAdminUser, getUser } from "./utils";
+import { appendNotificationEvents } from "./adminAlerts";
 import { auditLog } from "./auditLog";
 import {
   BankAccountEventType,
@@ -866,6 +867,24 @@ export const submitForVerification = mutation({
       },
       actorUserId: user._id,
     });
+
+    await appendNotificationEvents(ctx, [
+      {
+        eventType: "bank_verification_submitted",
+        sourceKind: "user",
+        resourceType: RESOURCE_TYPE.BANK_ACCOUNTS,
+        resourceId: String(updated._id),
+        dedupeKey: `bank_verification_submitted:${updated._id}:${updated.verification_submitted_at ?? now}`,
+        occurredAt: now,
+        payload: {
+          account_id: String(updated._id),
+          user_id: String(updated.user_id),
+          verification_status: updated.verification_status,
+          verification_submitted_at: updated.verification_submitted_at,
+          documents_submitted: uploadedDocTypes,
+        },
+      },
+    ]);
 
     return updated;
   },
