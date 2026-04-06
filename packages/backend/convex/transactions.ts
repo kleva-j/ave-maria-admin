@@ -25,6 +25,9 @@
  */
 import type { MutationCtx } from "./_generated/server";
 import type {
+  TransactionReconciliationIssueId,
+  TransactionReconciliationRunId,
+  TransactionReconciliationRun,
   UserSavingsPlanId,
   TransactionId,
   AdminUserId,
@@ -37,11 +40,12 @@ import { DomainError, computeProjectionDelta } from "@avm-daily/domain";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 
+import { internalAction, internalMutation, internalQuery, query } from "./_generated/server";
 import { createConvexSavingsPlanRepository } from "./adapters/savingsPlanAdapters";
 import { createConvexEventOutboxService } from "./adapters/eventOutboxAdapter";
 import { createConvexUserRepository } from "./adapters/userAdapters";
-import { internalMutation, query } from "./_generated/server";
 import { getAdminUser, getUser, isRecord } from "./utils";
+import { internal } from "./_generated/api";
 import { auditLog } from "./auditLog";
 
 import {
@@ -68,6 +72,8 @@ import {
   TransactionReconciliationIssueType,
   TransactionReconciliationRunStatus,
   NotificationEventType,
+  transactionReconciliationIssueStatus,
+  transactionReconciliationIssueType,
   transactionSource,
   TransactionSource,
   RESOURCE_TYPE,
@@ -120,6 +126,59 @@ const paginatedTransactionsValidator = v.object({
   continueCursor: v.string(),
   isDone: v.boolean(),
 });
+
+const reconciliationUsersPageValidator = v.object({
+  page: v.array(
+    v.object({
+      _id: v.id("users"),
+      total_balance_kobo: v.int64(),
+      savings_balance_kobo: v.int64(),
+    }),
+  ),
+  continueCursor: v.string(),
+  isDone: v.boolean(),
+});
+
+const reconciliationPlansPageValidator = v.object({
+  page: v.array(
+    v.object({
+      _id: v.id("user_savings_plans"),
+      user_id: v.id("users"),
+      current_amount_kobo: v.int64(),
+    }),
+  ),
+  continueCursor: v.string(),
+  isDone: v.boolean(),
+});
+
+const reconciliationIssueIdsPageValidator = v.object({
+  page: v.array(v.id("transaction_reconciliation_issues")),
+  continueCursor: v.string(),
+  isDone: v.boolean(),
+});
+
+const transactionReferenceLookupValidator = v.array(
+  v.object({
+    _id: v.id("transactions"),
+    reference: v.string(),
+  }),
+);
+
+const reconciliationIssueInputValidator = v.object({
+  issue_type: transactionReconciliationIssueType,
+  issue_status: transactionReconciliationIssueStatus,
+  user_id: v.optional(v.id("users")),
+  user_plan_id: v.optional(v.id("user_savings_plans")),
+  transaction_id: v.optional(v.id("transactions")),
+  reference: v.optional(v.string()),
+  expected_amount_kobo: v.optional(v.int64()),
+  actual_amount_kobo: v.optional(v.int64()),
+  details: v.optional(v.any()),
+  created_at: v.number(),
+});
+
+const RECONCILIATION_READ_PAGE_SIZE = 500;
+const RECONCILIATION_WRITE_BATCH_SIZE = 100;
 
 const reconciliationRunValidator = v.object({
   _id: v.id("transaction_reconciliation_runs"),
@@ -485,6 +544,43 @@ function buildTransactionSummary(transaction: Transaction) {
   };
 }
 
+type ReconciliationTransactionPage = {
+  page: Array<ReturnType<typeof buildTransactionSummary>>;
+  continueCursor: string;
+  isDone: boolean;
+};
+
+type ReconciliationUsersPage = {
+  page: Array<{
+    _id: UserId;
+    total_balance_kobo: bigint;
+    savings_balance_kobo: bigint;
+  }>;
+  continueCursor: string;
+  isDone: boolean;
+};
+
+type ReconciliationPlansPage = {
+  page: Array<{
+    _id: UserSavingsPlanId;
+    user_id: UserId;
+    current_amount_kobo: bigint;
+  }>;
+  continueCursor: string;
+  isDone: boolean;
+};
+
+type ReconciliationIssueIdsPage = {
+  page: TransactionReconciliationIssueId[];
+  continueCursor: string;
+  isDone: boolean;
+};
+
+type TransactionReferenceLookup = Array<{
+  _id: TransactionId;
+  reference: string;
+}>;
+
 async function getUserPlan(
   ctx: Context,
   userId: UserId,
@@ -513,7 +609,9 @@ async function getTransactionsByReference(ctx: Context, reference: string) {
     .collect();
 }
 
-function getEffectiveType(transaction: Transaction) {
+function getEffectiveType(
+  transaction: Pick<Transaction, "_id" | "type" | "reversal_of_type">,
+) {
   if (transaction.type !== TxnType.REVERSAL) {
     return transaction.type;
   }
@@ -525,6 +623,16 @@ function getEffectiveType(transaction: Transaction) {
   }
 
   return transaction.reversal_of_type;
+}
+
+function chunkArray<T>(items: T[], size: number) {
+  const chunks: T[][] = [];
+
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+
+  return chunks;
 }
 
 /**
@@ -967,25 +1075,130 @@ export const rebuildPlanProjection = internalMutation({
  * It also detects ledger anomalies like "Double Reversals" or "Orphaned Reversals".
  * Any mismatches are recorded as `transaction_reconciliation_issues` for admin review.
  */
-export const runReconciliation = internalMutation({
-  args: {},
-  returns: reconciliationRunValidator,
-  handler: async (ctx) => {
-    const startedAt = Date.now();
+export const _getReconciliationUsersPage = internalQuery({
+  args: {
+    cursor: v.union(v.string(), v.null()),
+  },
+  returns: reconciliationUsersPageValidator,
+  handler: async (ctx, args) => {
+    const result = await ctx.db
+      .query(TABLE_NAMES.USERS)
+      .paginate({ numItems: RECONCILIATION_READ_PAGE_SIZE, cursor: args.cursor });
 
-    const runId = await ctx.db.insert(
-      TABLE_NAMES.TRANSACTION_RECONCILIATION_RUNS,
-      {
-        status: TransactionReconciliationRunStatus.RUNNING,
-        started_at: startedAt,
-        completed_at: undefined,
-        issue_count: 0,
-        user_count: 0,
-        plan_count: 0,
-        transaction_count: 0,
-        created_at: startedAt,
-      },
+    return {
+      page: result.page.map(
+        ({ _id, total_balance_kobo, savings_balance_kobo }) => ({
+          _id,
+          total_balance_kobo,
+          savings_balance_kobo,
+        }),
+      ),
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+export const _getReconciliationPlansPage = internalQuery({
+  args: {
+    cursor: v.union(v.string(), v.null()),
+  },
+  returns: reconciliationPlansPageValidator,
+  handler: async (ctx, args) => {
+    const result = await ctx.db
+      .query(TABLE_NAMES.USER_SAVINGS_PLANS)
+      .paginate({ numItems: RECONCILIATION_READ_PAGE_SIZE, cursor: args.cursor });
+
+    return {
+      page: result.page.map(({ _id, user_id, current_amount_kobo }) => ({
+        _id,
+        user_id,
+        current_amount_kobo,
+      })),
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+export const _getReconciliationTransactionsPage = internalQuery({
+  args: {
+    cursor: v.union(v.string(), v.null()),
+  },
+  returns: paginatedTransactionsValidator,
+  handler: async (ctx, args) => {
+    const result = await ctx.db
+      .query(TABLE_NAMES.TRANSACTIONS)
+      .withIndex("by_created_at")
+      .paginate({ numItems: RECONCILIATION_READ_PAGE_SIZE, cursor: args.cursor });
+
+    return {
+      page: result.page.map(buildTransactionSummary),
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+export const _getOpenReconciliationIssueIdsPage = internalQuery({
+  args: {
+    cursor: v.union(v.string(), v.null()),
+  },
+  returns: reconciliationIssueIdsPageValidator,
+  handler: async (ctx, args) => {
+    const result = await ctx.db
+      .query(TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES)
+      .withIndex("by_issue_status", (q) =>
+        q.eq("issue_status", TransactionReconciliationIssueStatus.OPEN),
+      )
+      .paginate({
+        numItems: RECONCILIATION_READ_PAGE_SIZE,
+        cursor: args.cursor,
+      });
+
+    return {
+      page: result.page.map((issue) => issue._id),
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+export const _getTransactionReferencesByIds = internalQuery({
+  args: {
+    transactionIds: v.array(v.id("transactions")),
+  },
+  returns: transactionReferenceLookupValidator,
+  handler: async (ctx, args) => {
+    const transactions = await Promise.all(
+      args.transactionIds.map(async (transactionId) => await ctx.db.get(transactionId)),
     );
+
+    return transactions
+      .filter((transaction) => transaction !== null)
+      .map((transaction) => ({
+        _id: transaction._id,
+        reference: transaction.reference,
+      }));
+  },
+});
+
+export const _startReconciliationRun = internalMutation({
+  args: {
+    startedAt: v.number(),
+  },
+  returns: v.id("transaction_reconciliation_runs"),
+  handler: async (ctx, args) => {
+    const runId = await ctx.db.insert(TABLE_NAMES.TRANSACTION_RECONCILIATION_RUNS, {
+      status: TransactionReconciliationRunStatus.RUNNING,
+      started_at: args.startedAt,
+      completed_at: undefined,
+      issue_count: 0,
+      user_count: 0,
+      plan_count: 0,
+      transaction_count: 0,
+      created_at: args.startedAt,
+    });
 
     await auditLog.log(ctx, {
       action: "transaction.reconciliation.started",
@@ -994,104 +1207,396 @@ export const runReconciliation = internalMutation({
       severity: "info",
     });
 
+    return runId;
+  },
+});
+
+export const _resolveReconciliationIssuesBatch = internalMutation({
+  args: {
+    issueIds: v.array(v.id("transaction_reconciliation_issues")),
+    resolvedAt: v.number(),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    let resolved = 0;
+
+    for (const issueId of args.issueIds) {
+      const oldIssue = await ctx.db.get(issueId);
+      if (!oldIssue || oldIssue.issue_status !== TransactionReconciliationIssueStatus.OPEN) {
+        continue;
+      }
+
+      await ctx.db.patch(issueId, {
+        issue_status: TransactionReconciliationIssueStatus.RESOLVED,
+        resolved_at: args.resolvedAt,
+      });
+
+      const newIssue = await ctx.db.get(issueId);
+      if (newIssue) {
+        await syncReconciliationIssueUpdate(ctx, oldIssue, newIssue);
+      }
+
+      resolved += 1;
+    }
+
+    return resolved;
+  },
+});
+
+export const _insertReconciliationIssuesBatch = internalMutation({
+  args: {
+    runId: v.id("transaction_reconciliation_runs"),
+    issues: v.array(reconciliationIssueInputValidator),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    let inserted = 0;
+
+    for (const issue of args.issues) {
+      const issueId = await ctx.db.insert(
+        TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES,
+        {
+          run_id: args.runId,
+          ...issue,
+        },
+      );
+
+      const createdIssue = await ctx.db.get(issueId);
+      if (createdIssue) {
+        await syncReconciliationIssueInsert(ctx, createdIssue);
+      }
+
+      inserted += 1;
+    }
+
+    return inserted;
+  },
+});
+
+export const _completeReconciliationRun = internalMutation({
+  args: {
+    runId: v.id("transaction_reconciliation_runs"),
+    completedAt: v.number(),
+    issueCount: v.number(),
+    userCount: v.number(),
+    planCount: v.number(),
+    transactionCount: v.number(),
+  },
+  returns: reconciliationRunValidator,
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.runId, {
+      status: TransactionReconciliationRunStatus.COMPLETED,
+      completed_at: args.completedAt,
+      issue_count: args.issueCount,
+      user_count: args.userCount,
+      plan_count: args.planCount,
+      transaction_count: args.transactionCount,
+    });
+
+    const run = await ctx.db.get(args.runId);
+    if (!run) {
+      throw new ConvexError("Failed to persist reconciliation run");
+    }
+
+    await auditLog.log(ctx, {
+      action: "transaction.reconciliation.completed",
+      resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
+      resourceId: args.runId,
+      severity: args.issueCount > 0 ? "warning" : "info",
+      metadata: {
+        issue_count: args.issueCount,
+        user_count: args.userCount,
+        plan_count: args.planCount,
+        transaction_count: args.transactionCount,
+      },
+    });
+
+    await createConvexEventOutboxService(ctx).append([
+      {
+        eventType: NotificationEventType.RECONCILIATION_RUN_COMPLETED,
+        sourceKind: "system",
+        resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
+        resourceId: String(args.runId),
+        dedupeKey: `reconciliation_run_completed:${args.runId}:${args.completedAt}`,
+        occurredAt: args.completedAt,
+        payload: {
+          run_id: String(args.runId),
+          issue_count: args.issueCount,
+          user_count: args.userCount,
+          plan_count: args.planCount,
+          transaction_count: args.transactionCount,
+          completed_at: args.completedAt,
+        },
+      },
+    ]);
+
+    return run;
+  },
+});
+
+export const _recordReconciliationFailure = internalMutation({
+  args: {
+    runId: v.id("transaction_reconciliation_runs"),
+    completedAt: v.number(),
+    error: v.string(),
+  },
+  returns: reconciliationRunValidator,
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.runId, {
+      status: TransactionReconciliationRunStatus.FAILED,
+      completed_at: args.completedAt,
+    });
+
+    await auditLog.log(ctx, {
+      action: "transaction.reconciliation.failed",
+      resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
+      resourceId: args.runId,
+      severity: "error",
+      metadata: {
+        error: args.error,
+      },
+    });
+
+    await createConvexEventOutboxService(ctx).append([
+      {
+        eventType: NotificationEventType.RECONCILIATION_RUN_FAILED,
+        sourceKind: "system",
+        resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
+        resourceId: String(args.runId),
+        dedupeKey: `reconciliation_run_failed:${args.runId}:${args.completedAt}`,
+        occurredAt: args.completedAt,
+        payload: {
+          run_id: String(args.runId),
+          error: args.error,
+          failed_at: args.completedAt,
+        },
+      },
+    ]);
+
+    const failedRun = await ctx.db.get(args.runId);
+    if (!failedRun) {
+      throw new ConvexError("Failed to persist failed reconciliation run");
+    }
+
+    return failedRun;
+  },
+});
+
+export const runReconciliation = internalAction({
+  args: {},
+  returns: reconciliationRunValidator,
+  handler: async (ctx): Promise<TransactionReconciliationRun> => {
+    const startedAt = Date.now();
+    const runId: TransactionReconciliationRunId = await ctx.runMutation(
+      internal.transactions._startReconciliationRun,
+      {
+        startedAt,
+      },
+    );
+
     try {
-      const previousOpenIssues = await ctx.db
-        .query(TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES)
-        .withIndex("by_issue_status", (q) =>
-          q.eq("issue_status", TransactionReconciliationIssueStatus.OPEN),
-        )
-        .collect();
+      const previousOpenIssueIds: TransactionReconciliationIssueId[] = [];
+      let openIssueCursor: string | null = null;
 
-      const users = await ctx.db.query(TABLE_NAMES.USERS).collect();
-      const plans = await ctx.db
-        .query(TABLE_NAMES.USER_SAVINGS_PLANS)
-        .collect();
-      const allTransactions = await ctx.db
-        .query(TABLE_NAMES.TRANSACTIONS)
-        .collect();
-      const reversals: Transaction[] = [];
-      const issues: Array<ReturnType<typeof buildReconciliationIssue>> = [];
-      const userProjectedBalances = new Map<string, { totalBalanceKobo: bigint; savingsBalanceKobo: bigint }>();
-      const planProjectedAmounts = new Map<string, bigint>();
-      const transactionsById = new Map<string, Transaction>();
-
-      for (const transaction of allTransactions) {
-        transactionsById.set(String(transaction._id), transaction);
-
-        if (transaction.type === TxnType.REVERSAL) {
-          reversals.push(transaction);
-        }
-
-        const effectiveType = getEffectiveType(transaction);
-        const delta = computeProjectionDelta(
-          effectiveType,
-          transaction.amount_kobo,
-          transaction.user_plan_id,
+      for (;;) {
+        const result: ReconciliationIssueIdsPage = await ctx.runQuery(
+          internal.transactions._getOpenReconciliationIssueIdsPage,
+          { cursor: openIssueCursor },
         );
 
-        // Update user balances
-        const userId = String(transaction.user_id);
-        const userBal = userProjectedBalances.get(userId) ?? { totalBalanceKobo: 0n, savingsBalanceKobo: 0n };
-        userBal.totalBalanceKobo += delta.totalBalanceKobo;
-        userBal.savingsBalanceKobo += delta.savingsBalanceKobo;
-        userProjectedBalances.set(userId, userBal);
+        previousOpenIssueIds.push(...result.page);
 
-        // Update plan balances
-        if (transaction.user_plan_id) {
-          const planId = String(transaction.user_plan_id);
-          const planAmount = planProjectedAmounts.get(planId) ?? 0n;
-          planProjectedAmounts.set(planId, planAmount + delta.planAmountKobo);
+        if (result.isDone) {
+          break;
+        }
+
+        openIssueCursor = result.continueCursor;
+      }
+
+      const reversals: Array<{
+        _id: TransactionId;
+        reference: string;
+        reversal_of_transaction_id?: TransactionId;
+        reversal_of_reference?: string;
+        reversal_of_type?: Transaction["reversal_of_type"];
+      }> = [];
+      const issues: Array<ReturnType<typeof buildReconciliationIssue>> = [];
+      const userProjectedBalances = new Map<
+        string,
+        { totalBalanceKobo: bigint; savingsBalanceKobo: bigint }
+      >();
+      const planProjectedAmounts = new Map<string, bigint>();
+      let transactionCount = 0;
+      let transactionCursor: string | null = null;
+
+      for (;;) {
+        const result: ReconciliationTransactionPage = await ctx.runQuery(
+          internal.transactions._getReconciliationTransactionsPage,
+          { cursor: transactionCursor },
+        );
+
+        transactionCount += result.page.length;
+
+        for (const transaction of result.page) {
+          if (transaction.type === TxnType.REVERSAL) {
+            reversals.push({
+              _id: transaction._id,
+              reference: transaction.reference,
+              reversal_of_transaction_id: transaction.reversal_of_transaction_id,
+              reversal_of_reference: transaction.reversal_of_reference,
+              reversal_of_type: transaction.reversal_of_type,
+            });
+          }
+
+          const effectiveType = getEffectiveType(transaction);
+          const delta = computeProjectionDelta(
+            effectiveType,
+            transaction.amount_kobo,
+            transaction.user_plan_id,
+          );
+
+          const userId = String(transaction.user_id);
+          const userBal = userProjectedBalances.get(userId) ?? {
+            totalBalanceKobo: 0n,
+            savingsBalanceKobo: 0n,
+          };
+          userBal.totalBalanceKobo += delta.totalBalanceKobo;
+          userBal.savingsBalanceKobo += delta.savingsBalanceKobo;
+          userProjectedBalances.set(userId, userBal);
+
+          if (transaction.user_plan_id) {
+            const planId = String(transaction.user_plan_id);
+            const planAmount = planProjectedAmounts.get(planId) ?? 0n;
+            planProjectedAmounts.set(planId, planAmount + delta.planAmountKobo);
+          }
+        }
+
+        if (result.isDone) {
+          break;
+        }
+
+        transactionCursor = result.continueCursor;
+      }
+
+      let userCount = 0;
+      let userCursor: string | null = null;
+
+      for (;;) {
+        const result: ReconciliationUsersPage = await ctx.runQuery(
+          internal.transactions._getReconciliationUsersPage,
+          { cursor: userCursor },
+        );
+
+        userCount += result.page.length;
+
+        for (const user of result.page) {
+          const projected = userProjectedBalances.get(String(user._id)) ?? {
+            totalBalanceKobo: 0n,
+            savingsBalanceKobo: 0n,
+          };
+
+          if (projected.totalBalanceKobo !== user.total_balance_kobo) {
+            issues.push(
+              buildReconciliationIssue({
+                issueType:
+                  TransactionReconciliationIssueType.USER_TOTAL_BALANCE_MISMATCH,
+                createdAt: startedAt,
+                userId: user._id,
+                expectedAmountKobo: projected.totalBalanceKobo,
+                actualAmountKobo: user.total_balance_kobo,
+              }),
+            );
+          }
+
+          if (projected.savingsBalanceKobo !== user.savings_balance_kobo) {
+            issues.push(
+              buildReconciliationIssue({
+                issueType:
+                  TransactionReconciliationIssueType.USER_SAVINGS_BALANCE_MISMATCH,
+                createdAt: startedAt,
+                userId: user._id,
+                expectedAmountKobo: projected.savingsBalanceKobo,
+                actualAmountKobo: user.savings_balance_kobo,
+              }),
+            );
+          }
+        }
+
+        if (result.isDone) {
+          break;
+        }
+
+        userCursor = result.continueCursor;
+      }
+
+      let planCount = 0;
+      let planCursor: string | null = null;
+
+      for (;;) {
+        const result: ReconciliationPlansPage = await ctx.runQuery(
+          internal.transactions._getReconciliationPlansPage,
+          { cursor: planCursor },
+        );
+
+        planCount += result.page.length;
+
+        for (const plan of result.page) {
+          const projectedAmount =
+            planProjectedAmounts.get(String(plan._id)) ?? 0n;
+          if (projectedAmount !== plan.current_amount_kobo) {
+            issues.push(
+              buildReconciliationIssue({
+                issueType:
+                  TransactionReconciliationIssueType.PLAN_CURRENT_AMOUNT_MISMATCH,
+                createdAt: startedAt,
+                userId: plan.user_id,
+                userPlanId: plan._id,
+                expectedAmountKobo: projectedAmount,
+                actualAmountKobo: plan.current_amount_kobo,
+              }),
+            );
+          }
+        }
+
+        if (result.isDone) {
+          break;
+        }
+
+        planCursor = result.continueCursor;
+      }
+
+      const originalTransactionIds = [
+        ...new Set(
+          reversals
+            .map((reversal) => reversal.reversal_of_transaction_id)
+            .filter(
+              (transactionId): transactionId is TransactionId =>
+                transactionId !== undefined,
+            ),
+        ),
+      ];
+      const originalReferencesById = new Map<string, string>();
+
+      for (const transactionIds of chunkArray(
+        originalTransactionIds,
+        RECONCILIATION_WRITE_BATCH_SIZE,
+      )) {
+        const originals: TransactionReferenceLookup = await ctx.runQuery(
+          internal.transactions._getTransactionReferencesByIds,
+          {
+            transactionIds,
+          },
+        );
+
+        for (const original of originals) {
+          originalReferencesById.set(String(original._id), original.reference);
         }
       }
 
-      for (const user of users) {
-        const projected = userProjectedBalances.get(String(user._id)) ?? { totalBalanceKobo: 0n, savingsBalanceKobo: 0n };
-
-        if (projected.totalBalanceKobo !== user.total_balance_kobo) {
-          issues.push(
-            buildReconciliationIssue({
-              issueType:
-                TransactionReconciliationIssueType.USER_TOTAL_BALANCE_MISMATCH,
-              createdAt: startedAt,
-              userId: user._id,
-              expectedAmountKobo: projected.totalBalanceKobo,
-              actualAmountKobo: user.total_balance_kobo,
-            }),
-          );
-        }
-
-        if (projected.savingsBalanceKobo !== user.savings_balance_kobo) {
-          issues.push(
-            buildReconciliationIssue({
-              issueType:
-                TransactionReconciliationIssueType.USER_SAVINGS_BALANCE_MISMATCH,
-              createdAt: startedAt,
-              userId: user._id,
-              expectedAmountKobo: projected.savingsBalanceKobo,
-              actualAmountKobo: user.savings_balance_kobo,
-            }),
-          );
-        }
-      }
-
-      for (const plan of plans) {
-        const projectedAmount = planProjectedAmounts.get(String(plan._id)) ?? 0n;
-        if (projectedAmount !== plan.current_amount_kobo) {
-          issues.push(
-            buildReconciliationIssue({
-              issueType:
-                TransactionReconciliationIssueType.PLAN_CURRENT_AMOUNT_MISMATCH,
-              createdAt: startedAt,
-              userId: plan.user_id,
-              userPlanId: plan._id,
-              expectedAmountKobo: projectedAmount,
-              actualAmountKobo: plan.current_amount_kobo,
-            }),
-          );
-        }
-      }
-
-      const reversalsByOriginalId = new Map<string, Transaction[]>();
+      const reversalsByOriginalId = new Map<
+        string,
+        Array<(typeof reversals)[number]>
+      >();
 
       for (const reversal of reversals) {
         if (
@@ -1113,11 +1618,12 @@ export const runReconciliation = internalMutation({
           continue;
         }
 
-        const original = transactionsById.get(String(reversal.reversal_of_transaction_id));
+        const originalId = String(reversal.reversal_of_transaction_id);
+        const originalReference = originalReferencesById.get(originalId);
 
         if (
-          !original ||
-          original.reference !== reversal.reversal_of_reference
+          !originalReference ||
+          originalReference !== reversal.reversal_of_reference
         ) {
           issues.push(
             buildReconciliationIssue({
@@ -1135,11 +1641,9 @@ export const runReconciliation = internalMutation({
           continue;
         }
 
-        const key = String(original._id);
-        reversalsByOriginalId.set(key, [
-          ...(reversalsByOriginalId.get(key) ?? []),
-          reversal,
-        ]);
+        const linkedReversals = reversalsByOriginalId.get(originalId) ?? [];
+        linkedReversals.push(reversal);
+        reversalsByOriginalId.set(originalId, linkedReversals);
       }
 
       for (const [
@@ -1150,13 +1654,12 @@ export const runReconciliation = internalMutation({
           continue;
         }
 
-        const original = transactionsById.get(originalId);
         issues.push(
           buildReconciliationIssue({
             issueType: TransactionReconciliationIssueType.DOUBLE_REVERSAL,
             createdAt: startedAt,
-            transactionId: original?._id,
-            reference: original?.reference,
+            transactionId: linkedReversals[0]?.reversal_of_transaction_id,
+            reference: originalReferencesById.get(originalId),
             details: {
               reversal_transaction_ids: linkedReversals.map((transaction) =>
                 String(transaction._id),
@@ -1171,124 +1674,63 @@ export const runReconciliation = internalMutation({
 
       const completedAt = Date.now();
 
-      for (const issue of previousOpenIssues) {
-        await ctx.db.patch(issue._id, {
-          issue_status: TransactionReconciliationIssueStatus.RESOLVED,
-          resolved_at: completedAt,
-        });
-
-        const newIssue = await ctx.db.get(issue._id);
-
-        // Sync aggregates - mark as resolved
-        if (newIssue) {
-          await syncReconciliationIssueUpdate(ctx, issue, newIssue);
+      for (const issueIds of chunkArray(
+        previousOpenIssueIds,
+        RECONCILIATION_WRITE_BATCH_SIZE,
+      )) {
+        if (issueIds.length === 0) {
+          continue;
         }
-      }
 
-      for (const issue of issues) {
-        const issueId = await ctx.db.insert(
-          TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES,
-          { run_id: runId, ...issue },
-        );
-
-        // Sync aggregates - add new issue
-        const createdIssue = await ctx.db.get(issueId);
-        if (createdIssue) {
-          await syncReconciliationIssueInsert(ctx, createdIssue);
-        }
-      }
-
-      const allTransactionsLength = allTransactions.length;
-
-      await ctx.db.patch(runId, {
-        status: TransactionReconciliationRunStatus.COMPLETED,
-        completed_at: completedAt,
-        issue_count: issues.length,
-        user_count: users.length,
-        plan_count: plans.length,
-        transaction_count: allTransactionsLength,
-      });
-
-      const run = await ctx.db.get(runId);
-      if (!run) {
-        throw new ConvexError("Failed to persist reconciliation run");
-      }
-
-      await auditLog.log(ctx, {
-        action: "transaction.reconciliation.completed",
-        resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
-        resourceId: runId,
-        severity: issues.length > 0 ? "warning" : "info",
-        metadata: {
-          issue_count: issues.length,
-          user_count: users.length,
-          plan_count: plans.length,
-          transaction_count: allTransactionsLength,
-        },
-      });
-
-      await createConvexEventOutboxService(ctx).append([
-        {
-          eventType: NotificationEventType.RECONCILIATION_RUN_COMPLETED,
-          sourceKind: "system",
-          resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
-          resourceId: String(runId),
-          dedupeKey: `reconciliation_run_completed:${runId}:${completedAt}`,
-          occurredAt: completedAt,
-          payload: {
-            run_id: String(runId),
-            issue_count: issues.length,
-            user_count: users.length,
-            plan_count: plans.length,
-            transaction_count: allTransactionsLength,
-            completed_at: completedAt,
+        await ctx.runMutation(
+          internal.transactions._resolveReconciliationIssuesBatch,
+          {
+            issueIds,
+            resolvedAt: completedAt,
           },
-        },
-      ]);
+        );
+      }
 
-      return run;
+      for (const issueBatch of chunkArray(
+        issues,
+        RECONCILIATION_WRITE_BATCH_SIZE,
+      )) {
+        if (issueBatch.length === 0) {
+          continue;
+        }
+
+        await ctx.runMutation(
+          internal.transactions._insertReconciliationIssuesBatch,
+          {
+            runId,
+            issues: issueBatch,
+          },
+        );
+      }
+
+      return await ctx.runMutation(
+        internal.transactions._completeReconciliationRun,
+        {
+          runId,
+          completedAt,
+          issueCount: issues.length,
+          userCount,
+          planCount,
+          transactionCount,
+        },
+      );
     } catch (error) {
       const completedAt = Date.now();
       const failureMessage =
         error instanceof Error ? error.message : "Unknown error";
-
-      await ctx.db.patch(runId, {
-        status: TransactionReconciliationRunStatus.FAILED,
-        completed_at: completedAt,
-      });
-
-      await auditLog.log(ctx, {
-        action: "transaction.reconciliation.failed",
-        resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
-        resourceId: runId,
-        severity: "error",
-        metadata: {
+      return await ctx.runMutation(
+        internal.transactions._recordReconciliationFailure,
+        {
+          runId,
+          completedAt,
           error: failureMessage,
         },
-      });
-
-      await createConvexEventOutboxService(ctx).append([
-        {
-          eventType: NotificationEventType.RECONCILIATION_RUN_FAILED,
-          sourceKind: "system",
-          resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
-          resourceId: String(runId),
-          dedupeKey: `reconciliation_run_failed:${runId}:${completedAt}`,
-          occurredAt: completedAt,
-          payload: {
-            run_id: String(runId),
-            error: failureMessage,
-            failed_at: completedAt,
-          },
-        },
-      ]);
-
-      const failedRun = await ctx.db.get(runId);
-      if (!failedRun) {
-        throw new ConvexError("Failed to persist failed reconciliation run");
-      }
-
-      return failedRun;
+      );
     }
   },
 });
