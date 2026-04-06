@@ -1,6 +1,9 @@
 import { Link, useRouterState } from "@tanstack/react-router";
+import { api } from "@avm-daily/backend/convex/_generated/api";
 import { Button } from "@avm-daily/ui/components/button";
 import { Badge } from "@avm-daily/ui/components/badge";
+import { convexQuery } from "@convex-dev/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@avm-daily/ui/lib/utils";
 
 type AdminShellProps = {
@@ -15,6 +18,7 @@ type AdminShellProps = {
 
 const navigationItems = [
   { to: "/admin", label: "Overview" },
+  { to: "/admin/alerts", label: "Alerts" },
   { to: "/admin/withdrawals", label: "Withdrawals" },
   { to: "/admin/kyc", label: "KYC" },
   { to: "/admin/bank-verification", label: "Bank Verification" },
@@ -25,6 +29,11 @@ export function AdminShell({ admin, children }: AdminShellProps) {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   });
+  const unreadAlertsQuery = useQuery({
+    ...convexQuery(api.adminAlerts.getMyUnreadCount, {}),
+    retry: false,
+  });
+  const unreadCount = unreadAlertsQuery.data?.unreadCount ?? 0;
 
   return (
     <div className="min-h-screen bg-zinc-50 text-zinc-950">
@@ -66,7 +75,18 @@ export function AdminShell({ admin, children }: AdminShellProps) {
                     "w-full justify-start rounded-2xl",
                     !active && "border-zinc-200 bg-transparent text-zinc-700",
                   )}
-                  render={<Link to={item.to}>{item.label}</Link>}
+                  render={
+                    <Link to={item.to}>
+                      <span className="flex w-full items-center justify-between gap-3">
+                        <span>{item.label}</span>
+                        {item.to === "/admin/alerts" && unreadCount > 0 ? (
+                          <Badge variant={active ? "secondary" : "outline"}>
+                            {unreadCount}
+                          </Badge>
+                        ) : null}
+                      </span>
+                    </Link>
+                  }
                 />
               );
             })}

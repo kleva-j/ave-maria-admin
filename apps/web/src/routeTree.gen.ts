@@ -22,6 +22,7 @@ import { Route as ProtectedAdminWithdrawalsRouteImport } from './routes/_protect
 import { Route as ProtectedAdminReconciliationRouteImport } from './routes/_protected/admin/reconciliation'
 import { Route as ProtectedAdminKycRouteImport } from './routes/_protected/admin/kyc'
 import { Route as ProtectedAdminBankVerificationRouteImport } from './routes/_protected/admin/bank-verification'
+import { Route as ProtectedAdminAlertsRouteImport } from './routes/_protected/admin/alerts'
 
 const TodosRoute = TodosRouteImport.update({
   id: '/todos',
@@ -90,6 +91,11 @@ const ProtectedAdminBankVerificationRoute =
     path: '/bank-verification',
     getParentRoute: () => ProtectedAdminRoute,
   } as any)
+const ProtectedAdminAlertsRoute = ProtectedAdminAlertsRouteImport.update({
+  id: '/alerts',
+  path: '/alerts',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -98,6 +104,7 @@ export interface FileRoutesByFullPath {
   '/todos': typeof TodosRoute
   '/admin': typeof ProtectedAdminRouteWithChildren
   '/dashboard': typeof ProtectedDashboardRoute
+  '/admin/alerts': typeof ProtectedAdminAlertsRoute
   '/admin/bank-verification': typeof ProtectedAdminBankVerificationRoute
   '/admin/kyc': typeof ProtectedAdminKycRoute
   '/admin/reconciliation': typeof ProtectedAdminReconciliationRoute
@@ -111,6 +118,7 @@ export interface FileRoutesByTo {
   '/signout': typeof SignoutRoute
   '/todos': typeof TodosRoute
   '/dashboard': typeof ProtectedDashboardRoute
+  '/admin/alerts': typeof ProtectedAdminAlertsRoute
   '/admin/bank-verification': typeof ProtectedAdminBankVerificationRoute
   '/admin/kyc': typeof ProtectedAdminKycRoute
   '/admin/reconciliation': typeof ProtectedAdminReconciliationRoute
@@ -127,6 +135,7 @@ export interface FileRoutesById {
   '/todos': typeof TodosRoute
   '/_protected/admin': typeof ProtectedAdminRouteWithChildren
   '/_protected/dashboard': typeof ProtectedDashboardRoute
+  '/_protected/admin/alerts': typeof ProtectedAdminAlertsRoute
   '/_protected/admin/bank-verification': typeof ProtectedAdminBankVerificationRoute
   '/_protected/admin/kyc': typeof ProtectedAdminKycRoute
   '/_protected/admin/reconciliation': typeof ProtectedAdminReconciliationRoute
@@ -143,6 +152,7 @@ export interface FileRouteTypes {
     | '/todos'
     | '/admin'
     | '/dashboard'
+    | '/admin/alerts'
     | '/admin/bank-verification'
     | '/admin/kyc'
     | '/admin/reconciliation'
@@ -156,6 +166,7 @@ export interface FileRouteTypes {
     | '/signout'
     | '/todos'
     | '/dashboard'
+    | '/admin/alerts'
     | '/admin/bank-verification'
     | '/admin/kyc'
     | '/admin/reconciliation'
@@ -171,6 +182,7 @@ export interface FileRouteTypes {
     | '/todos'
     | '/_protected/admin'
     | '/_protected/dashboard'
+    | '/_protected/admin/alerts'
     | '/_protected/admin/bank-verification'
     | '/_protected/admin/kyc'
     | '/_protected/admin/reconciliation'
@@ -281,10 +293,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedAdminBankVerificationRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
+    '/_protected/admin/alerts': {
+      id: '/_protected/admin/alerts'
+      path: '/alerts'
+      fullPath: '/admin/alerts'
+      preLoaderRoute: typeof ProtectedAdminAlertsRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
   }
 }
 
 interface ProtectedAdminRouteChildren {
+  ProtectedAdminAlertsRoute: typeof ProtectedAdminAlertsRoute
   ProtectedAdminBankVerificationRoute: typeof ProtectedAdminBankVerificationRoute
   ProtectedAdminKycRoute: typeof ProtectedAdminKycRoute
   ProtectedAdminReconciliationRoute: typeof ProtectedAdminReconciliationRoute
@@ -293,6 +313,7 @@ interface ProtectedAdminRouteChildren {
 }
 
 const ProtectedAdminRouteChildren: ProtectedAdminRouteChildren = {
+  ProtectedAdminAlertsRoute: ProtectedAdminAlertsRoute,
   ProtectedAdminBankVerificationRoute: ProtectedAdminBankVerificationRoute,
   ProtectedAdminKycRoute: ProtectedAdminKycRoute,
   ProtectedAdminReconciliationRoute: ProtectedAdminReconciliationRoute,
