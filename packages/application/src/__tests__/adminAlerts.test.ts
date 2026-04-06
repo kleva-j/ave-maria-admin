@@ -407,6 +407,45 @@ describe("admin alert use cases", () => {
     ]);
   });
 
+  it("treats non-alerting notification events as handled no-ops", async () => {
+    const notificationEventRepository = createNotificationEventRepository([
+      {
+        id: "event-1",
+        eventType: NotificationEventType.WITHDRAWAL_REQUESTED,
+        sourceKind: "user",
+        resourceType: "withdrawals",
+        resourceId: "withdrawal-1",
+        dedupeKey: "withdrawal_requested:withdrawal-1",
+        payload: {
+          withdrawal_id: "withdrawal-1",
+        },
+        occurredAt: 1,
+        processingStatus: NotificationEventProcessingStatus.PENDING,
+        attemptCount: 0,
+        nextAttemptAt: 1,
+      },
+    ]);
+    const adminAlertRepository = createAdminAlertRepository();
+    const adminAlertReceiptRepository = createAdminAlertReceiptRepository();
+    const processAdminAlertEvent = createProcessAdminAlertEventUseCase({
+      notificationEventRepository,
+      adminAlertRepository,
+      adminAlertReceiptRepository,
+      adminUserDirectory: createAdminUserDirectory({}),
+    });
+
+    const result = await processAdminAlertEvent({
+      eventId: "event-1",
+      now: 10,
+    });
+
+    expect(result.processingStatus).toBe(
+      NotificationEventProcessingStatus.PROCESSED,
+    );
+    expect(adminAlertRepository.values()).toEqual([]);
+    expect(adminAlertReceiptRepository.values()).toEqual([]);
+  });
+
   it("auto-resolves condition alerts after two healthy evaluations", async () => {
     let pendingSnapshot: { pendingCount: number; oldestRequestedAt?: number } = { pendingCount: 1, oldestRequestedAt: 1 };
 

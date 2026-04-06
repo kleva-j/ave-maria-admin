@@ -742,7 +742,15 @@ async function handleNotificationEvent(
       }
       break;
     }
-    default:
+    case NotificationEventType.WITHDRAWAL_REQUESTED:
+    case NotificationEventType.WITHDRAWAL_APPROVED:
+    case NotificationEventType.WITHDRAWAL_REJECTED:
+    case NotificationEventType.WITHDRAWAL_PROCESSED:
+    case NotificationEventType.WITHDRAWAL_PROCESSING_FAILED:
+    case NotificationEventType.KYC_DECISION_APPLIED:
+    case NotificationEventType.BANK_VERIFICATION_SUBMITTED:
+    case NotificationEventType.BANK_VERIFICATION_APPROVED:
+    case NotificationEventType.BANK_VERIFICATION_REJECTED:
       break;
   }
 }

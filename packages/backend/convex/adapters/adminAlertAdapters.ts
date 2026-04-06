@@ -645,18 +645,26 @@ export function createConvexAdminAlertInboxRepository(
         (entry): entry is NonNullable<typeof entry> => entry !== null,
       );
 
+      const counts = rows.reduce(
+        (acc, entry) => {
+          if (entry.alert.severity === AdminAlertSeverity.CRITICAL) {
+            acc.criticalCount++;
+          } else if (entry.alert.severity === AdminAlertSeverity.WARNING) {
+            acc.warningCount++;
+          }
+
+          if (entry.receipt.deliveryState === AdminAlertReceiptState.UNREAD) {
+            acc.unreadCount++;
+          }
+          
+          return acc;
+        },
+        { criticalCount: 0, warningCount: 0, unreadCount: 0 }
+      );
+
       return {
         activeCount: rows.length,
-        criticalCount: rows.filter(
-          (entry) => entry.alert.severity === AdminAlertSeverity.CRITICAL,
-        ).length,
-        warningCount: rows.filter(
-          (entry) => entry.alert.severity === AdminAlertSeverity.WARNING,
-        ).length,
-        unreadCount: rows.filter(
-          (entry) =>
-            entry.receipt.deliveryState === AdminAlertReceiptState.UNREAD,
-        ).length,
+        ...counts,
       };
     },
   };
@@ -782,9 +790,17 @@ export function createConvexAdminAlertConditionReader(
         .withIndex("by_issue_status", (q) => q.eq("issue_status", "open"))
         .collect();
 
+      const latestIssueAt = openIssues.reduce<number | undefined>(
+        (latest, issue) =>
+          latest === undefined || issue.created_at > latest
+            ? issue.created_at
+            : latest,
+        undefined,
+      );
+
       return {
         openIssueCount: openIssues.length,
-        latestIssueAt: openIssues[0]?.created_at,
+        latestIssueAt,
       };
     },
   };
