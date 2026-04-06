@@ -8,12 +8,15 @@ import { withdrawal_reservations } from "./schemas/withdrawalReservations";
 import { bank_account_documents } from "./schemas/bankAccountDocuments";
 import { savings_plan_templates } from "./schemas/savingsPlanTemplates";
 import { admin_dashboard_kpis } from "./schemas/adminDashboardKpis";
+import { admin_alert_receipts } from "./schemas/adminAlertReceipts";
+import { notification_events } from "./schemas/notificationEvents";
 import { user_bank_accounts } from "./schemas/userBankAccounts";
 import { user_savings_plans } from "./schemas/userSavingsPlans";
 import { user_risk_holds } from "./schemas/userRiskHolds";
 import { kyc_documents } from "./schemas/kycDocuments";
 import { transactions } from "./schemas/transactions";
 import { admin_users, users } from "./schemas/users";
+import { admin_alerts } from "./schemas/adminAlerts";
 import { withdrawals } from "./schemas/withdrawals";
 import { risk_events } from "./schemas/riskEvents";
 import { TABLE_NAMES } from "./shared";
@@ -22,16 +25,19 @@ export default defineSchema({
   [TABLE_NAMES.USERS]: users,
   [TABLE_NAMES.ADMIN_USERS]: admin_users,
   [TABLE_NAMES.WITHDRAWALS]: withdrawals,
+  [TABLE_NAMES.ADMIN_ALERTS]: admin_alerts,
   [TABLE_NAMES.TRANSACTIONS]: transactions,
   [TABLE_NAMES.TRANSACTION_RECONCILIATION_RUNS]:
     transaction_reconciliation_runs,
   [TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES]:
     transaction_reconciliation_issues,
-  [TABLE_NAMES.USER_RISK_HOLDS]: user_risk_holds,
-  [TABLE_NAMES.RISK_EVENTS]: risk_events,
-  [TABLE_NAMES.KYC_DOCUMENTS]: kyc_documents,
+    [TABLE_NAMES.RISK_EVENTS]: risk_events,
+    [TABLE_NAMES.KYC_DOCUMENTS]: kyc_documents,
+    [TABLE_NAMES.USER_RISK_HOLDS]: user_risk_holds,
   [TABLE_NAMES.USER_SAVINGS_PLANS]: user_savings_plans,
   [TABLE_NAMES.USER_BANK_ACCOUNTS]: user_bank_accounts,
+  [TABLE_NAMES.NOTIFICATION_EVENTS]: notification_events,
+  [TABLE_NAMES.ADMIN_ALERT_RECEIPTS]: admin_alert_receipts,
   [TABLE_NAMES.ADMIN_DASHBOARD_KPIS]: admin_dashboard_kpis,
   [TABLE_NAMES.BANK_ACCOUNT_DOCUMENTS]: bank_account_documents,
   [TABLE_NAMES.SAVINGS_PLAN_TEMPLATES]: savings_plan_templates,

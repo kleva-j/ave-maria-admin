@@ -29,6 +29,8 @@ export const withdrawals = defineTable({
   .index("by_requested_by", ["requested_by"])
   .index("by_requested_by_and_requested_at", ["requested_by", "requested_at"])
   .index("by_status", ["status"])
+  .index("by_status_and_requested_at", ["status", "requested_at"])
+  .index("by_status_and_approved_at", ["status", "approved_at"])
   .index("by_requested_at", ["requested_at"])
   .index("by_approved_by", ["approved_by"])
   .index("by_processed_by", ["processed_by"]);

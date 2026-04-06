@@ -22,4 +22,8 @@ export const user_bank_accounts = defineTable({
   .index("by_user_id_and_is_primary", ["user_id", "is_primary"])
   .index("by_account_number", ["account_number"])
   .index("by_verification_status", ["verification_status"])
-  .index("by_verification_submitted_at", ["verification_submitted_at"]);
+  .index("by_verification_submitted_at", ["verification_submitted_at"])
+  .index("by_verification_status_and_submitted_at", [
+    "verification_status",
+    "verification_submitted_at",
+  ]);
