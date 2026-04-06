@@ -421,6 +421,25 @@ export type AdminAlertReceiptRecord = {
   lastNotifiedAt: number;
 };
 
+export type AdminAlertInboxFilters = {
+  status?: AdminAlertStatus;
+  severity?: AdminAlertSeverity;
+  scope?: AdminAlertScope;
+  limit?: number;
+};
+
+export type AdminAlertInboxEntry = {
+  alert: AdminAlertRecord;
+  receipt: AdminAlertReceiptRecord;
+};
+
+export type AdminAlertActiveSummary = {
+  activeCount: number;
+  criticalCount: number;
+  warningCount: number;
+  unreadCount: number;
+};
+
 export type PendingWithdrawalsAlertSnapshot = {
   pendingCount: number;
   oldestRequestedAt?: number;
@@ -515,6 +534,17 @@ export interface AdminAlertReceiptRepository {
       Omit<AdminAlertReceiptRecord, "id" | "alertId" | "adminUserId">
     >,
   ): Promise<AdminAlertReceiptRecord>;
+}
+
+export interface AdminAlertInboxRepository {
+  listByAdminUserId(
+    adminUserId: string,
+    filters: AdminAlertInboxFilters,
+  ): Promise<AdminAlertInboxEntry[]>;
+  getUnreadCountByAdminUserId(adminUserId: string): Promise<number>;
+  getActiveSummaryByAdminUserId(
+    adminUserId: string,
+  ): Promise<AdminAlertActiveSummary>;
 }
 
 export interface AdminUserDirectory {

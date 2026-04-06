@@ -1,16 +1,21 @@
 import type { MutationCtx } from "./_generated/server";
-import type { AdminAlertId } from "./types";
+import type { AdminAlertId, Context } from "./types";
 
 import { DomainError } from "@avm-daily/domain";
 import {
   createEvaluateAdminAlertConditionsUseCase,
+  createAcknowledgeAdminAlertReceiptUseCase,
   createReconcileAdminAlertReceiptsUseCase,
+  createGetAdminAlertActiveSummaryUseCase,
+  createGetAdminAlertUnreadCountUseCase,
   createFanOutAdminAlertReceiptsUseCase,
   createSendAdminAlertRemindersUseCase,
   createUpsertSharedAdminAlertUseCase,
   createProcessAdminAlertEventUseCase,
   createSweepAdminAlertOutboxUseCase,
+  createListAdminAlertInboxUseCase,
   createAppendDomainEventsUseCase,
+  createMarkAdminAlertSeenUseCase,
   createResolveAdminAlertUseCase,
 } from "@avm-daily/application/use-cases";
 
@@ -23,6 +28,7 @@ import {
   createConvexAdminAlertReceiptRepository,
   createConvexNotificationEventRepository,
   createConvexNotificationEventScheduler,
+  createConvexAdminAlertInboxRepository,
   createConvexAdminAlertConditionReader,
   createConvexAdminAlertRepository,
   createConvexAdminUserDirectory,
@@ -31,18 +37,15 @@ import {
 import {
   notificationEventProcessingStatus,
   adminAlertResolutionKind,
-  AdminAlertReceiptState,
   adminAlertReceiptState,
   notificationSourceKind,
   notificationEventType,
   adminAlertResolvedBy,
   adminAlertSeverity,
-  AdminAlertStatus,
   adminAlertStatus,
   adminAlertScope,
   adminAlertType,
   resourceType,
-  TABLE_NAMES,
   adminRole,
 } from "./shared";
 
@@ -107,19 +110,6 @@ function toConvexError(error: unknown): never {
   throw error;
 }
 
-async function getReceiptForAdmin(
-  ctx: MutationCtx,
-  alertId: AdminAlertId,
-  adminUserId: string,
-) {
-  return await ctx.db
-    .query(TABLE_NAMES.ADMIN_ALERT_RECEIPTS)
-    .withIndex("by_alert_id_and_admin_user_id", (q) =>
-      q.eq("alert_id", alertId).eq("admin_user_id", adminUserId as any),
-    )
-    .first();
-}
-
 async function getAdminAlertById(ctx: MutationCtx, alertId: string) {
   return await ctx.db.get(alertId as AdminAlertId);
 }
@@ -136,6 +126,12 @@ function createAlertConditionDeps(ctx: MutationCtx) {
   return {
     ...createAlertWriteDeps(ctx),
     adminAlertConditionReader: createConvexAdminAlertConditionReader(ctx),
+  };
+}
+
+function createAlertInboxDeps(ctx: Context) {
+  return {
+    adminAlertInboxRepository: createConvexAdminAlertInboxRepository(ctx),
   };
 }
 
@@ -356,61 +352,60 @@ export const listMyInbox = query({
   returns: v.array(adminInboxEntryValidator),
   handler: async (ctx, args) => {
     const admin = await getAdminUser(ctx);
-    const receipts = await ctx.db
-      .query(TABLE_NAMES.ADMIN_ALERT_RECEIPTS)
-      .withIndex("by_admin_user_id_and_delivered_at", (q) =>
-        q.eq("admin_user_id", admin._id),
-      )
-      .order("desc")
-      .collect();
-
-    const rows = await Promise.all(
-      receipts.map(async (receipt) => {
-        const alert = await ctx.db.get(receipt.alert_id);
-        if (!alert) {
-          return null;
-        }
-
-        if (args.status && alert.status !== args.status) {
-          return null;
-        }
-        if (args.severity && alert.severity !== args.severity) {
-          return null;
-        }
-        if (args.scope && alert.scope !== args.scope) {
-          return null;
-        }
-
-        return {
-          alert,
-          receipt: {
-            receipt_id: receipt._id,
-            delivery_state: receipt.delivery_state,
-            delivered_at: receipt.delivered_at,
-            seen_at: receipt.seen_at,
-            acknowledged_at: receipt.acknowledged_at,
-            last_notified_at: receipt.last_notified_at,
-          },
-        };
-      }),
+    const listAdminAlertInbox = createListAdminAlertInboxUseCase(
+      createAlertInboxDeps(ctx),
     );
 
-    const filtered = rows.filter(
-      (row): row is NonNullable<typeof row> => row !== null,
-    );
-    filtered.sort((left, right) => {
-      const leftTime = Math.max(
-        left.receipt.last_notified_at,
-        left.alert.last_triggered_at,
-      );
-      const rightTime = Math.max(
-        right.receipt.last_notified_at,
-        right.alert.last_triggered_at,
-      );
-      return rightTime - leftTime;
+    const rows = await listAdminAlertInbox({
+      adminUserId: String(admin._id),
+      status: args.status,
+      severity: args.severity,
+      scope: args.scope,
+      limit: args.limit,
     });
 
-    return filtered.slice(0, Math.max(1, Math.min(args.limit ?? 100, 200)));
+    return rows.map((row) => ({
+      alert: {
+        _id: row.alert.id as any,
+        alert_type: row.alert.alertType,
+        scope: row.alert.scope,
+        severity: row.alert.severity,
+        status: row.alert.status,
+        title: row.alert.title,
+        body: row.alert.body,
+        fingerprint: row.alert.fingerprint,
+        source_event_id: row.alert.sourceEventId as any,
+        routing_roles: row.alert.routingRoles,
+        metadata: row.alert.metadata,
+        first_opened_at: row.alert.firstOpenedAt,
+        last_triggered_at: row.alert.lastTriggeredAt,
+        last_evaluated_at: row.alert.lastEvaluatedAt,
+        next_reminder_at: row.alert.nextReminderAt,
+        reminder_count: row.alert.reminderCount,
+        resolution_kind: row.alert.resolutionKind,
+        resolved_at: row.alert.resolvedAt,
+        resolved_by:
+          row.alert.resolvedBy?.actorType === "admin"
+            ? {
+                actor_type: "admin" as const,
+                admin_user_id: row.alert.resolvedBy.adminUserId as any,
+              }
+            : row.alert.resolvedBy
+              ? {
+                  actor_type: "system" as const,
+                  system_actor_type: row.alert.resolvedBy.systemActorType,
+                }
+              : undefined,
+      },
+      receipt: {
+        receipt_id: row.receipt.id as any,
+        delivery_state: row.receipt.deliveryState,
+        delivered_at: row.receipt.deliveredAt,
+        seen_at: row.receipt.seenAt,
+        acknowledged_at: row.receipt.acknowledgedAt,
+        last_notified_at: row.receipt.lastNotifiedAt,
+      },
+    }));
   },
 });
 
@@ -419,16 +414,12 @@ export const getMyUnreadCount = query({
   returns: unreadCountValidator,
   handler: async (ctx) => {
     const admin = await getAdminUser(ctx);
-    const unreadReceipts = await ctx.db
-      .query(TABLE_NAMES.ADMIN_ALERT_RECEIPTS)
-      .withIndex("by_admin_user_id_and_delivery_state", (q) =>
-        q
-          .eq("admin_user_id", admin._id)
-          .eq("delivery_state", AdminAlertReceiptState.UNREAD),
-      )
-      .collect();
-
-    return { unreadCount: unreadReceipts.length };
+    const getAdminAlertUnreadCount = createGetAdminAlertUnreadCountUseCase(
+      createAlertInboxDeps(ctx),
+    );
+    return await getAdminAlertUnreadCount({
+      adminUserId: String(admin._id),
+    });
   },
 });
 
@@ -437,39 +428,12 @@ export const getMyActiveSummary = query({
   returns: activeSummaryValidator,
   handler: async (ctx) => {
     const admin = await getAdminUser(ctx);
-    const receipts = await ctx.db
-      .query(TABLE_NAMES.ADMIN_ALERT_RECEIPTS)
-      .withIndex("by_admin_user_id_and_delivered_at", (q) =>
-        q.eq("admin_user_id", admin._id),
-      )
-      .collect();
-
-    const activeEntries = await Promise.all(
-      receipts.map(async (receipt) => {
-        const alert = await ctx.db.get(receipt.alert_id);
-        if (!alert || alert.status !== AdminAlertStatus.ACTIVE) {
-          return null;
-        }
-
-        return { alert, receipt };
-      }),
+    const getAdminAlertActiveSummary = createGetAdminAlertActiveSummaryUseCase(
+      createAlertInboxDeps(ctx),
     );
-
-    const rows = activeEntries.filter(
-      (entry): entry is NonNullable<typeof entry> => entry !== null,
-    );
-
-    return {
-      activeCount: rows.length,
-      criticalCount: rows.filter((entry) => entry.alert.severity === "critical")
-        .length,
-      warningCount: rows.filter((entry) => entry.alert.severity === "warning")
-        .length,
-      unreadCount: rows.filter(
-        (entry) =>
-          entry.receipt.delivery_state === AdminAlertReceiptState.UNREAD,
-      ).length,
-    };
+    return await getAdminAlertActiveSummary({
+      adminUserId: String(admin._id),
+    });
   },
 });
 
@@ -480,38 +444,27 @@ export const markSeen = mutation({
   returns: adminAlertReceiptSummaryValidator,
   handler: async (ctx, args) => {
     const admin = await getAdminUser(ctx);
-    const receipt = await getReceiptForAdmin(
-      ctx,
-      args.alertId,
-      String(admin._id),
-    );
+    try {
+      const markAdminAlertSeen = createMarkAdminAlertSeenUseCase({
+        adminAlertReceiptRepository:
+          createConvexAdminAlertReceiptRepository(ctx),
+      });
+      const receipt = await markAdminAlertSeen({
+        alertId: String(args.alertId),
+        adminUserId: String(admin._id),
+      });
 
-    if (!receipt) {
-      throw new ConvexError("Alert receipt not found");
+      return {
+        receipt_id: receipt.id as any,
+        delivery_state: receipt.deliveryState,
+        delivered_at: receipt.deliveredAt,
+        seen_at: receipt.seenAt,
+        acknowledged_at: receipt.acknowledgedAt,
+        last_notified_at: receipt.lastNotifiedAt,
+      };
+    } catch (error) {
+      toConvexError(error);
     }
-
-    const now = Date.now();
-    await ctx.db.patch(receipt._id, {
-      delivery_state:
-        receipt.delivery_state === AdminAlertReceiptState.ACKNOWLEDGED
-          ? receipt.delivery_state
-          : AdminAlertReceiptState.SEEN,
-      seen_at: receipt.seen_at ?? now,
-    });
-
-    const updated = await ctx.db.get(receipt._id);
-    if (!updated) {
-      throw new ConvexError("Alert receipt not found after update");
-    }
-
-    return {
-      receipt_id: updated._id,
-      delivery_state: updated.delivery_state,
-      delivered_at: updated.delivered_at,
-      seen_at: updated.seen_at,
-      acknowledged_at: updated.acknowledged_at,
-      last_notified_at: updated.last_notified_at,
-    };
   },
 });
 
@@ -522,36 +475,28 @@ export const acknowledgeReceipt = mutation({
   returns: adminAlertReceiptSummaryValidator,
   handler: async (ctx, args) => {
     const admin = await getAdminUser(ctx);
-    const receipt = await getReceiptForAdmin(
-      ctx,
-      args.alertId,
-      String(admin._id),
-    );
+    try {
+      const acknowledgeAdminAlertReceipt =
+        createAcknowledgeAdminAlertReceiptUseCase({
+          adminAlertReceiptRepository:
+            createConvexAdminAlertReceiptRepository(ctx),
+        });
+      const receipt = await acknowledgeAdminAlertReceipt({
+        alertId: String(args.alertId),
+        adminUserId: String(admin._id),
+      });
 
-    if (!receipt) {
-      throw new ConvexError("Alert receipt not found");
+      return {
+        receipt_id: receipt.id as any,
+        delivery_state: receipt.deliveryState,
+        delivered_at: receipt.deliveredAt,
+        seen_at: receipt.seenAt,
+        acknowledged_at: receipt.acknowledgedAt,
+        last_notified_at: receipt.lastNotifiedAt,
+      };
+    } catch (error) {
+      toConvexError(error);
     }
-
-    const now = Date.now();
-    await ctx.db.patch(receipt._id, {
-      delivery_state: AdminAlertReceiptState.ACKNOWLEDGED,
-      seen_at: receipt.seen_at ?? now,
-      acknowledged_at: now,
-    });
-
-    const updated = await ctx.db.get(receipt._id);
-    if (!updated) {
-      throw new ConvexError("Alert receipt not found after update");
-    }
-
-    return {
-      receipt_id: updated._id,
-      delivery_state: updated.delivery_state,
-      delivered_at: updated.delivered_at,
-      seen_at: updated.seen_at,
-      acknowledged_at: updated.acknowledged_at,
-      last_notified_at: updated.last_notified_at,
-    };
   },
 });
 

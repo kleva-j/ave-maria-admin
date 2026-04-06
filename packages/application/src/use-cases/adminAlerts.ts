@@ -13,6 +13,7 @@ import type {
   NotificationEventRepository,
   AdminAlertReceiptRepository,
   NotificationEventScheduler,
+  AdminAlertInboxRepository,
   AdminAlertConditionReader,
   NotificationEventRecord,
   AdminAlertRepository,
@@ -170,6 +171,10 @@ function ageMilliseconds(now: number, timestamp: number) {
 
 function addDurationMs(timestamp: number, durationMs: number) {
   return addMillisecondsToTimestamp(timestamp, durationMs);
+}
+
+function clampInboxLimit(limit?: number) {
+  return Math.max(1, Math.min(limit ?? 100, 200));
 }
 
 export function computeNotificationRetryBackoffMs(attemptCount: number) {
@@ -927,6 +932,116 @@ export function createResolveAdminAlertUseCase(
     }
 
     return resolved;
+  };
+}
+
+export function createListAdminAlertInboxUseCase(deps: {
+  adminAlertInboxRepository: AdminAlertInboxRepository;
+}) {
+  return async function listAdminAlertInbox(input: {
+    adminUserId: string;
+    status?: AdminAlertStatus;
+    severity?: AdminAlertSeverity;
+    scope?: AdminAlertScope;
+    limit?: number;
+  }) {
+    return await deps.adminAlertInboxRepository.listByAdminUserId(
+      input.adminUserId,
+      {
+        status: input.status,
+        severity: input.severity,
+        scope: input.scope,
+        limit: clampInboxLimit(input.limit),
+      },
+    );
+  };
+}
+
+export function createGetAdminAlertUnreadCountUseCase(deps: {
+  adminAlertInboxRepository: AdminAlertInboxRepository;
+}) {
+  return async function getAdminAlertUnreadCount(input: {
+    adminUserId: string;
+  }) {
+    return {
+      unreadCount: await deps.adminAlertInboxRepository.getUnreadCountByAdminUserId(
+        input.adminUserId,
+      ),
+    };
+  };
+}
+
+export function createGetAdminAlertActiveSummaryUseCase(deps: {
+  adminAlertInboxRepository: AdminAlertInboxRepository;
+}) {
+  return async function getAdminAlertActiveSummary(input: {
+    adminUserId: string;
+  }) {
+    return await deps.adminAlertInboxRepository.getActiveSummaryByAdminUserId(
+      input.adminUserId,
+    );
+  };
+}
+
+export function createMarkAdminAlertSeenUseCase(deps: {
+  adminAlertReceiptRepository: AdminAlertReceiptRepository;
+}) {
+  return async function markAdminAlertSeen(input: {
+    alertId: string;
+    adminUserId: string;
+    now?: number;
+  }) {
+    const receipt =
+      await deps.adminAlertReceiptRepository.findByAlertIdAndAdminUserId(
+        input.alertId,
+        input.adminUserId,
+      );
+
+    if (!receipt) {
+      throw new DomainError(
+        "Alert receipt not found",
+        "admin_alert_receipt_not_found",
+      );
+    }
+
+    const now = input.now ?? Date.now();
+    return await deps.adminAlertReceiptRepository.update(receipt.id, {
+      deliveryState:
+        receipt.deliveryState === AdminAlertReceiptState.ACKNOWLEDGED
+          ? receipt.deliveryState
+          : AdminAlertReceiptState.SEEN,
+      seenAt: receipt.seenAt ?? now,
+    });
+  };
+}
+
+export function createAcknowledgeAdminAlertReceiptUseCase(deps: {
+  adminAlertReceiptRepository: AdminAlertReceiptRepository;
+}) {
+  return async function acknowledgeAdminAlertReceipt(input: {
+    alertId: string;
+    adminUserId: string;
+    now?: number;
+  }) {
+    const receipt =
+      await deps.adminAlertReceiptRepository.findByAlertIdAndAdminUserId(
+        input.alertId,
+        input.adminUserId,
+      );
+
+    if (!receipt) {
+      throw new DomainError(
+        "Alert receipt not found",
+        "admin_alert_receipt_not_found",
+      );
+    }
+
+    const now = input.now ?? Date.now();
+    return await deps.adminAlertReceiptRepository.update(receipt.id, {
+      deliveryState: AdminAlertReceiptState.ACKNOWLEDGED,
+      seenAt: receipt.seenAt ?? now,
+      acknowledgedAt: now,
+    });
   };
 }
 

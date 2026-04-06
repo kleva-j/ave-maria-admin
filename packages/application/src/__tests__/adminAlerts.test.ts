@@ -1,8 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { DomainError, AdminRole } from "@avm-daily/domain";
+import { AdminRole } from "@avm-daily/domain";
 
 import type {
+  AdminAlertInboxRepository,
   AdminAlertReceiptRepository,
   NotificationEventRepository,
   NotificationEventScheduler,
@@ -27,7 +28,12 @@ import {
 } from "../ports";
 
 import {
+  createAcknowledgeAdminAlertReceiptUseCase,
   createEvaluateAdminAlertConditionsUseCase,
+  createGetAdminAlertActiveSummaryUseCase,
+  createGetAdminAlertUnreadCountUseCase,
+  createListAdminAlertInboxUseCase,
+  createMarkAdminAlertSeenUseCase,
   createProcessAdminAlertEventUseCase,
   createAppendDomainEventsUseCase,
   createResolveAdminAlertUseCase,
@@ -196,6 +202,64 @@ function createAdminAlertReceiptRepository(
       const updated = { ...current, ...patch };
       receipts.set(id, updated);
       return { ...updated };
+    },
+  };
+}
+
+function createAdminAlertInboxRepository(
+  entries: Array<{
+    adminUserId: string;
+    entry: {
+      alert: AdminAlertRecord;
+      receipt: AdminAlertReceiptRecord;
+    };
+  }>,
+): AdminAlertInboxRepository {
+  return {
+    async listByAdminUserId(adminUserId, filters) {
+      return entries
+        .filter((item) => item.adminUserId === adminUserId)
+        .map((item) => item.entry)
+        .filter((item) =>
+          filters.status ? item.alert.status === filters.status : true,
+        )
+        .filter((item) =>
+          filters.severity ? item.alert.severity === filters.severity : true,
+        )
+        .filter((item) =>
+          filters.scope ? item.alert.scope === filters.scope : true,
+        )
+        .slice(0, filters.limit ?? 100)
+        .map((item) => ({
+          alert: { ...item.alert },
+          receipt: { ...item.receipt },
+        }));
+    },
+    async getUnreadCountByAdminUserId(adminUserId) {
+      return entries.filter(
+        (item) =>
+          item.adminUserId === adminUserId &&
+          item.entry.receipt.deliveryState === AdminAlertReceiptState.UNREAD,
+      ).length;
+    },
+    async getActiveSummaryByAdminUserId(adminUserId) {
+      const active = entries
+        .filter((item) => item.adminUserId === adminUserId)
+        .map((item) => item.entry)
+        .filter((item) => item.alert.status === AdminAlertStatus.ACTIVE);
+
+      return {
+        activeCount: active.length,
+        criticalCount: active.filter(
+          (item) => item.alert.severity === AdminAlertSeverity.CRITICAL,
+        ).length,
+        warningCount: active.filter(
+          (item) => item.alert.severity === AdminAlertSeverity.WARNING,
+        ).length,
+        unreadCount: active.filter(
+          (item) => item.receipt.deliveryState === AdminAlertReceiptState.UNREAD,
+        ).length,
+      };
     },
   };
 }
@@ -433,8 +497,147 @@ describe("admin alert use cases", () => {
         adminUserId: "admin-1",
         now: 16 * 60 * 1000,
       }),
-    ).rejects.toMatchObject<Partial<DomainError>>({
+    ).rejects.toMatchObject({
       code: "admin_alert_condition_still_active",
+    });
+  });
+
+  it("lists inbox entries and derives unread and active summaries via the inbox port", async () => {
+    const inboxRepository = createAdminAlertInboxRepository([
+      {
+        adminUserId: "admin-1",
+        entry: {
+          alert: {
+            id: "alert-1",
+            alertType: AdminAlertType.RECONCILIATION_RUN_FAILED,
+            scope: AdminAlertScope.RECONCILIATION,
+            severity: AdminAlertSeverity.CRITICAL,
+            status: AdminAlertStatus.ACTIVE,
+            title: "Reconciliation run failed",
+            body: "Body",
+            fingerprint: AdminAlertType.RECONCILIATION_RUN_FAILED,
+            routingRoles: [AdminRole.FINANCE, AdminRole.SUPER_ADMIN],
+            firstOpenedAt: 1,
+            lastTriggeredAt: 2,
+            lastEvaluatedAt: 2,
+            nextReminderAt: 3,
+            reminderCount: 0,
+          },
+          receipt: {
+            id: "receipt-1",
+            alertId: "alert-1",
+            adminUserId: "admin-1",
+            deliveryState: AdminAlertReceiptState.UNREAD,
+            deliveredAt: 1,
+            lastNotifiedAt: 2,
+          },
+        },
+      },
+      {
+        adminUserId: "admin-1",
+        entry: {
+          alert: {
+            id: "alert-2",
+            alertType: AdminAlertType.KYC_PENDING_OLDEST,
+            scope: AdminAlertScope.KYC,
+            severity: AdminAlertSeverity.WARNING,
+            status: AdminAlertStatus.RESOLVED,
+            title: "KYC queue is aging",
+            body: "Body",
+            fingerprint: AdminAlertType.KYC_PENDING_OLDEST,
+            routingRoles: [
+              AdminRole.COMPLIANCE,
+              AdminRole.SUPPORT,
+              AdminRole.SUPER_ADMIN,
+            ],
+            firstOpenedAt: 1,
+            lastTriggeredAt: 2,
+            lastEvaluatedAt: 2,
+            reminderCount: 0,
+          },
+          receipt: {
+            id: "receipt-2",
+            alertId: "alert-2",
+            adminUserId: "admin-1",
+            deliveryState: AdminAlertReceiptState.SEEN,
+            deliveredAt: 1,
+            seenAt: 2,
+            lastNotifiedAt: 2,
+          },
+        },
+      },
+    ]);
+
+    const listAdminAlertInbox = createListAdminAlertInboxUseCase({
+      adminAlertInboxRepository: inboxRepository,
+    });
+    const getAdminAlertUnreadCount = createGetAdminAlertUnreadCountUseCase({
+      adminAlertInboxRepository: inboxRepository,
+    });
+    const getAdminAlertActiveSummary = createGetAdminAlertActiveSummaryUseCase({
+      adminAlertInboxRepository: inboxRepository,
+    });
+
+    const inbox = await listAdminAlertInbox({
+      adminUserId: "admin-1",
+      status: AdminAlertStatus.ACTIVE,
+      limit: 10,
+    });
+
+    expect(inbox).toHaveLength(1);
+    expect(inbox[0]?.alert.id).toBe("alert-1");
+    expect(await getAdminAlertUnreadCount({ adminUserId: "admin-1" })).toEqual({
+      unreadCount: 1,
+    });
+    expect(
+      await getAdminAlertActiveSummary({ adminUserId: "admin-1" }),
+    ).toEqual({
+      activeCount: 1,
+      criticalCount: 1,
+      warningCount: 0,
+      unreadCount: 1,
+    });
+  });
+
+  it("marks receipts seen and acknowledged through the receipt repository", async () => {
+    const adminAlertReceiptRepository = createAdminAlertReceiptRepository([
+      {
+        id: "receipt-1",
+        alertId: "alert-1",
+        adminUserId: "admin-1",
+        deliveryState: AdminAlertReceiptState.UNREAD,
+        deliveredAt: 1,
+        lastNotifiedAt: 1,
+      },
+    ]);
+
+    const markAdminAlertSeen = createMarkAdminAlertSeenUseCase({
+      adminAlertReceiptRepository,
+    });
+    const acknowledgeAdminAlertReceipt =
+      createAcknowledgeAdminAlertReceiptUseCase({
+        adminAlertReceiptRepository,
+      });
+
+    const seen = await markAdminAlertSeen({
+      alertId: "alert-1",
+      adminUserId: "admin-1",
+      now: 5,
+    });
+    expect(seen).toMatchObject({
+      deliveryState: AdminAlertReceiptState.SEEN,
+      seenAt: 5,
+    });
+
+    const acknowledged = await acknowledgeAdminAlertReceipt({
+      alertId: "alert-1",
+      adminUserId: "admin-1",
+      now: 6,
+    });
+    expect(acknowledged).toMatchObject({
+      deliveryState: AdminAlertReceiptState.ACKNOWLEDGED,
+      seenAt: 5,
+      acknowledgedAt: 6,
     });
   });
 });

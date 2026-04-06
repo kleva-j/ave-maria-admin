@@ -1,4 +1,5 @@
 import type {
+  AdminAlertInboxRepository,
   NotificationEventScheduler,
   NotificationEventRepository,
   AdminAlertConditionReader,
@@ -25,6 +26,7 @@ import { getInsertDb, getPatchDb } from "./utils";
 import { internal } from "../_generated/api";
 
 import {
+  AdminAlertReceiptState,
   NOTIFICATION_EVENT_PROCESSING_STATUS,
   AdminAlertSeverity,
   AdminAlertStatus,
@@ -544,6 +546,116 @@ export function createConvexAdminAlertReceiptRepository(
           "admin_alert_receipt_update_failed",
         ),
       );
+    },
+  };
+}
+
+export function createConvexAdminAlertInboxRepository(
+  ctx: Context,
+): AdminAlertInboxRepository {
+  return {
+    async listByAdminUserId(adminUserId, filters) {
+      const receipts = await ctx.db
+        .query(TABLE_NAMES.ADMIN_ALERT_RECEIPTS)
+        .withIndex("by_admin_user_id_and_delivered_at", (q) =>
+          q.eq("admin_user_id", adminUserId as any),
+        )
+        .order("desc")
+        .collect();
+
+      const rows = await Promise.all(
+        receipts.map(async (receipt) => {
+          const alert = await ctx.db.get(receipt.alert_id);
+          if (!alert) {
+            return null;
+          }
+
+          if (filters.status && alert.status !== filters.status) {
+            return null;
+          }
+          if (filters.severity && alert.severity !== filters.severity) {
+            return null;
+          }
+          if (filters.scope && alert.scope !== filters.scope) {
+            return null;
+          }
+
+          return {
+            alert: mapAdminAlert(alert as AdminAlert),
+            receipt: mapAdminAlertReceipt(receipt),
+          };
+        }),
+      );
+
+      const filtered = rows
+        .filter((row): row is NonNullable<typeof row> => row !== null)
+        .sort((left, right) => {
+          const leftTime = Math.max(
+            left.receipt.lastNotifiedAt,
+            left.alert.lastTriggeredAt,
+          );
+          const rightTime = Math.max(
+            right.receipt.lastNotifiedAt,
+            right.alert.lastTriggeredAt,
+          );
+          return rightTime - leftTime;
+        });
+
+      return filtered.slice(0, filters.limit ?? 100);
+    },
+
+    async getUnreadCountByAdminUserId(adminUserId) {
+      const unreadReceipts = await ctx.db
+        .query(TABLE_NAMES.ADMIN_ALERT_RECEIPTS)
+        .withIndex("by_admin_user_id_and_delivery_state", (q) =>
+          q
+            .eq("admin_user_id", adminUserId as any)
+            .eq("delivery_state", AdminAlertReceiptState.UNREAD),
+        )
+        .collect();
+
+      return unreadReceipts.length;
+    },
+
+    async getActiveSummaryByAdminUserId(adminUserId) {
+      const receipts = await ctx.db
+        .query(TABLE_NAMES.ADMIN_ALERT_RECEIPTS)
+        .withIndex("by_admin_user_id_and_delivered_at", (q) =>
+          q.eq("admin_user_id", adminUserId as any),
+        )
+        .collect();
+
+      const activeEntries = await Promise.all(
+        receipts.map(async (receipt) => {
+          const alert = await ctx.db.get(receipt.alert_id);
+          if (!alert || alert.status !== AdminAlertStatus.ACTIVE) {
+            return null;
+          }
+
+          return {
+            alert: mapAdminAlert(alert as AdminAlert),
+            receipt: mapAdminAlertReceipt(receipt),
+          };
+        }),
+      );
+
+      const rows = activeEntries.filter(
+        (entry): entry is NonNullable<typeof entry> => entry !== null,
+      );
+
+      return {
+        activeCount: rows.length,
+        criticalCount: rows.filter(
+          (entry) => entry.alert.severity === AdminAlertSeverity.CRITICAL,
+        ).length,
+        warningCount: rows.filter(
+          (entry) => entry.alert.severity === AdminAlertSeverity.WARNING,
+        ).length,
+        unreadCount: rows.filter(
+          (entry) =>
+            entry.receipt.deliveryState === AdminAlertReceiptState.UNREAD,
+        ).length,
+      };
     },
   };
 }
