@@ -97,6 +97,11 @@ function AdminOverviewPage() {
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
             <QuickLink
+              to="/admin/alerts"
+              title="Alerts inbox"
+              description="Track queue breaches, reconciliation failures, and live ops issues."
+            />
+            <QuickLink
               to="/admin/withdrawals"
               title="Withdrawal review"
               description="Approve, reject, process, and manage user holds."
@@ -128,7 +133,12 @@ function QuickLink({
   title,
   description,
 }: {
-  to: "/admin/withdrawals" | "/admin/kyc" | "/admin/bank-verification" | "/admin/reconciliation";
+  to:
+    | "/admin/alerts"
+    | "/admin/withdrawals"
+    | "/admin/kyc"
+    | "/admin/bank-verification"
+    | "/admin/reconciliation";
   title: string;
   description: string;
 }) {

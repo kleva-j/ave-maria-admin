@@ -21,5 +21,6 @@ export const kyc_documents = defineTable({
 })
   .index("by_user_id", ["user_id"])
   .index("by_status", ["status"])
+  .index("by_status_and_created_at", ["status", "created_at"])
   .index("by_user_id_and_status", ["user_id", "status"])
   .index("by_reviewed_by", ["reviewed_by"]);

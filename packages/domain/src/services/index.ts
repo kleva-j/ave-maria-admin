@@ -4,3 +4,4 @@ export * from "./riskEvaluation";
 export * from "./savingsPlans";
 export * from "./constants";
 export * from "./kycPolicy";
+export * from "./time";

@@ -8,8 +8,10 @@
  * @module
  */
 
+import type * as adapters_adminAlertAdapters from "../adapters/adminAlertAdapters.js";
 import type * as adapters_auditLogAdapter from "../adapters/auditLogAdapter.js";
 import type * as adapters_bankAccountAdapter from "../adapters/bankAccountAdapter.js";
+import type * as adapters_eventOutboxAdapter from "../adapters/eventOutboxAdapter.js";
 import type * as adapters_kycAdapters from "../adapters/kycAdapters.js";
 import type * as adapters_riskAdapters from "../adapters/riskAdapters.js";
 import type * as adapters_savingsPlanAdapters from "../adapters/savingsPlanAdapters.js";
@@ -20,6 +22,8 @@ import type * as adapters_withdrawalAdapter from "../adapters/withdrawalAdapter.
 import type * as adapters_withdrawalPayoutAdapter from "../adapters/withdrawalPayoutAdapter.js";
 import type * as adapters_withdrawalReservationAdapter from "../adapters/withdrawalReservationAdapter.js";
 import type * as admin from "../admin.js";
+import type * as adminAlertPolicies from "../adminAlertPolicies.js";
+import type * as adminAlerts from "../adminAlerts.js";
 import type * as aggregateHelpers from "../aggregateHelpers.js";
 import type * as aggregates from "../aggregates.js";
 import type * as auditLog from "../auditLog.js";
@@ -38,11 +42,14 @@ import type * as risk from "../risk.js";
 import type * as savingsPlanRules from "../savingsPlanRules.js";
 import type * as savingsPlanTemplates from "../savingsPlanTemplates.js";
 import type * as savingsPlans from "../savingsPlans.js";
+import type * as schemas_adminAlertReceipts from "../schemas/adminAlertReceipts.js";
+import type * as schemas_adminAlerts from "../schemas/adminAlerts.js";
 import type * as schemas_adminDashboardKpis from "../schemas/adminDashboardKpis.js";
 import type * as schemas_bankAccountDocumentComments from "../schemas/bankAccountDocumentComments.js";
 import type * as schemas_bankAccountDocuments from "../schemas/bankAccountDocuments.js";
 import type * as schemas_documentReviewNotifications from "../schemas/documentReviewNotifications.js";
 import type * as schemas_kycDocuments from "../schemas/kycDocuments.js";
+import type * as schemas_notificationEvents from "../schemas/notificationEvents.js";
 import type * as schemas_riskEvents from "../schemas/riskEvents.js";
 import type * as schemas_savingsPlanTemplates from "../schemas/savingsPlanTemplates.js";
 import type * as schemas_transactionReconciliationIssues from "../schemas/transactionReconciliationIssues.js";
@@ -72,8 +79,10 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "adapters/adminAlertAdapters": typeof adapters_adminAlertAdapters;
   "adapters/auditLogAdapter": typeof adapters_auditLogAdapter;
   "adapters/bankAccountAdapter": typeof adapters_bankAccountAdapter;
+  "adapters/eventOutboxAdapter": typeof adapters_eventOutboxAdapter;
   "adapters/kycAdapters": typeof adapters_kycAdapters;
   "adapters/riskAdapters": typeof adapters_riskAdapters;
   "adapters/savingsPlanAdapters": typeof adapters_savingsPlanAdapters;
@@ -84,6 +93,8 @@ declare const fullApi: ApiFromModules<{
   "adapters/withdrawalPayoutAdapter": typeof adapters_withdrawalPayoutAdapter;
   "adapters/withdrawalReservationAdapter": typeof adapters_withdrawalReservationAdapter;
   admin: typeof admin;
+  adminAlertPolicies: typeof adminAlertPolicies;
+  adminAlerts: typeof adminAlerts;
   aggregateHelpers: typeof aggregateHelpers;
   aggregates: typeof aggregates;
   auditLog: typeof auditLog;
@@ -102,11 +113,14 @@ declare const fullApi: ApiFromModules<{
   savingsPlanRules: typeof savingsPlanRules;
   savingsPlanTemplates: typeof savingsPlanTemplates;
   savingsPlans: typeof savingsPlans;
+  "schemas/adminAlertReceipts": typeof schemas_adminAlertReceipts;
+  "schemas/adminAlerts": typeof schemas_adminAlerts;
   "schemas/adminDashboardKpis": typeof schemas_adminDashboardKpis;
   "schemas/bankAccountDocumentComments": typeof schemas_bankAccountDocumentComments;
   "schemas/bankAccountDocuments": typeof schemas_bankAccountDocuments;
   "schemas/documentReviewNotifications": typeof schemas_documentReviewNotifications;
   "schemas/kycDocuments": typeof schemas_kycDocuments;
+  "schemas/notificationEvents": typeof schemas_notificationEvents;
   "schemas/riskEvents": typeof schemas_riskEvents;
   "schemas/savingsPlanTemplates": typeof schemas_savingsPlanTemplates;
   "schemas/transactionReconciliationIssues": typeof schemas_transactionReconciliationIssues;

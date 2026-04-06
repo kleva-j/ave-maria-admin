@@ -33,9 +33,13 @@ import type {
   UserId,
 } from "./types";
 
+import { DomainError, computeProjectionDelta } from "@avm-daily/domain";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 
+import { createConvexSavingsPlanRepository } from "./adapters/savingsPlanAdapters";
+import { createConvexEventOutboxService } from "./adapters/eventOutboxAdapter";
+import { createConvexUserRepository } from "./adapters/userAdapters";
 import { internalMutation, query } from "./_generated/server";
 import { getAdminUser, getUser, isRecord } from "./utils";
 import { auditLog } from "./auditLog";
@@ -50,11 +54,6 @@ import {
   createConvexTransactionReadRepository,
 } from "./adapters/transactionAdapters";
 
-import { DomainError, computeProjectionDelta } from "@avm-daily/domain";
-
-import { createConvexSavingsPlanRepository } from "./adapters/savingsPlanAdapters";
-import { createConvexUserRepository } from "./adapters/userAdapters";
-
 // Re-export computeProjectionDelta from domain (single source of truth)
 export { computeProjectionDelta } from "@avm-daily/domain";
 
@@ -68,6 +67,7 @@ import {
   TransactionReconciliationIssueStatus,
   TransactionReconciliationIssueType,
   TransactionReconciliationRunStatus,
+  NotificationEventType,
   transactionSource,
   TransactionSource,
   RESOURCE_TYPE,
@@ -971,7 +971,6 @@ export const runReconciliation = internalMutation({
   args: {},
   returns: reconciliationRunValidator,
   handler: async (ctx) => {
-    const admin = await getAdminUser(ctx);
     const startedAt = Date.now();
 
     const runId = await ctx.db.insert(
@@ -990,7 +989,6 @@ export const runReconciliation = internalMutation({
 
     await auditLog.log(ctx, {
       action: "transaction.reconciliation.started",
-      actorId: admin._id,
       resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
       resourceId: runId,
       severity: "info",
@@ -1087,6 +1085,7 @@ export const runReconciliation = internalMutation({
         }
 
         const original = await ctx.db.get(reversal.reversal_of_transaction_id);
+
         if (
           !original ||
           original.reference !== reversal.reversal_of_reference
@@ -1149,6 +1148,7 @@ export const runReconciliation = internalMutation({
           issue_status: TransactionReconciliationIssueStatus.RESOLVED,
           resolved_at: completedAt,
         });
+
         const newIssue = await ctx.db.get(issue._id);
 
         // Sync aggregates - mark as resolved
@@ -1160,10 +1160,7 @@ export const runReconciliation = internalMutation({
       for (const issue of issues) {
         const issueId = await ctx.db.insert(
           TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES,
-          {
-            run_id: runId,
-            ...issue,
-          },
+          { run_id: runId, ...issue },
         );
 
         // Sync aggregates - add new issue
@@ -1173,13 +1170,15 @@ export const runReconciliation = internalMutation({
         }
       }
 
+      const allTransactionsLength = allTransactions.length;
+
       await ctx.db.patch(runId, {
         status: TransactionReconciliationRunStatus.COMPLETED,
         completed_at: completedAt,
         issue_count: issues.length,
         user_count: users.length,
         plan_count: plans.length,
-        transaction_count: allTransactions.length,
+        transaction_count: allTransactionsLength,
       });
 
       const run = await ctx.db.get(runId);
@@ -1196,15 +1195,38 @@ export const runReconciliation = internalMutation({
           issue_count: issues.length,
           user_count: users.length,
           plan_count: plans.length,
-          transaction_count: allTransactions.length,
+          transaction_count: allTransactionsLength,
         },
       });
 
+      await createConvexEventOutboxService(ctx).append([
+        {
+          eventType: NotificationEventType.RECONCILIATION_RUN_COMPLETED,
+          sourceKind: "system",
+          resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
+          resourceId: String(runId),
+          dedupeKey: `reconciliation_run_completed:${runId}:${completedAt}`,
+          occurredAt: completedAt,
+          payload: {
+            run_id: String(runId),
+            issue_count: issues.length,
+            user_count: users.length,
+            plan_count: plans.length,
+            transaction_count: allTransactionsLength,
+            completed_at: completedAt,
+          },
+        },
+      ]);
+
       return run;
     } catch (error) {
+      const completedAt = Date.now();
+      const failureMessage =
+        error instanceof Error ? error.message : "Unknown error";
+
       await ctx.db.patch(runId, {
         status: TransactionReconciliationRunStatus.FAILED,
-        completed_at: Date.now(),
+        completed_at: completedAt,
       });
 
       await auditLog.log(ctx, {
@@ -1213,11 +1235,32 @@ export const runReconciliation = internalMutation({
         resourceId: runId,
         severity: "error",
         metadata: {
-          error: error instanceof Error ? error.message : "Unknown error",
+          error: failureMessage,
         },
       });
 
-      throw error;
+      await createConvexEventOutboxService(ctx).append([
+        {
+          eventType: NotificationEventType.RECONCILIATION_RUN_FAILED,
+          sourceKind: "system",
+          resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
+          resourceId: String(runId),
+          dedupeKey: `reconciliation_run_failed:${runId}:${completedAt}`,
+          occurredAt: completedAt,
+          payload: {
+            run_id: String(runId),
+            error: failureMessage,
+            failed_at: completedAt,
+          },
+        },
+      ]);
+
+      const failedRun = await ctx.db.get(runId);
+      if (!failedRun) {
+        throw new ConvexError("Failed to persist failed reconciliation run");
+      }
+
+      return failedRun;
     }
   },
 });

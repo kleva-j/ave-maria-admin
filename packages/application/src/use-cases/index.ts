@@ -92,11 +92,14 @@ import type {
   SavingsPlanRepository,
   KycDocumentRepository,
   WithdrawalRepository,
+  EventOutboxService,
   RiskHoldRepository,
   RiskEventService,
   AuditLogService,
   UserRepository,
 } from "../ports";
+
+import { NotificationEventType } from "../ports";
 
 export type EvaluateWithdrawalRiskInput = {
   userId: string;
@@ -400,6 +403,36 @@ function buildComparablePayload(input: PostTransactionDTO) {
     reversal_of_type: input.reversalOfType,
     metadata: input.metadata ?? {},
   };
+}
+
+async function appendDomainEvents(
+  eventOutboxService: EventOutboxService | undefined,
+  events: Array<{
+    eventType: NotificationEventType;
+    sourceKind: "user" | "admin" | "system";
+    resourceType: string;
+    resourceId: string;
+    dedupeKey: string;
+    payload: Record<string, unknown>;
+    occurredAt?: number;
+  }>,
+) {
+  if (!eventOutboxService || events.length === 0) {
+    return;
+  }
+
+  try {
+    await eventOutboxService.append(events);
+  } catch (error) {
+    console.error("Failed to append domain events to outbox", {
+      error,
+      events,
+      dedupeKeys: events.map((event) => event.dedupeKey),
+      resourceIds: events.map((event) => event.resourceId),
+      resourceTypes: events.map((event) => event.resourceType),
+      sourceKinds: events.map((event) => event.sourceKind),
+    });
+  }
 }
 
 function buildComparablePayloadFromTx(tx: Transaction) {
@@ -782,7 +815,10 @@ async function retryWithdrawalSettlementUpdate<T>(
 ): Promise<T> {
   let lastError: unknown;
 
-  for (const [attempt, delayMs] of withdrawalSettlementRetryDelaysMs.entries()) {
+  for (const [
+    attempt,
+    delayMs,
+  ] of withdrawalSettlementRetryDelaysMs.entries()) {
     if (delayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, delayMs));
     }
@@ -1333,6 +1369,7 @@ export function createRequestWithdrawalUseCase(deps: {
   withdrawalReservationRepository: WithdrawalReservationRepository;
   bankAccountRepository: BankAccountRepository;
   auditLogService: AuditLogService;
+  eventOutboxService?: EventOutboxService;
   assertWithdrawalAllowed: AssertWithdrawalAllowedHandler;
 }) {
   return async function requestWithdrawal(
@@ -1456,6 +1493,27 @@ export function createRequestWithdrawalUseCase(deps: {
       },
     });
 
+    await appendDomainEvents(deps.eventOutboxService, [
+      {
+        eventType: NotificationEventType.WITHDRAWAL_REQUESTED,
+        sourceKind: "user",
+        resourceType: "withdrawals",
+        resourceId: withdrawal._id,
+        dedupeKey: `withdrawal_requested:${withdrawal._id}`,
+        occurredAt: now,
+        payload: {
+          user_id: user._id,
+          withdrawal_id: withdrawal._id,
+          reservation_id: reservation._id,
+          reference,
+          method,
+          amount_kobo: input.amountKobo.toString(),
+          status: withdrawal.status,
+          requested_at: now,
+        },
+      },
+    ]);
+
     return { withdrawal, reservation };
   };
 }
@@ -1463,6 +1521,7 @@ export function createRequestWithdrawalUseCase(deps: {
 export function createApproveWithdrawalUseCase(deps: {
   withdrawalRepository: WithdrawalRepository;
   auditLogService: AuditLogService;
+  eventOutboxService?: EventOutboxService;
   assertAdminActionAllowed: AssertWithdrawalAdminActionAllowedHandler;
 }) {
   return async function approveWithdrawal(
@@ -1508,6 +1567,24 @@ export function createApproveWithdrawalUseCase(deps: {
       severity: "info",
     });
 
+    await appendDomainEvents(deps.eventOutboxService, [
+      {
+        eventType: NotificationEventType.WITHDRAWAL_APPROVED,
+        sourceKind: "admin",
+        resourceType: "withdrawals",
+        resourceId: updated._id,
+        dedupeKey: `withdrawal_approved:${updated._id}:${updated.approved_at ?? "none"}`,
+        occurredAt: updated.approved_at,
+        payload: {
+          withdrawal_id: updated._id,
+          user_id: updated.requested_by,
+          approved_by: updated.approved_by,
+          approved_at: updated.approved_at,
+          status: updated.status,
+        },
+      },
+    ]);
+
     return updated;
   };
 }
@@ -1516,6 +1593,7 @@ export function createRejectWithdrawalUseCase(deps: {
   withdrawalRepository: WithdrawalRepository;
   withdrawalReservationRepository: WithdrawalReservationRepository;
   auditLogService: AuditLogService;
+  eventOutboxService?: EventOutboxService;
   assertAdminActionAllowed: AssertWithdrawalAdminActionAllowedHandler;
 }) {
   return async function rejectWithdrawal(input: RejectWithdrawalDTO): Promise<{
@@ -1579,6 +1657,25 @@ export function createRejectWithdrawalUseCase(deps: {
       severity: "warning",
     });
 
+    await appendDomainEvents(deps.eventOutboxService, [
+      {
+        eventType: NotificationEventType.WITHDRAWAL_REJECTED,
+        sourceKind: "admin",
+        resourceType: "withdrawals",
+        resourceId: updated._id,
+        dedupeKey: `withdrawal_rejected:${updated._id}:${releasedReservation._id}`,
+        occurredAt: now,
+        payload: {
+          withdrawal_id: updated._id,
+          user_id: updated.requested_by,
+          reservation_id: releasedReservation._id,
+          rejected_by: input.adminId,
+          rejection_reason: rejectionReason,
+          status: updated.status,
+        },
+      },
+    ]);
+
     return { withdrawal: updated, reservation: releasedReservation };
   };
 }
@@ -1591,6 +1688,7 @@ export function createProcessWithdrawalUseCase(deps: {
     input: PostTransactionDTO,
   ) => Promise<PostTransactionOutput>;
   auditLogService: AuditLogService;
+  eventOutboxService?: EventOutboxService;
   assertAdminActionAllowed: AssertWithdrawalAdminActionAllowedHandler;
 }) {
   return async function processWithdrawal(
@@ -1664,6 +1762,24 @@ export function createProcessWithdrawalUseCase(deps: {
         severity: "warning",
       });
 
+      await appendDomainEvents(deps.eventOutboxService, [
+        {
+          eventType: NotificationEventType.WITHDRAWAL_PROCESSING_FAILED,
+          sourceKind: "admin",
+          resourceType: "withdrawals",
+          resourceId: failed._id,
+          dedupeKey: `withdrawal_processing_failed:${failed._id}:${message}`,
+          occurredAt: Date.now(),
+          payload: {
+            withdrawal_id: failed._id,
+            user_id: failed.requested_by,
+            attempted_by: input.adminId,
+            error: message,
+            status: failed.status,
+          },
+        },
+      ]);
+
       throw error;
     }
 
@@ -1732,6 +1848,28 @@ export function createProcessWithdrawalUseCase(deps: {
       },
       severity: "info",
     });
+
+    await appendDomainEvents(deps.eventOutboxService, [
+      {
+        eventType: NotificationEventType.WITHDRAWAL_PROCESSED,
+        sourceKind: "admin",
+        resourceType: "withdrawals",
+        resourceId: updatedWithdrawal._id,
+        dedupeKey: `withdrawal_processed:${updatedWithdrawal._id}:${transactionResult.transaction._id}`,
+        occurredAt: now,
+        payload: {
+          withdrawal_id: updatedWithdrawal._id,
+          user_id: updatedWithdrawal.requested_by,
+          reservation_id: consumedReservation._id,
+          transaction_id: transactionResult.transaction._id,
+          processed_by: input.adminId,
+          processed_at: updatedWithdrawal.processed_at,
+          payout_provider: updatedWithdrawal.payout_provider,
+          payout_reference: updatedWithdrawal.payout_reference,
+          status: updatedWithdrawal.status,
+        },
+      },
+    ]);
 
     return {
       withdrawal: updatedWithdrawal,
@@ -1887,6 +2025,7 @@ export function createApplyKycDecisionUseCase(deps: {
   userRepository: UserRepository;
   kycDocumentRepository: KycDocumentRepository;
   auditLogService: AuditLogService;
+  eventOutboxService?: EventOutboxService;
 }) {
   return async function applyKycDecision(input: ApplyKycDecisionDTO): Promise<{
     userId: string;
@@ -1944,6 +2083,32 @@ export function createApplyKycDecisionUseCase(deps: {
       severity: input.approved ? "info" : "warning",
     });
 
+    await appendDomainEvents(deps.eventOutboxService, [
+      {
+        eventType: NotificationEventType.KYC_DECISION_APPLIED,
+        sourceKind: input.reviewedBy ? "admin" : "system",
+        resourceType: "users",
+        resourceId: user._id,
+        dedupeKey: `kyc_decision_applied:${user._id}:${nextDocumentStatus}:${pendingDocuments
+          .map((document) => document._id)
+          .sort()
+          .join(",")}`,
+        occurredAt: now,
+        payload: {
+          user_id: user._id,
+          approved: input.approved,
+          new_status: nextStatus,
+          document_status: nextDocumentStatus,
+          documents_reviewed: pendingDocuments.length,
+          document_ids: pendingDocuments.map((document) => document._id),
+          reviewed_by: input.reviewedBy,
+          reason: rejectionReason,
+          provider_reference: input.providerReference,
+          ...(input.metadata ?? {}),
+        },
+      },
+    ]);
+
     return {
       userId: user._id,
       newStatus: nextStatus,
@@ -1951,3 +2116,5 @@ export function createApplyKycDecisionUseCase(deps: {
     };
   };
 }
+
+export * from "./adminAlerts";

@@ -49,4 +49,5 @@ export const admin_users = defineTable({
   .index("by_workos_id", ["workosId"])
   .index("by_email", ["email"])
   .index("by_role", ["role"])
-  .index("by_status", ["status"]);
+  .index("by_status", ["status"])
+  .index("by_role_and_status", ["role", "status"]);

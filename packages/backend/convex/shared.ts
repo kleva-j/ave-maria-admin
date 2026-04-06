@@ -7,10 +7,13 @@ export const TABLE_NAMES = {
   WITHDRAWALS: "withdrawals",
   RISK_EVENTS: "risk_events",
   TRANSACTIONS: "transactions",
+  ADMIN_ALERTS: "admin_alerts",
   KYC_DOCUMENTS: "kyc_documents",
   USER_RISK_HOLDS: "user_risk_holds",
   USER_SAVINGS_PLANS: "user_savings_plans",
   USER_BANK_ACCOUNTS: "user_bank_accounts",
+  NOTIFICATION_EVENTS: "notification_events",
+  ADMIN_ALERT_RECEIPTS: "admin_alert_receipts",
   ADMIN_DASHBOARD_KPIS: "admin_dashboard_kpis",
   BANK_ACCOUNT_DOCUMENTS: "bank_account_documents",
   SAVINGS_PLAN_TEMPLATES: "savings_plan_templates",
@@ -417,6 +420,12 @@ export const RESOURCE_TYPE = {
   USER: "user",
   USERS: "users",
   ADMIN_USER: "admin_user",
+  ADMIN_ALERT: "admin_alert",
+  ADMIN_ALERTS: "admin_alerts",
+  ADMIN_ALERT_RECEIPT: "admin_alert_receipt",
+  ADMIN_ALERT_RECEIPTS: "admin_alert_receipts",
+  NOTIFICATION_EVENT: "notification_event",
+  NOTIFICATION_EVENTS: "notification_events",
   BANK_ACCOUNT: "user_bank_account",
   BANK_ACCOUNTS: "user_bank_accounts",
   BANK_ACCOUNT_DOCUMENT: "bank_account_document",
@@ -447,7 +456,14 @@ export const RESOURCE_TYPE = {
 
 export const resourceType = v.union(
   v.literal(RESOURCE_TYPE.USER),
+  v.literal(RESOURCE_TYPE.USERS),
   v.literal(RESOURCE_TYPE.ADMIN_USER),
+  v.literal(RESOURCE_TYPE.ADMIN_ALERT),
+  v.literal(RESOURCE_TYPE.ADMIN_ALERTS),
+  v.literal(RESOURCE_TYPE.ADMIN_ALERT_RECEIPT),
+  v.literal(RESOURCE_TYPE.ADMIN_ALERT_RECEIPTS),
+  v.literal(RESOURCE_TYPE.NOTIFICATION_EVENT),
+  v.literal(RESOURCE_TYPE.NOTIFICATION_EVENTS),
   v.literal(RESOURCE_TYPE.BANK_ACCOUNT),
   v.literal(RESOURCE_TYPE.BANK_ACCOUNTS),
   v.literal(RESOURCE_TYPE.BANK_ACCOUNT_DOCUMENT),
@@ -576,6 +592,178 @@ export const commentType = v.union(
 );
 
 export type CommentType = typeof commentType.type;
+
+export const NOTIFICATION_SOURCE_KIND = {
+  USER: "user",
+  ADMIN: "admin",
+  SYSTEM: "system",
+} as const;
+
+export const notificationSourceKind = v.union(
+  v.literal(NOTIFICATION_SOURCE_KIND.USER),
+  v.literal(NOTIFICATION_SOURCE_KIND.ADMIN),
+  v.literal(NOTIFICATION_SOURCE_KIND.SYSTEM),
+);
+
+export type NotificationSourceKind = typeof notificationSourceKind.type;
+
+export const SYSTEM_ACTOR_TYPE = {
+  CRON: "cron",
+  WORKER: "worker",
+} as const;
+
+export const systemActorType = v.union(
+  v.literal(SYSTEM_ACTOR_TYPE.CRON),
+  v.literal(SYSTEM_ACTOR_TYPE.WORKER),
+);
+
+export type SystemActorType = typeof systemActorType.type;
+
+export const NOTIFICATION_EVENT_PROCESSING_STATUS = {
+  PENDING: "pending",
+  PROCESSING: "processing",
+  PROCESSED: "processed",
+  FAILED: "failed",
+} as const;
+
+export const notificationEventProcessingStatus = v.union(
+  v.literal(NOTIFICATION_EVENT_PROCESSING_STATUS.PENDING),
+  v.literal(NOTIFICATION_EVENT_PROCESSING_STATUS.PROCESSING),
+  v.literal(NOTIFICATION_EVENT_PROCESSING_STATUS.PROCESSED),
+  v.literal(NOTIFICATION_EVENT_PROCESSING_STATUS.FAILED),
+);
+
+export type NotificationEventProcessingStatus =
+  typeof notificationEventProcessingStatus.type;
+
+export const NotificationEventType = {
+  WITHDRAWAL_REQUESTED: "withdrawal_requested",
+  WITHDRAWAL_APPROVED: "withdrawal_approved",
+  WITHDRAWAL_REJECTED: "withdrawal_rejected",
+  WITHDRAWAL_PROCESSED: "withdrawal_processed",
+  WITHDRAWAL_PROCESSING_FAILED: "withdrawal_processing_failed",
+  KYC_DECISION_APPLIED: "kyc_decision_applied",
+  BANK_VERIFICATION_SUBMITTED: "bank_verification_submitted",
+  BANK_VERIFICATION_APPROVED: "bank_verification_approved",
+  BANK_VERIFICATION_REJECTED: "bank_verification_rejected",
+  RECONCILIATION_RUN_COMPLETED: "reconciliation_run_completed",
+  RECONCILIATION_RUN_FAILED: "reconciliation_run_failed",
+} as const;
+
+export const notificationEventType = v.union(
+  v.literal(NotificationEventType.WITHDRAWAL_REQUESTED),
+  v.literal(NotificationEventType.WITHDRAWAL_APPROVED),
+  v.literal(NotificationEventType.WITHDRAWAL_REJECTED),
+  v.literal(NotificationEventType.WITHDRAWAL_PROCESSED),
+  v.literal(NotificationEventType.WITHDRAWAL_PROCESSING_FAILED),
+  v.literal(NotificationEventType.KYC_DECISION_APPLIED),
+  v.literal(NotificationEventType.BANK_VERIFICATION_SUBMITTED),
+  v.literal(NotificationEventType.BANK_VERIFICATION_APPROVED),
+  v.literal(NotificationEventType.BANK_VERIFICATION_REJECTED),
+  v.literal(NotificationEventType.RECONCILIATION_RUN_COMPLETED),
+  v.literal(NotificationEventType.RECONCILIATION_RUN_FAILED),
+);
+
+export type NotificationEventType = typeof notificationEventType.type;
+
+export const AdminAlertType = {
+  WITHDRAWALS_PENDING_OLDEST: "withdrawals_pending_oldest",
+  WITHDRAWALS_APPROVED_UNPROCESSED_OLDEST:
+    "withdrawals_approved_unprocessed_oldest",
+  KYC_PENDING_OLDEST: "kyc_pending_oldest",
+  BANK_VERIFICATION_PENDING_OLDEST: "bank_verification_pending_oldest",
+  RECONCILIATION_RUN_FAILED: "reconciliation_run_failed",
+  RECONCILIATION_RUN_STALE: "reconciliation_run_stale",
+  RECONCILIATION_OPEN_ISSUES: "reconciliation_open_issues",
+} as const;
+
+export const adminAlertType = v.union(
+  v.literal(AdminAlertType.WITHDRAWALS_PENDING_OLDEST),
+  v.literal(AdminAlertType.WITHDRAWALS_APPROVED_UNPROCESSED_OLDEST),
+  v.literal(AdminAlertType.KYC_PENDING_OLDEST),
+  v.literal(AdminAlertType.BANK_VERIFICATION_PENDING_OLDEST),
+  v.literal(AdminAlertType.RECONCILIATION_RUN_FAILED),
+  v.literal(AdminAlertType.RECONCILIATION_RUN_STALE),
+  v.literal(AdminAlertType.RECONCILIATION_OPEN_ISSUES),
+);
+
+export type AdminAlertType = typeof adminAlertType.type;
+
+export const AdminAlertScope = {
+  WITHDRAWALS: "withdrawals",
+  KYC: "kyc",
+  BANK_VERIFICATION: "bank_verification",
+  RECONCILIATION: "reconciliation",
+  SYSTEM: "system",
+} as const;
+
+export const adminAlertScope = v.union(
+  v.literal(AdminAlertScope.WITHDRAWALS),
+  v.literal(AdminAlertScope.KYC),
+  v.literal(AdminAlertScope.BANK_VERIFICATION),
+  v.literal(AdminAlertScope.RECONCILIATION),
+  v.literal(AdminAlertScope.SYSTEM),
+);
+
+export type AdminAlertScope = typeof adminAlertScope.type;
+
+export const AdminAlertSeverity = {
+  WARNING: "warning",
+  CRITICAL: "critical",
+} as const;
+
+export const adminAlertSeverity = v.union(
+  v.literal(AdminAlertSeverity.WARNING),
+  v.literal(AdminAlertSeverity.CRITICAL),
+);
+
+export type AdminAlertSeverity = typeof adminAlertSeverity.type;
+
+export const AdminAlertStatus = {
+  ACTIVE: "active",
+  RESOLVED: "resolved",
+} as const;
+
+export const adminAlertStatus = v.union(
+  v.literal(AdminAlertStatus.ACTIVE),
+  v.literal(AdminAlertStatus.RESOLVED),
+);
+
+export type AdminAlertStatus = typeof adminAlertStatus.type;
+
+export const AdminAlertReceiptState = {
+  UNREAD: "unread",
+  SEEN: "seen",
+  ACKNOWLEDGED: "acknowledged",
+} as const;
+
+export const adminAlertReceiptState = v.union(
+  v.literal(AdminAlertReceiptState.UNREAD),
+  v.literal(AdminAlertReceiptState.SEEN),
+  v.literal(AdminAlertReceiptState.ACKNOWLEDGED),
+);
+
+export type AdminAlertReceiptState = typeof adminAlertReceiptState.type;
+
+export const ADMIN_ALERT_RESOLUTION_KIND = {
+  AUTOMATIC: "automatic",
+  MANUAL: "manual",
+} as const;
+
+export const adminAlertResolutionKind = v.union(
+  v.literal(ADMIN_ALERT_RESOLUTION_KIND.AUTOMATIC),
+  v.literal(ADMIN_ALERT_RESOLUTION_KIND.MANUAL),
+);
+
+export type AdminAlertResolutionKind = typeof adminAlertResolutionKind.type;
+
+export const adminAlertResolvedBy = v.object({
+  actor_type: v.union(v.literal("admin"), v.literal("system")),
+  admin_user_id: v.optional(v.id("admin_users")),
+  system_actor_type: v.optional(systemActorType),
+});
+
+export type AdminAlertResolvedBy = typeof adminAlertResolvedBy.type;
 
 /**
  * Notification types for bank account document comments

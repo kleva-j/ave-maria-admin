@@ -14,11 +14,13 @@
  */
 import { ConvexError, v } from "convex/values";
 
+import { createConvexEventOutboxService } from "./adapters/eventOutboxAdapter";
 import { mutation, query } from "./_generated/server";
 import { getAdminUser } from "./utils";
 import { auditLog } from "./auditLog";
 import {
   KYC_VERIFICATION_STATUS,
+  NotificationEventType,
   verificationStatus,
   VERIFICATION_STATUS,
   RESOURCE_TYPE,
@@ -514,6 +516,24 @@ export const approveVerification = mutation({
       actor_admin_id: admin._id,
     });
 
+    await createConvexEventOutboxService(ctx).append([
+      {
+        eventType: NotificationEventType.BANK_VERIFICATION_APPROVED,
+        sourceKind: "admin",
+        resourceType: RESOURCE_TYPE.BANK_ACCOUNTS,
+        resourceId: String(updated._id),
+        dedupeKey: `bank_verification_approved:${updated._id}:${updated.verified_at ?? now}`,
+        occurredAt: now,
+        payload: {
+          account_id: String(updated._id),
+          user_id: String(account.user_id),
+          verified_by_admin_id: String(admin._id),
+          verified_at: updated.verified_at,
+          notes: args.notes ?? null,
+        },
+      },
+    ]);
+
     return {
       _id: updated._id,
       verification_status: updated.verification_status,
@@ -622,6 +642,23 @@ export const rejectVerification = mutation({
       },
       actor_admin_id: admin._id,
     });
+
+    await createConvexEventOutboxService(ctx).append([
+      {
+        eventType: NotificationEventType.BANK_VERIFICATION_REJECTED,
+        sourceKind: "admin",
+        resourceType: RESOURCE_TYPE.BANK_ACCOUNTS,
+        resourceId: String(updated._id),
+        dedupeKey: `bank_verification_rejected:${updated._id}:${now}`,
+        occurredAt: now,
+        payload: {
+          account_id: String(updated._id),
+          user_id: String(account.user_id),
+          rejected_by_admin_id: String(admin._id),
+          rejection_reason: args.reason,
+        },
+      },
+    ]);
 
     return {
       _id: updated._id,

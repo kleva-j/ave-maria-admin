@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AuditLogService,
   BankAccountRepository,
+  EventOutboxService,
   KycDocumentRepository,
   UserRepository,
   VerifiedBankAccountRecord,
@@ -10,7 +11,13 @@ import type {
   WithdrawalRepository,
   WithdrawalReservationRepository,
 } from "../ports/index.js";
-import type { KycDocument, Transaction, User, Withdrawal, WithdrawalReservation } from "@avm-daily/domain";
+import type {
+  WithdrawalReservation,
+  KycDocument,
+  Transaction,
+  Withdrawal,
+  User,
+} from "@avm-daily/domain";
 
 import {
   createApplyKycDecisionUseCase,
@@ -21,7 +28,17 @@ import {
   createRunAutomatedKycUseCase,
   createUploadKycDocumentUseCase,
 } from "../use-cases/index.js";
-import { DomainError, DocumentType, KycStatus, TransactionSource, TxnType, WithdrawalMethod, WithdrawalReservationStatus, WithdrawalStatus } from "@avm-daily/domain";
+import { NotificationEventType } from "../ports/index.js";
+import {
+  DomainError,
+  DocumentType,
+  KycStatus,
+  TransactionSource,
+  TxnType,
+  WithdrawalMethod,
+  WithdrawalReservationStatus,
+  WithdrawalStatus,
+} from "@avm-daily/domain";
 
 function createUser(overrides: Partial<User> = {}): User {
   return {
@@ -72,9 +89,7 @@ function createReservation(
   };
 }
 
-function createKycDocument(
-  overrides: Partial<KycDocument> = {},
-): KycDocument {
+function createKycDocument(overrides: Partial<KycDocument> = {}): KycDocument {
   return {
     _id: "doc-1",
     user_id: "user-1",
@@ -93,7 +108,12 @@ function createUserRepository(users: User[]): UserRepository {
       const user = store.get(id);
       return user ? { ...user } : null;
     },
-    updateBalance: async (id, totalBalanceKobo, savingsBalanceKobo, updatedAt) => {
+    updateBalance: async (
+      id,
+      totalBalanceKobo,
+      savingsBalanceKobo,
+      updatedAt,
+    ) => {
       const user = store.get(id);
       if (!user) throw new Error(`Unknown user: ${id}`);
       store.set(id, {
@@ -118,7 +138,9 @@ function createUserRepository(users: User[]): UserRepository {
 function createWithdrawalRepository(
   withdrawals: Withdrawal[] = [],
 ): WithdrawalRepository & { get: (id: string) => Withdrawal | undefined } {
-  const store = new Map(withdrawals.map((withdrawal) => [withdrawal._id, { ...withdrawal }]));
+  const store = new Map(
+    withdrawals.map((withdrawal) => [withdrawal._id, { ...withdrawal }]),
+  );
   let counter = withdrawals.length;
 
   return {
@@ -131,7 +153,9 @@ function createWithdrawalRepository(
       return withdrawal ? { ...withdrawal } : null;
     },
     findByReference: async (reference) => {
-      const withdrawal = [...store.values()].find((item) => item.reference === reference);
+      const withdrawal = [...store.values()].find(
+        (item) => item.reference === reference,
+      );
       return withdrawal ? { ...withdrawal } : null;
     },
     findByUserId: async (userId) =>
@@ -209,7 +233,9 @@ function createBankAccountRepository(
 function createKycDocumentRepository(
   documents: KycDocument[] = [],
 ): KycDocumentRepository & { get: (id: string) => KycDocument | undefined } {
-  const store = new Map(documents.map((document) => [document._id, { ...document }]));
+  const store = new Map(
+    documents.map((document) => [document._id, { ...document }]),
+  );
   let counter = documents.length;
 
   return {
@@ -257,6 +283,14 @@ function createAuditLogService(): AuditLogService {
   };
 }
 
+function createEventOutboxService(): EventOutboxService & {
+  append: ReturnType<typeof vi.fn>;
+} {
+  return {
+    append: vi.fn(async () => undefined),
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -265,6 +299,7 @@ describe("withdrawal application use cases", () => {
   it("creates a withdrawal reservation without posting a ledger transaction", async () => {
     vi.spyOn(Date, "now").mockReturnValue(10_000);
     const auditLogService = createAuditLogService();
+    const eventOutboxService = createEventOutboxService();
     const withdrawalRepository = createWithdrawalRepository();
     const reservationRepository = createReservationRepository();
     const assertWithdrawalAllowed = vi.fn(async () => undefined);
@@ -280,6 +315,7 @@ describe("withdrawal application use cases", () => {
         account_number_last4: "1234",
       }),
       auditLogService,
+      eventOutboxService,
       assertWithdrawalAllowed,
     });
 
@@ -296,6 +332,13 @@ describe("withdrawal application use cases", () => {
     expect(result.reservation.status).toBe(WithdrawalReservationStatus.ACTIVE);
     expect(assertWithdrawalAllowed).toHaveBeenCalledOnce();
     expect(auditLogService.log).toHaveBeenCalledOnce();
+    expect(eventOutboxService.append).toHaveBeenCalledWith([
+      expect.objectContaining({
+        eventType: NotificationEventType.WITHDRAWAL_REQUESTED,
+        sourceKind: "user",
+        resourceId: result.withdrawal._id,
+      }),
+    ]);
   });
 
   it("rejects an approved withdrawal by releasing the reservation only", async () => {
@@ -327,7 +370,9 @@ describe("withdrawal application use cases", () => {
 
     expect(result.withdrawal.status).toBe(WithdrawalStatus.REJECTED);
     expect(result.withdrawal.transaction_id).toBeUndefined();
-    expect(result.reservation.status).toBe(WithdrawalReservationStatus.RELEASED);
+    expect(result.reservation.status).toBe(
+      WithdrawalReservationStatus.RELEASED,
+    );
     expect(auditLogService.logChange).toHaveBeenCalledOnce();
   });
 
@@ -388,7 +433,9 @@ describe("withdrawal application use cases", () => {
     );
     expect(result.withdrawal.status).toBe(WithdrawalStatus.PROCESSED);
     expect(result.withdrawal.transaction_id).toBe("tx-1");
-    expect(result.reservation.status).toBe(WithdrawalReservationStatus.CONSUMED);
+    expect(result.reservation.status).toBe(
+      WithdrawalReservationStatus.CONSUMED,
+    );
   });
 });
 
@@ -492,6 +539,7 @@ describe("kyc application use cases", () => {
   it("applies KYC rejection by keeping the user in pending_kyc and updating all pending documents", async () => {
     vi.spyOn(Date, "now").mockReturnValue(50_000);
     const auditLogService = createAuditLogService();
+    const eventOutboxService = createEventOutboxService();
     const userRepository = createUserRepository([
       createUser({ status: "pending_kyc" }),
     ]);
@@ -507,6 +555,7 @@ describe("kyc application use cases", () => {
       userRepository,
       kycDocumentRepository,
       auditLogService,
+      eventOutboxService,
     });
 
     const result = await applyKycDecision({
@@ -518,7 +567,19 @@ describe("kyc application use cases", () => {
 
     expect(result.newStatus).toBe("pending_kyc");
     expect(result.documentsReviewed).toBe(2);
-    expect(await kycDocumentRepository.findByUserIdAndStatus("user-1", KycStatus.REJECTED)).toHaveLength(2);
+    expect(
+      await kycDocumentRepository.findByUserIdAndStatus(
+        "user-1",
+        KycStatus.REJECTED,
+      ),
+    ).toHaveLength(2);
     expect(auditLogService.logChange).toHaveBeenCalledOnce();
+    expect(eventOutboxService.append).toHaveBeenCalledWith([
+      expect.objectContaining({
+        eventType: NotificationEventType.KYC_DECISION_APPLIED,
+        sourceKind: "admin",
+        resourceId: "user-1",
+      }),
+    ]);
   });
 });

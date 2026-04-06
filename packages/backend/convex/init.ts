@@ -30,6 +30,16 @@ export const setup = internalAction({
         fn: internal.transactions.runReconciliation,
         schedule: { kind: "interval" as const, ms: 60 * 60 * 1000 }, // 1 hour
       },
+      {
+        name: "evaluate admin alert conditions",
+        fn: internal.adminAlerts.evaluateQueueConditions,
+        schedule: { kind: "interval" as const, ms: 5 * 60 * 1000 }, // 5 minutes
+      },
+      {
+        name: "sweep admin alert outbox",
+        fn: internal.adminAlerts.processPendingEvents,
+        schedule: { kind: "interval" as const, ms: 60 * 1000 }, // 1 minute
+      },
     ];
 
     for (const job of cronJobs) {

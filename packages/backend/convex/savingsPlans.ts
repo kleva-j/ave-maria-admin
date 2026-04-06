@@ -34,9 +34,16 @@ import {
   createConvexSavingsPlanTemplateRepository,
 } from "./adapters/savingsPlanAdapters";
 
-import { syncSavingsPlanInsert, syncSavingsPlanUpdate } from "./aggregateHelpers";
+import {
+  syncSavingsPlanInsert,
+  syncSavingsPlanUpdate,
+} from "./aggregateHelpers";
 
-import { buildSavingsPlanSummary, normalizeOptionalString, todayIsoDate } from "./savingsPlanRules";
+import {
+  buildSavingsPlanSummary,
+  normalizeOptionalString,
+  todayIsoDate,
+} from "./savingsPlanRules";
 
 const templateSnapshotValidator = v.object({
   name: v.string(),
@@ -174,7 +181,9 @@ function normalizeContributionMetadata(params: {
 }) {
   const metadata = asObject(params.metadata);
   const channel = normalizeOptionalString(params.channel);
-  const originReference = normalizeOptionalString(params.originReference ?? params.reference);
+  const originReference = normalizeOptionalString(
+    params.originReference ?? params.reference,
+  );
   const note = normalizeOptionalString(params.note);
 
   return {
@@ -187,11 +196,17 @@ function normalizeContributionMetadata(params: {
   };
 }
 
-async function getPlanDoc(ctx: QueryCtx | MutationCtx, planId: UserSavingsPlanId) {
+async function getPlanDoc(
+  ctx: QueryCtx | MutationCtx,
+  planId: UserSavingsPlanId,
+) {
   return await ctx.db.get(planId);
 }
 
-async function getPlanDocOrThrow(ctx: QueryCtx | MutationCtx, planId: UserSavingsPlanId) {
+async function getPlanDocOrThrow(
+  ctx: QueryCtx | MutationCtx,
+  planId: UserSavingsPlanId,
+) {
   const plan = await getPlanDoc(ctx, planId);
   if (!plan) {
     throw new ConvexError("Savings plan not found");
@@ -233,16 +248,21 @@ function paginatePlans(
   const cursor = parsePlanCursor(paginationOpts.cursor);
   const orderedPlans = [...plans].sort(comparePlansBySortKey);
   const startIndex =
-    cursor === null ? 0 : orderedPlans.findIndex((plan) => comparePlanToCursor(plan, cursor) > 0);
+    cursor === null
+      ? 0
+      : orderedPlans.findIndex((plan) => comparePlanToCursor(plan, cursor) > 0);
 
-  const normalizedStartIndex = startIndex === -1 ? orderedPlans.length : startIndex;
+  const normalizedStartIndex =
+    startIndex === -1 ? orderedPlans.length : startIndex;
   const page = orderedPlans.slice(
     normalizedStartIndex,
     normalizedStartIndex + paginationOpts.numItems,
   );
   const isDone = normalizedStartIndex + page.length >= orderedPlans.length;
   const continueCursor =
-    isDone || page.length === 0 ? null : formatPlanCursor(page[page.length - 1]!);
+    isDone || page.length === 0
+      ? null
+      : formatPlanCursor(page[page.length - 1]!);
 
   return {
     page: page.map((plan) => serializePlanSummary(plan, today)),
@@ -370,7 +390,9 @@ function buildAdminPlansQuery(
 
   return ctx.db
     .query(TABLE_NAMES.USER_SAVINGS_PLANS)
-    .withIndex("by_created_at", (q) => (cursor ? q.lte("created_at", cursor.createdAt) : q))
+    .withIndex("by_created_at", (q) =>
+      cursor ? q.lte("created_at", cursor.createdAt) : q,
+    )
     .order("desc");
 }
 
@@ -389,45 +411,49 @@ async function recordContributionWorkflow(
   const before = await getPlanDoc(ctx, input.planId);
 
   try {
-    const recordSavingsPlanContribution = createRecordSavingsPlanContributionUseCase({
-      savingsPlanRepository: createConvexSavingsPlanRepository(ctx),
-      transactionReadRepository: createConvexTransactionReadRepository(ctx),
-      postTransaction: async (args) => {
-        const result = await postTransactionEntry(ctx, {
-          userId: args.userId as UserId,
-          userPlanId: args.userPlanId as UserSavingsPlanId | undefined,
-          type: args.type,
-          amountKobo: args.amountKobo,
-          reference: args.reference,
-          metadata: args.metadata,
-          source: args.source as TransactionSource,
-          actorId: args.actorId as UserId | AdminUserId | undefined,
-          createdAt: args.createdAt,
-          reversalOfTransactionId: args.reversalOfTransactionId as TransactionId | undefined,
-        });
+    const recordSavingsPlanContribution =
+      createRecordSavingsPlanContributionUseCase({
+        savingsPlanRepository: createConvexSavingsPlanRepository(ctx),
+        transactionReadRepository: createConvexTransactionReadRepository(ctx),
+        postTransaction: async (args) => {
+          const result = await postTransactionEntry(ctx, {
+            userId: args.userId as UserId,
+            userPlanId: args.userPlanId as UserSavingsPlanId | undefined,
+            type: args.type,
+            amountKobo: args.amountKobo,
+            reference: args.reference,
+            metadata: args.metadata,
+            source: args.source as TransactionSource,
+            actorId: args.actorId as UserId | AdminUserId | undefined,
+            createdAt: args.createdAt,
+            reversalOfTransactionId: args.reversalOfTransactionId as
+              | TransactionId
+              | undefined,
+          });
 
-        return {
-          idempotent: result.idempotent,
-          transaction: {
-            _id: String(result.transaction._id),
-            user_id: String(result.transaction.user_id),
-            user_plan_id: result.transaction.user_plan_id
-              ? String(result.transaction.user_plan_id)
-              : undefined,
-            type: result.transaction.type,
-            amount_kobo: result.transaction.amount_kobo,
-            reference: result.transaction.reference,
-            reversal_of_transaction_id: result.transaction.reversal_of_transaction_id
-              ? String(result.transaction.reversal_of_transaction_id)
-              : undefined,
-            reversal_of_reference: result.transaction.reversal_of_reference,
-            reversal_of_type: result.transaction.reversal_of_type,
-            metadata: asObject(result.transaction.metadata),
-            created_at: result.transaction.created_at,
-          },
-        };
-      },
-    });
+          return {
+            idempotent: result.idempotent,
+            transaction: {
+              _id: String(result.transaction._id),
+              user_id: String(result.transaction.user_id),
+              user_plan_id: result.transaction.user_plan_id
+                ? String(result.transaction.user_plan_id)
+                : undefined,
+              type: result.transaction.type,
+              amount_kobo: result.transaction.amount_kobo,
+              reference: result.transaction.reference,
+              reversal_of_transaction_id: result.transaction
+                .reversal_of_transaction_id
+                ? String(result.transaction.reversal_of_transaction_id)
+                : undefined,
+              reversal_of_reference: result.transaction.reversal_of_reference,
+              reversal_of_type: result.transaction.reversal_of_type,
+              metadata: asObject(result.transaction.metadata),
+              created_at: result.transaction.created_at,
+            },
+          };
+        },
+      });
 
     const result = await recordSavingsPlanContribution({
       ...input,
@@ -499,7 +525,8 @@ export const create = mutation({
       const createSavingsPlan = createCreateSavingsPlanUseCase({
         userRepository: createConvexUserRepository(ctx),
         savingsPlanRepository: createConvexSavingsPlanRepository(ctx),
-        savingsPlanTemplateRepository: createConvexSavingsPlanTemplateRepository(ctx),
+        savingsPlanTemplateRepository:
+          createConvexSavingsPlanTemplateRepository(ctx),
         auditLogService: createConvexAuditLogService(ctx),
       });
 
@@ -511,7 +538,10 @@ export const create = mutation({
         endDate: args.endDate,
       });
 
-      const doc = await getPlanDocOrThrow(ctx, created._id as UserSavingsPlanId);
+      const doc = await getPlanDocOrThrow(
+        ctx,
+        created._id as UserSavingsPlanId,
+      );
       await syncSavingsPlanInsert(ctx, doc);
       return serializePlanSummary(doc);
     } catch (error) {
@@ -540,7 +570,10 @@ export const pause = mutation({
       });
 
       await syncUpdatedPlanIfNeeded(ctx, before, args.planId);
-      const doc = await getPlanDocOrThrow(ctx, updated._id as UserSavingsPlanId);
+      const doc = await getPlanDocOrThrow(
+        ctx,
+        updated._id as UserSavingsPlanId,
+      );
       return serializePlanSummary(doc);
     } catch (error) {
       toConvexError(error);
@@ -568,7 +601,10 @@ export const resume = mutation({
       });
 
       await syncUpdatedPlanIfNeeded(ctx, before, args.planId);
-      const doc = await getPlanDocOrThrow(ctx, updated._id as UserSavingsPlanId);
+      const doc = await getPlanDocOrThrow(
+        ctx,
+        updated._id as UserSavingsPlanId,
+      );
       return serializePlanSummary(doc);
     } catch (error) {
       toConvexError(error);
@@ -602,7 +638,10 @@ export const updateSettings = mutation({
       });
 
       await syncUpdatedPlanIfNeeded(ctx, before, args.planId);
-      const doc = await getPlanDocOrThrow(ctx, updated._id as UserSavingsPlanId);
+      const doc = await getPlanDocOrThrow(
+        ctx,
+        updated._id as UserSavingsPlanId,
+      );
       return serializePlanSummary(doc);
     } catch (error) {
       toConvexError(error);
@@ -630,7 +669,10 @@ export const close = mutation({
       });
 
       await syncUpdatedPlanIfNeeded(ctx, before, args.planId);
-      const doc = await getPlanDocOrThrow(ctx, updated._id as UserSavingsPlanId);
+      const doc = await getPlanDocOrThrow(
+        ctx,
+        updated._id as UserSavingsPlanId,
+      );
       return serializePlanSummary(doc);
     } catch (error) {
       toConvexError(error);
@@ -650,35 +692,32 @@ export const listForAdmin = query({
   handler: async (ctx, args) => {
     await getAdminUser(ctx);
     const today = todayIsoDate();
-    const cursor = parsePlanCursor(args.paginationOpts.cursor);
-    let limit = Math.max(args.paginationOpts.numItems * 2, 20);
+
+    const { userId, templateId, status, overdueOnly, paginationOpts } = args;
+
+    const cursor = parsePlanCursor(paginationOpts.cursor);
+    let limit = Math.max(paginationOpts.numItems * 2, 20);
 
     while (true) {
       const plans = await buildAdminPlansQuery(
         ctx,
-        {
-          userId: args.userId,
-          templateId: args.templateId,
-          status: args.status,
-        },
+        { userId, templateId, status },
         cursor,
       ).take(limit);
 
       const filtered = plans.filter((plan) =>
         matchesAdminPlanFilters(
           plan,
-          {
-            userId: args.userId,
-            templateId: args.templateId,
-            status: args.status,
-            overdueOnly: args.overdueOnly,
-          },
+          { userId, templateId, status, overdueOnly },
           today,
         ),
       );
-      const paginated = paginatePlans(filtered, args.paginationOpts, today);
+      const paginated = paginatePlans(filtered, paginationOpts, today);
 
-      if (paginated.page.length === args.paginationOpts.numItems || plans.length < limit) {
+      if (
+        paginated.page.length === args.paginationOpts.numItems ||
+        plans.length < limit
+      ) {
         return paginated;
       }
 
