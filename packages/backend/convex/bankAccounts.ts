@@ -24,6 +24,7 @@ import { createConvexEventOutboxService } from "./adapters/eventOutboxAdapter";
 import { sortAccounts, getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
 import {
+  NotificationEventType,
   BankAccountEventType,
   bankAccountEventType,
   VERIFICATION_STATUS,
@@ -870,7 +871,7 @@ export const submitForVerification = mutation({
 
     await createConvexEventOutboxService(ctx).append([
       {
-        eventType: "bank_verification_submitted",
+        eventType: NotificationEventType.BANK_VERIFICATION_SUBMITTED,
         sourceKind: "user",
         resourceType: RESOURCE_TYPE.BANK_ACCOUNTS,
         resourceId: String(updated._id),

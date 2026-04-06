@@ -280,6 +280,8 @@ export function createConvexNotificationEventRepository(
         ])
       )
         .flat()
+        .sort((left, right) => left.next_attempt_at - right.next_attempt_at)
+        .slice(0, limit)
         .map(mapNotificationEvent);
     },
   };

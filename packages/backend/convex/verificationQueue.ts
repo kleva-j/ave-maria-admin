@@ -20,6 +20,7 @@ import { getAdminUser } from "./utils";
 import { auditLog } from "./auditLog";
 import {
   KYC_VERIFICATION_STATUS,
+  NotificationEventType,
   verificationStatus,
   VERIFICATION_STATUS,
   RESOURCE_TYPE,
@@ -517,7 +518,7 @@ export const approveVerification = mutation({
 
     await createConvexEventOutboxService(ctx).append([
       {
-        eventType: "bank_verification_approved",
+        eventType: NotificationEventType.BANK_VERIFICATION_APPROVED,
         sourceKind: "admin",
         resourceType: RESOURCE_TYPE.BANK_ACCOUNTS,
         resourceId: String(updated._id),
@@ -644,7 +645,7 @@ export const rejectVerification = mutation({
 
     await createConvexEventOutboxService(ctx).append([
       {
-        eventType: "bank_verification_rejected",
+        eventType: NotificationEventType.BANK_VERIFICATION_REJECTED,
         sourceKind: "admin",
         resourceType: RESOURCE_TYPE.BANK_ACCOUNTS,
         resourceId: String(updated._id),

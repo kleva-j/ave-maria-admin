@@ -83,7 +83,11 @@ function createNotificationEventRepository(
     },
     async listDueForProcessing(now, limit) {
       return [...events.values()]
-        .filter((event) => event.nextAttemptAt <= now)
+        .filter(
+          (event) =>
+            event.nextAttemptAt <= now &&
+            event.processingStatus === NotificationEventProcessingStatus.PENDING,
+        )
         .slice(0, limit)
         .map((event) => ({ ...event }));
     },

@@ -256,7 +256,7 @@ export interface AuditLogService {
 }
 
 export type DomainEvent = {
-  eventType: string;
+  eventType: NotificationEventType;
   sourceKind: "user" | "admin" | "system";
   resourceType: string;
   resourceId: string;

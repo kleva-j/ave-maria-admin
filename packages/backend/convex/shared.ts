@@ -456,6 +456,7 @@ export const RESOURCE_TYPE = {
 
 export const resourceType = v.union(
   v.literal(RESOURCE_TYPE.USER),
+  v.literal(RESOURCE_TYPE.USERS),
   v.literal(RESOURCE_TYPE.ADMIN_USER),
   v.literal(RESOURCE_TYPE.ADMIN_ALERT),
   v.literal(RESOURCE_TYPE.ADMIN_ALERTS),

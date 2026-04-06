@@ -99,6 +99,8 @@ import type {
   UserRepository,
 } from "../ports";
 
+import { NotificationEventType } from "../ports";
+
 export type EvaluateWithdrawalRiskInput = {
   userId: string;
   amountKobo: bigint;
@@ -406,7 +408,7 @@ function buildComparablePayload(input: PostTransactionDTO) {
 async function appendDomainEvents(
   eventOutboxService: EventOutboxService | undefined,
   events: Array<{
-    eventType: string;
+    eventType: NotificationEventType;
     sourceKind: "user" | "admin" | "system";
     resourceType: string;
     resourceId: string;
@@ -419,7 +421,18 @@ async function appendDomainEvents(
     return;
   }
 
-  await eventOutboxService.append(events);
+  try {
+    await eventOutboxService.append(events);
+  } catch (error) {
+    console.error("Failed to append domain events to outbox", {
+      error,
+      events,
+      dedupeKeys: events.map((event) => event.dedupeKey),
+      resourceIds: events.map((event) => event.resourceId),
+      resourceTypes: events.map((event) => event.resourceType),
+      sourceKinds: events.map((event) => event.sourceKind),
+    });
+  }
 }
 
 function buildComparablePayloadFromTx(tx: Transaction) {
@@ -1482,7 +1495,7 @@ export function createRequestWithdrawalUseCase(deps: {
 
     await appendDomainEvents(deps.eventOutboxService, [
       {
-        eventType: "withdrawal_requested",
+        eventType: NotificationEventType.WITHDRAWAL_REQUESTED,
         sourceKind: "user",
         resourceType: "withdrawals",
         resourceId: withdrawal._id,
@@ -1556,7 +1569,7 @@ export function createApproveWithdrawalUseCase(deps: {
 
     await appendDomainEvents(deps.eventOutboxService, [
       {
-        eventType: "withdrawal_approved",
+        eventType: NotificationEventType.WITHDRAWAL_APPROVED,
         sourceKind: "admin",
         resourceType: "withdrawals",
         resourceId: updated._id,
@@ -1646,7 +1659,7 @@ export function createRejectWithdrawalUseCase(deps: {
 
     await appendDomainEvents(deps.eventOutboxService, [
       {
-        eventType: "withdrawal_rejected",
+        eventType: NotificationEventType.WITHDRAWAL_REJECTED,
         sourceKind: "admin",
         resourceType: "withdrawals",
         resourceId: updated._id,
@@ -1751,7 +1764,7 @@ export function createProcessWithdrawalUseCase(deps: {
 
       await appendDomainEvents(deps.eventOutboxService, [
         {
-          eventType: "withdrawal_processing_failed",
+          eventType: NotificationEventType.WITHDRAWAL_PROCESSING_FAILED,
           sourceKind: "admin",
           resourceType: "withdrawals",
           resourceId: failed._id,
@@ -1838,7 +1851,7 @@ export function createProcessWithdrawalUseCase(deps: {
 
     await appendDomainEvents(deps.eventOutboxService, [
       {
-        eventType: "withdrawal_processed",
+        eventType: NotificationEventType.WITHDRAWAL_PROCESSED,
         sourceKind: "admin",
         resourceType: "withdrawals",
         resourceId: updatedWithdrawal._id,
@@ -2072,7 +2085,7 @@ export function createApplyKycDecisionUseCase(deps: {
 
     await appendDomainEvents(deps.eventOutboxService, [
       {
-        eventType: "kyc_decision_applied",
+        eventType: NotificationEventType.KYC_DECISION_APPLIED,
         sourceKind: input.reviewedBy ? "admin" : "system",
         resourceType: "users",
         resourceId: user._id,

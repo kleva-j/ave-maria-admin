@@ -31,9 +31,9 @@ export default defineSchema({
     transaction_reconciliation_runs,
   [TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES]:
     transaction_reconciliation_issues,
-    [TABLE_NAMES.RISK_EVENTS]: risk_events,
-    [TABLE_NAMES.KYC_DOCUMENTS]: kyc_documents,
-    [TABLE_NAMES.USER_RISK_HOLDS]: user_risk_holds,
+  [TABLE_NAMES.RISK_EVENTS]: risk_events,
+  [TABLE_NAMES.KYC_DOCUMENTS]: kyc_documents,
+  [TABLE_NAMES.USER_RISK_HOLDS]: user_risk_holds,
   [TABLE_NAMES.USER_SAVINGS_PLANS]: user_savings_plans,
   [TABLE_NAMES.USER_BANK_ACCOUNTS]: user_bank_accounts,
   [TABLE_NAMES.NOTIFICATION_EVENTS]: notification_events,

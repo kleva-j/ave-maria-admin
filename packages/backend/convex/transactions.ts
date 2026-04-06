@@ -67,6 +67,7 @@ import {
   TransactionReconciliationIssueStatus,
   TransactionReconciliationIssueType,
   TransactionReconciliationRunStatus,
+  NotificationEventType,
   transactionSource,
   TransactionSource,
   RESOURCE_TYPE,
@@ -1199,7 +1200,7 @@ export const runReconciliation = internalMutation({
 
       await createConvexEventOutboxService(ctx).append([
         {
-          eventType: "reconciliation_run_completed",
+          eventType: NotificationEventType.RECONCILIATION_RUN_COMPLETED,
           sourceKind: "system",
           resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
           resourceId: String(runId),
@@ -1236,7 +1237,7 @@ export const runReconciliation = internalMutation({
 
       await createConvexEventOutboxService(ctx).append([
         {
-          eventType: "reconciliation_run_failed",
+          eventType: NotificationEventType.RECONCILIATION_RUN_FAILED,
           sourceKind: "system",
           resourceType: RESOURCE_TYPE.TRANSACTION_RECONCILIATION_RUNS,
           resourceId: String(runId),

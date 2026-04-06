@@ -811,7 +811,7 @@ export function createAppendDomainEventsUseCase(deps: {
 
       const occurredAt = event.occurredAt ?? Date.now();
       const created = await deps.notificationEventRepository.create({
-        eventType: event.eventType as NotificationEventType,
+        eventType: event.eventType,
         sourceKind: event.sourceKind,
         resourceType: event.resourceType,
         resourceId: event.resourceId,
