@@ -17,6 +17,8 @@ import type {
 import {
   reconciliationIssuesByStatus,
   reconciliationIssuesByType,
+  reconciliationIssuesByUser,
+  reconciliationIssuesByRun,
   totalReconciliationIssues,
   savingsPlansByStatus,
   withdrawalsByStatus,
@@ -187,6 +189,10 @@ export async function syncReconciliationIssueInsert(
     totalReconciliationIssues.insert(ctx, issue),
     reconciliationIssuesByStatus.insert(ctx, issue),
     reconciliationIssuesByType.insert(ctx, issue),
+    reconciliationIssuesByRun.insert(ctx, issue),
+    issue.user_id
+      ? reconciliationIssuesByUser.insert(ctx, issue)
+      : Promise.resolve(),
   ]);
 }
 
@@ -203,6 +209,29 @@ export async function syncReconciliationIssueUpdate(
     totalReconciliationIssues.replace(ctx, oldIssue, newIssue),
     reconciliationIssuesByStatus.replace(ctx, oldIssue, newIssue),
     reconciliationIssuesByType.replace(ctx, oldIssue, newIssue),
+    reconciliationIssuesByRun.replace(ctx, oldIssue, newIssue),
+    oldIssue.user_id && newIssue.user_id
+      ? reconciliationIssuesByUser.replace(ctx, oldIssue, newIssue)
+      : oldIssue.user_id && !newIssue.user_id
+        ? reconciliationIssuesByUser.delete(ctx, oldIssue)
+        : !oldIssue.user_id && newIssue.user_id
+          ? reconciliationIssuesByUser.insert(ctx, newIssue)
+          : Promise.resolve(),
+  ]);
+}
+
+export async function syncReconciliationIssueDelete(
+  ctx: MutationCtx,
+  issue: TransactionReconciliationIssue,
+) {
+  await Promise.all([
+    totalReconciliationIssues.delete(ctx, issue),
+    reconciliationIssuesByStatus.delete(ctx, issue),
+    reconciliationIssuesByType.delete(ctx, issue),
+    reconciliationIssuesByRun.delete(ctx, issue),
+    issue.user_id
+      ? reconciliationIssuesByUser.delete(ctx, issue)
+      : Promise.resolve(),
   ]);
 }
 
