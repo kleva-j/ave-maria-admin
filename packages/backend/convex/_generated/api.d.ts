@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as adapters_adminAlertAdapters from "../adapters/adminAlertAdapters.js";
 import type * as adapters_auditLogAdapter from "../adapters/auditLogAdapter.js";
 import type * as adapters_bankAccountAdapter from "../adapters/bankAccountAdapter.js";
 import type * as adapters_eventOutboxAdapter from "../adapters/eventOutboxAdapter.js";
@@ -78,6 +79,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  "adapters/adminAlertAdapters": typeof adapters_adminAlertAdapters;
   "adapters/auditLogAdapter": typeof adapters_auditLogAdapter;
   "adapters/bankAccountAdapter": typeof adapters_bankAccountAdapter;
   "adapters/eventOutboxAdapter": typeof adapters_eventOutboxAdapter;

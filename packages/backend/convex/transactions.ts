@@ -33,12 +33,15 @@ import type {
   UserId,
 } from "./types";
 
+import { DomainError, computeProjectionDelta } from "@avm-daily/domain";
 import { paginationOptsValidator } from "convex/server";
 import { ConvexError, v } from "convex/values";
 
+import { createConvexSavingsPlanRepository } from "./adapters/savingsPlanAdapters";
+import { createConvexEventOutboxService } from "./adapters/eventOutboxAdapter";
+import { createConvexUserRepository } from "./adapters/userAdapters";
 import { internalMutation, query } from "./_generated/server";
 import { getAdminUser, getUser, isRecord } from "./utils";
-import { appendNotificationEvents } from "./adminAlerts";
 import { auditLog } from "./auditLog";
 
 import {
@@ -50,11 +53,6 @@ import {
   createConvexTransactionWriteRepository,
   createConvexTransactionReadRepository,
 } from "./adapters/transactionAdapters";
-
-import { DomainError, computeProjectionDelta } from "@avm-daily/domain";
-
-import { createConvexSavingsPlanRepository } from "./adapters/savingsPlanAdapters";
-import { createConvexUserRepository } from "./adapters/userAdapters";
 
 // Re-export computeProjectionDelta from domain (single source of truth)
 export { computeProjectionDelta } from "@avm-daily/domain";
@@ -1199,7 +1197,7 @@ export const runReconciliation = internalMutation({
         },
       });
 
-      await appendNotificationEvents(ctx, [
+      await createConvexEventOutboxService(ctx).append([
         {
           eventType: "reconciliation_run_completed",
           sourceKind: "system",
@@ -1236,7 +1234,7 @@ export const runReconciliation = internalMutation({
         },
       });
 
-      await appendNotificationEvents(ctx, [
+      await createConvexEventOutboxService(ctx).append([
         {
           eventType: "reconciliation_run_failed",
           sourceKind: "system",

@@ -15,13 +15,13 @@
  */
 
 import type { AdminUserId, UserBankAccountId, UserId } from "./types";
-import type { VerificationStatus } from "./shared";
 import type { MutationCtx } from "./_generated/server";
+import type { VerificationStatus } from "./shared";
 
 import { ConvexError, v } from "convex/values";
 
+import { createConvexEventOutboxService } from "./adapters/eventOutboxAdapter";
 import { sortAccounts, getAdminUser, getUser } from "./utils";
-import { appendNotificationEvents } from "./adminAlerts";
 import { auditLog } from "./auditLog";
 import {
   BankAccountEventType,
@@ -868,7 +868,7 @@ export const submitForVerification = mutation({
       actorUserId: user._id,
     });
 
-    await appendNotificationEvents(ctx, [
+    await createConvexEventOutboxService(ctx).append([
       {
         eventType: "bank_verification_submitted",
         sourceKind: "user",

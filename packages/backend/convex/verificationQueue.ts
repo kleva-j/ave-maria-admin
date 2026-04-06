@@ -14,7 +14,7 @@
  */
 import { ConvexError, v } from "convex/values";
 
-import { appendNotificationEvents } from "./adminAlerts";
+import { createConvexEventOutboxService } from "./adapters/eventOutboxAdapter";
 import { mutation, query } from "./_generated/server";
 import { getAdminUser } from "./utils";
 import { auditLog } from "./auditLog";
@@ -515,7 +515,7 @@ export const approveVerification = mutation({
       actor_admin_id: admin._id,
     });
 
-    await appendNotificationEvents(ctx, [
+    await createConvexEventOutboxService(ctx).append([
       {
         eventType: "bank_verification_approved",
         sourceKind: "admin",
@@ -642,7 +642,7 @@ export const rejectVerification = mutation({
       actor_admin_id: admin._id,
     });
 
-    await appendNotificationEvents(ctx, [
+    await createConvexEventOutboxService(ctx).append([
       {
         eventType: "bank_verification_rejected",
         sourceKind: "admin",

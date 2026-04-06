@@ -2103,3 +2103,5 @@ export function createApplyKycDecisionUseCase(deps: {
     };
   };
 }
+
+export * from "./adminAlerts";

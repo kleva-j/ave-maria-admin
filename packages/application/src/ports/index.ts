@@ -5,6 +5,7 @@ import type {
   Transaction,
   KycDocument,
   Withdrawal,
+  AdminRole,
   User,
 } from "@avm-daily/domain";
 
@@ -266,4 +267,265 @@ export type DomainEvent = {
 
 export interface EventOutboxService {
   append(events: DomainEvent[]): Promise<void>;
+}
+
+export const NotificationEventProcessingStatus = {
+  PENDING: "pending",
+  PROCESSING: "processing",
+  PROCESSED: "processed",
+  FAILED: "failed",
+} as const;
+
+export type NotificationEventProcessingStatus =
+  (typeof NotificationEventProcessingStatus)[keyof typeof NotificationEventProcessingStatus];
+
+export const NotificationEventType = {
+  WITHDRAWAL_REQUESTED: "withdrawal_requested",
+  WITHDRAWAL_APPROVED: "withdrawal_approved",
+  WITHDRAWAL_REJECTED: "withdrawal_rejected",
+  WITHDRAWAL_PROCESSED: "withdrawal_processed",
+  WITHDRAWAL_PROCESSING_FAILED: "withdrawal_processing_failed",
+  KYC_DECISION_APPLIED: "kyc_decision_applied",
+  BANK_VERIFICATION_SUBMITTED: "bank_verification_submitted",
+  BANK_VERIFICATION_APPROVED: "bank_verification_approved",
+  BANK_VERIFICATION_REJECTED: "bank_verification_rejected",
+  RECONCILIATION_RUN_COMPLETED: "reconciliation_run_completed",
+  RECONCILIATION_RUN_FAILED: "reconciliation_run_failed",
+} as const;
+
+export type NotificationEventType =
+  (typeof NotificationEventType)[keyof typeof NotificationEventType];
+
+export const AdminAlertType = {
+  WITHDRAWALS_PENDING_OLDEST: "withdrawals_pending_oldest",
+  WITHDRAWALS_APPROVED_UNPROCESSED_OLDEST:
+    "withdrawals_approved_unprocessed_oldest",
+  KYC_PENDING_OLDEST: "kyc_pending_oldest",
+  BANK_VERIFICATION_PENDING_OLDEST: "bank_verification_pending_oldest",
+  RECONCILIATION_RUN_FAILED: "reconciliation_run_failed",
+  RECONCILIATION_RUN_STALE: "reconciliation_run_stale",
+  RECONCILIATION_OPEN_ISSUES: "reconciliation_open_issues",
+} as const;
+
+export type AdminAlertType =
+  (typeof AdminAlertType)[keyof typeof AdminAlertType];
+
+export const AdminAlertScope = {
+  WITHDRAWALS: "withdrawals",
+  KYC: "kyc",
+  BANK_VERIFICATION: "bank_verification",
+  RECONCILIATION: "reconciliation",
+  SYSTEM: "system",
+} as const;
+
+export type AdminAlertScope =
+  (typeof AdminAlertScope)[keyof typeof AdminAlertScope];
+
+export const AdminAlertSeverity = {
+  WARNING: "warning",
+  CRITICAL: "critical",
+} as const;
+
+export type AdminAlertSeverity =
+  (typeof AdminAlertSeverity)[keyof typeof AdminAlertSeverity];
+
+export const AdminAlertStatus = {
+  ACTIVE: "active",
+  RESOLVED: "resolved",
+} as const;
+
+export type AdminAlertStatus =
+  (typeof AdminAlertStatus)[keyof typeof AdminAlertStatus];
+
+export const AdminAlertReceiptState = {
+  UNREAD: "unread",
+  SEEN: "seen",
+  ACKNOWLEDGED: "acknowledged",
+} as const;
+
+export type AdminAlertReceiptState =
+  (typeof AdminAlertReceiptState)[keyof typeof AdminAlertReceiptState];
+
+export const AdminAlertResolutionKind = {
+  AUTOMATIC: "automatic",
+  MANUAL: "manual",
+} as const;
+
+export type AdminAlertResolutionKind =
+  (typeof AdminAlertResolutionKind)[keyof typeof AdminAlertResolutionKind];
+
+export const SystemActorType = {
+  CRON: "cron",
+  WORKER: "worker",
+} as const;
+
+export type SystemActorType =
+  (typeof SystemActorType)[keyof typeof SystemActorType];
+
+export type AdminAlertResolvedBy =
+  | {
+      actorType: "admin";
+      adminUserId: string;
+    }
+  | {
+      actorType: "system";
+      systemActorType: SystemActorType;
+    };
+
+export type NotificationEventRecord = {
+  id: string;
+  eventType: NotificationEventType;
+  sourceKind: DomainEvent["sourceKind"];
+  resourceType: string;
+  resourceId: string;
+  dedupeKey: string;
+  payload: Record<string, unknown>;
+  occurredAt: number;
+  processingStatus: NotificationEventProcessingStatus;
+  attemptCount: number;
+  nextAttemptAt: number;
+  lastError?: string;
+  processedAt?: number;
+};
+
+export type AdminAlertRecord = {
+  id: string;
+  alertType: AdminAlertType;
+  scope: AdminAlertScope;
+  severity: AdminAlertSeverity;
+  status: AdminAlertStatus;
+  title: string;
+  body: string;
+  fingerprint: string;
+  sourceEventId?: string;
+  routingRoles: AdminRole[];
+  metadata?: Record<string, unknown>;
+  firstOpenedAt: number;
+  lastTriggeredAt: number;
+  lastEvaluatedAt: number;
+  nextReminderAt?: number;
+  reminderCount: number;
+  resolutionKind?: AdminAlertResolutionKind;
+  resolvedAt?: number;
+  resolvedBy?: AdminAlertResolvedBy;
+};
+
+export type AdminAlertReceiptRecord = {
+  id: string;
+  alertId: string;
+  adminUserId: string;
+  deliveryState: AdminAlertReceiptState;
+  deliveredAt: number;
+  seenAt?: number;
+  acknowledgedAt?: number;
+  lastNotifiedAt: number;
+};
+
+export type PendingWithdrawalsAlertSnapshot = {
+  pendingCount: number;
+  oldestRequestedAt?: number;
+};
+
+export type ApprovedWithdrawalsAlertSnapshot = {
+  approvedCount: number;
+  oldestApprovedAt?: number;
+};
+
+export type KycPendingAlertSnapshot = {
+  pendingUserCount: number;
+  pendingDocumentCount: number;
+  oldestPendingDocumentAt?: number;
+};
+
+export type BankVerificationPendingAlertSnapshot = {
+  pendingAccountCount: number;
+  oldestSubmissionAt?: number;
+};
+
+export type ReconciliationRunAlertSnapshot = {
+  latestCompletedAt?: number;
+  latestRunId?: string;
+};
+
+export type ReconciliationOpenIssuesAlertSnapshot = {
+  openIssueCount: number;
+  latestIssueAt?: number;
+};
+
+export interface NotificationEventRepository {
+  findById(id: string): Promise<NotificationEventRecord | null>;
+  findByDedupeKey(dedupeKey: string): Promise<NotificationEventRecord | null>;
+  create(
+    event: Omit<
+      NotificationEventRecord,
+      "id" | "processingStatus" | "attemptCount" | "processedAt" | "lastError"
+    > & {
+      processingStatus?: NotificationEventProcessingStatus;
+      attemptCount?: number;
+    },
+  ): Promise<NotificationEventRecord>;
+  update(
+    id: string,
+    patch: Partial<
+      Omit<
+        NotificationEventRecord,
+        "id" | "eventType" | "sourceKind" | "resourceType" | "resourceId"
+      >
+    >,
+  ): Promise<NotificationEventRecord>;
+  listDueForProcessing(
+    now: number,
+    limit: number,
+  ): Promise<NotificationEventRecord[]>;
+}
+
+export interface NotificationEventScheduler {
+  scheduleProcessEvent(eventId: string): Promise<void>;
+}
+
+export interface AdminAlertRepository {
+  findById(id: string): Promise<AdminAlertRecord | null>;
+  findByFingerprint(fingerprint: string): Promise<AdminAlertRecord | null>;
+  create(alert: Omit<AdminAlertRecord, "id">): Promise<AdminAlertRecord>;
+  update(
+    id: string,
+    patch: Partial<
+      Omit<
+        AdminAlertRecord,
+        "id" | "alertType" | "scope" | "fingerprint" | "firstOpenedAt"
+      >
+    >,
+  ): Promise<AdminAlertRecord>;
+  listDueForReminder(now: number, limit: number): Promise<AdminAlertRecord[]>;
+  listActive(limit: number): Promise<AdminAlertRecord[]>;
+}
+
+export interface AdminAlertReceiptRepository {
+  findByAlertIdAndAdminUserId(
+    alertId: string,
+    adminUserId: string,
+  ): Promise<AdminAlertReceiptRecord | null>;
+  listByAlertId(alertId: string): Promise<AdminAlertReceiptRecord[]>;
+  create(
+    receipt: Omit<AdminAlertReceiptRecord, "id">,
+  ): Promise<AdminAlertReceiptRecord>;
+  update(
+    id: string,
+    patch: Partial<
+      Omit<AdminAlertReceiptRecord, "id" | "alertId" | "adminUserId">
+    >,
+  ): Promise<AdminAlertReceiptRecord>;
+}
+
+export interface AdminUserDirectory {
+  findActiveAdminIdsByRoles(roles: readonly AdminRole[]): Promise<string[]>;
+}
+
+export interface AdminAlertConditionReader {
+  getPendingWithdrawalsSnapshot(): Promise<PendingWithdrawalsAlertSnapshot>;
+  getApprovedWithdrawalsSnapshot(): Promise<ApprovedWithdrawalsAlertSnapshot>;
+  getKycPendingSnapshot(): Promise<KycPendingAlertSnapshot>;
+  getBankVerificationPendingSnapshot(): Promise<BankVerificationPendingAlertSnapshot>;
+  getReconciliationRunSnapshot(): Promise<ReconciliationRunAlertSnapshot>;
+  getReconciliationOpenIssuesSnapshot(): Promise<ReconciliationOpenIssuesAlertSnapshot>;
 }

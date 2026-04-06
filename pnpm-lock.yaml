@@ -317,6 +317,9 @@ importers:
       '@avm-daily/domain':
         specifier: workspace:*
         version: link:../domain
+      date-fns:
+        specifier: 'catalog:'
+        version: 4.1.0
     devDependencies:
       '@avm-daily/config':
         specifier: workspace:*
