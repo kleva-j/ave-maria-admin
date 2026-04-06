@@ -253,3 +253,17 @@ export interface AuditLogService {
     params: AuditLogChangeParams<T>,
   ): Promise<void>;
 }
+
+export type DomainEvent = {
+  eventType: string;
+  sourceKind: "user" | "admin" | "system";
+  resourceType: string;
+  resourceId: string;
+  dedupeKey: string;
+  payload: Record<string, unknown>;
+  occurredAt?: number;
+};
+
+export interface EventOutboxService {
+  append(events: DomainEvent[]): Promise<void>;
+}

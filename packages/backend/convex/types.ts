@@ -10,6 +10,12 @@ export type AuthContext = Context & { auth: Auth };
 // Users
 export type AdminUserId = Id<"admin_users">;
 export type AdminUser = Doc<"admin_users">;
+export type NotificationEvent = Doc<"notification_events">;
+export type NotificationEventId = Id<"notification_events">;
+export type AdminAlert = Doc<"admin_alerts">;
+export type AdminAlertId = Id<"admin_alerts">;
+export type AdminAlertReceipt = Doc<"admin_alert_receipts">;
+export type AdminAlertReceiptId = Id<"admin_alert_receipts">;
 export type UserId = Id<"users">;
 export type User = Doc<"users">;
 
