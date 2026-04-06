@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   AuditLogService,
   BankAccountRepository,
+  EventOutboxService,
   KycDocumentRepository,
   UserRepository,
   VerifiedBankAccountRecord,
@@ -257,6 +258,14 @@ function createAuditLogService(): AuditLogService {
   };
 }
 
+function createEventOutboxService(): EventOutboxService & {
+  append: ReturnType<typeof vi.fn>;
+} {
+  return {
+    append: vi.fn(async () => undefined),
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -265,6 +274,7 @@ describe("withdrawal application use cases", () => {
   it("creates a withdrawal reservation without posting a ledger transaction", async () => {
     vi.spyOn(Date, "now").mockReturnValue(10_000);
     const auditLogService = createAuditLogService();
+    const eventOutboxService = createEventOutboxService();
     const withdrawalRepository = createWithdrawalRepository();
     const reservationRepository = createReservationRepository();
     const assertWithdrawalAllowed = vi.fn(async () => undefined);
@@ -280,6 +290,7 @@ describe("withdrawal application use cases", () => {
         account_number_last4: "1234",
       }),
       auditLogService,
+      eventOutboxService,
       assertWithdrawalAllowed,
     });
 
@@ -296,6 +307,13 @@ describe("withdrawal application use cases", () => {
     expect(result.reservation.status).toBe(WithdrawalReservationStatus.ACTIVE);
     expect(assertWithdrawalAllowed).toHaveBeenCalledOnce();
     expect(auditLogService.log).toHaveBeenCalledOnce();
+    expect(eventOutboxService.append).toHaveBeenCalledWith([
+      expect.objectContaining({
+        eventType: "withdrawal_requested",
+        sourceKind: "user",
+        resourceId: result.withdrawal._id,
+      }),
+    ]);
   });
 
   it("rejects an approved withdrawal by releasing the reservation only", async () => {
@@ -492,6 +510,7 @@ describe("kyc application use cases", () => {
   it("applies KYC rejection by keeping the user in pending_kyc and updating all pending documents", async () => {
     vi.spyOn(Date, "now").mockReturnValue(50_000);
     const auditLogService = createAuditLogService();
+    const eventOutboxService = createEventOutboxService();
     const userRepository = createUserRepository([
       createUser({ status: "pending_kyc" }),
     ]);
@@ -507,6 +526,7 @@ describe("kyc application use cases", () => {
       userRepository,
       kycDocumentRepository,
       auditLogService,
+      eventOutboxService,
     });
 
     const result = await applyKycDecision({
@@ -520,5 +540,12 @@ describe("kyc application use cases", () => {
     expect(result.documentsReviewed).toBe(2);
     expect(await kycDocumentRepository.findByUserIdAndStatus("user-1", KycStatus.REJECTED)).toHaveLength(2);
     expect(auditLogService.logChange).toHaveBeenCalledOnce();
+    expect(eventOutboxService.append).toHaveBeenCalledWith([
+      expect.objectContaining({
+        eventType: "kyc_decision_applied",
+        sourceKind: "admin",
+        resourceId: "user-1",
+      }),
+    ]);
   });
 });
