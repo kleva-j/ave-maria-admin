@@ -1009,14 +1009,43 @@ export const runReconciliation = internalMutation({
       const allTransactions = await ctx.db
         .query(TABLE_NAMES.TRANSACTIONS)
         .collect();
-      const reversals = allTransactions.filter(
-        (transaction) => transaction.type === TxnType.REVERSAL,
-      );
-
+      const reversals: Transaction[] = [];
       const issues: Array<ReturnType<typeof buildReconciliationIssue>> = [];
+      const userProjectedBalances = new Map<string, { totalBalanceKobo: bigint; savingsBalanceKobo: bigint }>();
+      const planProjectedAmounts = new Map<string, bigint>();
+      const transactionsById = new Map<string, Transaction>();
+
+      for (const transaction of allTransactions) {
+        transactionsById.set(String(transaction._id), transaction);
+
+        if (transaction.type === TxnType.REVERSAL) {
+          reversals.push(transaction);
+        }
+
+        const effectiveType = getEffectiveType(transaction);
+        const delta = computeProjectionDelta(
+          effectiveType,
+          transaction.amount_kobo,
+          transaction.user_plan_id,
+        );
+
+        // Update user balances
+        const userId = String(transaction.user_id);
+        const userBal = userProjectedBalances.get(userId) ?? { totalBalanceKobo: 0n, savingsBalanceKobo: 0n };
+        userBal.totalBalanceKobo += delta.totalBalanceKobo;
+        userBal.savingsBalanceKobo += delta.savingsBalanceKobo;
+        userProjectedBalances.set(userId, userBal);
+
+        // Update plan balances
+        if (transaction.user_plan_id) {
+          const planId = String(transaction.user_plan_id);
+          const planAmount = planProjectedAmounts.get(planId) ?? 0n;
+          planProjectedAmounts.set(planId, planAmount + delta.planAmountKobo);
+        }
+      }
 
       for (const user of users) {
-        const projected = await buildProjectedUserBalances(ctx, user._id);
+        const projected = userProjectedBalances.get(String(user._id)) ?? { totalBalanceKobo: 0n, savingsBalanceKobo: 0n };
 
         if (projected.totalBalanceKobo !== user.total_balance_kobo) {
           issues.push(
@@ -1046,7 +1075,7 @@ export const runReconciliation = internalMutation({
       }
 
       for (const plan of plans) {
-        const projectedAmount = await buildProjectedPlanAmount(ctx, plan._id);
+        const projectedAmount = planProjectedAmounts.get(String(plan._id)) ?? 0n;
         if (projectedAmount !== plan.current_amount_kobo) {
           issues.push(
             buildReconciliationIssue({
@@ -1084,7 +1113,7 @@ export const runReconciliation = internalMutation({
           continue;
         }
 
-        const original = await ctx.db.get(reversal.reversal_of_transaction_id);
+        const original = transactionsById.get(String(reversal.reversal_of_transaction_id));
 
         if (
           !original ||
@@ -1121,7 +1150,7 @@ export const runReconciliation = internalMutation({
           continue;
         }
 
-        const original = await ctx.db.get(originalId as TransactionId);
+        const original = transactionsById.get(originalId);
         issues.push(
           buildReconciliationIssue({
             issueType: TransactionReconciliationIssueType.DOUBLE_REVERSAL,
@@ -1143,7 +1172,6 @@ export const runReconciliation = internalMutation({
       const completedAt = Date.now();
 
       for (const issue of previousOpenIssues) {
-        const oldIssue = await ctx.db.get(issue._id);
         await ctx.db.patch(issue._id, {
           issue_status: TransactionReconciliationIssueStatus.RESOLVED,
           resolved_at: completedAt,
@@ -1152,8 +1180,8 @@ export const runReconciliation = internalMutation({
         const newIssue = await ctx.db.get(issue._id);
 
         // Sync aggregates - mark as resolved
-        if (oldIssue && newIssue) {
-          await syncReconciliationIssueUpdate(ctx, oldIssue, newIssue);
+        if (newIssue) {
+          await syncReconciliationIssueUpdate(ctx, issue, newIssue);
         }
       }
 
