@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { DomainError, TxnType } from "@avm-daily/domain";
 
 import { createConvexTransactionWriteRepository } from "../adapters/transactionAdapters";
+import { createConvexAdminAlertConditionReader } from "../adapters/adminAlertAdapters";
 import { createConvexWithdrawalRepository } from "../adapters/withdrawalAdapter";
 
 import {
@@ -263,6 +264,42 @@ describe("Convex adapter repositories", () => {
       updated_at: 2,
     });
     expect(updated.status).toBe("paused");
+  });
+
+  it("derives reconciliation latestIssueAt from the newest open issue timestamp", async () => {
+    const openIssues = [
+      {
+        _id: "issue-1",
+        created_at: 10,
+      },
+      {
+        _id: "issue-2",
+        created_at: 35,
+      },
+      {
+        _id: "issue-3",
+        created_at: 20,
+      },
+    ];
+    const collect = vi.fn().mockResolvedValue(openIssues);
+    const withIndex = vi.fn(() => ({ collect }));
+    const query = vi.fn(() => ({ withIndex }));
+    const ctx = {
+      db: {
+        query,
+      },
+    } as any;
+
+    const reader = createConvexAdminAlertConditionReader(ctx);
+    const snapshot = await reader.getReconciliationOpenIssuesSnapshot();
+
+    expect(query).toHaveBeenCalledWith(
+      TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES,
+    );
+    expect(snapshot).toEqual({
+      openIssueCount: 3,
+      latestIssueAt: 35,
+    });
   });
 
   it("finds a savings plan by the user and template index", async () => {

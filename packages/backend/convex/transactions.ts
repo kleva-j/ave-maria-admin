@@ -1085,6 +1085,7 @@ export const runReconciliation = internalMutation({
         }
 
         const original = await ctx.db.get(reversal.reversal_of_transaction_id);
+
         if (
           !original ||
           original.reference !== reversal.reversal_of_reference
@@ -1147,6 +1148,7 @@ export const runReconciliation = internalMutation({
           issue_status: TransactionReconciliationIssueStatus.RESOLVED,
           resolved_at: completedAt,
         });
+
         const newIssue = await ctx.db.get(issue._id);
 
         // Sync aggregates - mark as resolved
@@ -1158,10 +1160,7 @@ export const runReconciliation = internalMutation({
       for (const issue of issues) {
         const issueId = await ctx.db.insert(
           TABLE_NAMES.TRANSACTION_RECONCILIATION_ISSUES,
-          {
-            run_id: runId,
-            ...issue,
-          },
+          { run_id: runId, ...issue },
         );
 
         // Sync aggregates - add new issue
@@ -1171,13 +1170,15 @@ export const runReconciliation = internalMutation({
         }
       }
 
+      const allTransactionsLength = allTransactions.length;
+
       await ctx.db.patch(runId, {
         status: TransactionReconciliationRunStatus.COMPLETED,
         completed_at: completedAt,
         issue_count: issues.length,
         user_count: users.length,
         plan_count: plans.length,
-        transaction_count: allTransactions.length,
+        transaction_count: allTransactionsLength,
       });
 
       const run = await ctx.db.get(runId);
@@ -1194,7 +1195,7 @@ export const runReconciliation = internalMutation({
           issue_count: issues.length,
           user_count: users.length,
           plan_count: plans.length,
-          transaction_count: allTransactions.length,
+          transaction_count: allTransactionsLength,
         },
       });
 
@@ -1211,7 +1212,7 @@ export const runReconciliation = internalMutation({
             issue_count: issues.length,
             user_count: users.length,
             plan_count: plans.length,
-            transaction_count: allTransactions.length,
+            transaction_count: allTransactionsLength,
             completed_at: completedAt,
           },
         },
@@ -1220,6 +1221,9 @@ export const runReconciliation = internalMutation({
       return run;
     } catch (error) {
       const completedAt = Date.now();
+      const failureMessage =
+        error instanceof Error ? error.message : "Unknown error";
+
       await ctx.db.patch(runId, {
         status: TransactionReconciliationRunStatus.FAILED,
         completed_at: completedAt,
@@ -1231,7 +1235,7 @@ export const runReconciliation = internalMutation({
         resourceId: runId,
         severity: "error",
         metadata: {
-          error: error instanceof Error ? error.message : "Unknown error",
+          error: failureMessage,
         },
       });
 
@@ -1245,13 +1249,18 @@ export const runReconciliation = internalMutation({
           occurredAt: completedAt,
           payload: {
             run_id: String(runId),
-            error: error instanceof Error ? error.message : "Unknown error",
+            error: failureMessage,
             failed_at: completedAt,
           },
         },
       ]);
 
-      throw error;
+      const failedRun = await ctx.db.get(runId);
+      if (!failedRun) {
+        throw new ConvexError("Failed to persist failed reconciliation run");
+      }
+
+      return failedRun;
     }
   },
 });
