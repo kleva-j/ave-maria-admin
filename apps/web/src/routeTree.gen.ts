@@ -19,6 +19,7 @@ import { Route as ProtectedAdminRouteImport } from './routes/_protected/admin'
 import { Route as ProtectedAdminIndexRouteImport } from './routes/_protected/admin/index'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 import { Route as ProtectedAdminWithdrawalsRouteImport } from './routes/_protected/admin/withdrawals'
+import { Route as ProtectedAdminTeamRouteImport } from './routes/_protected/admin/team'
 import { Route as ProtectedAdminReconciliationRouteImport } from './routes/_protected/admin/reconciliation'
 import { Route as ProtectedAdminKycRouteImport } from './routes/_protected/admin/kyc'
 import { Route as ProtectedAdminBankVerificationRouteImport } from './routes/_protected/admin/bank-verification'
@@ -74,6 +75,11 @@ const ProtectedAdminWithdrawalsRoute =
     path: '/withdrawals',
     getParentRoute: () => ProtectedAdminRoute,
   } as any)
+const ProtectedAdminTeamRoute = ProtectedAdminTeamRouteImport.update({
+  id: '/team',
+  path: '/team',
+  getParentRoute: () => ProtectedAdminRoute,
+} as any)
 const ProtectedAdminReconciliationRoute =
   ProtectedAdminReconciliationRouteImport.update({
     id: '/reconciliation',
@@ -108,6 +114,7 @@ export interface FileRoutesByFullPath {
   '/admin/bank-verification': typeof ProtectedAdminBankVerificationRoute
   '/admin/kyc': typeof ProtectedAdminKycRoute
   '/admin/reconciliation': typeof ProtectedAdminReconciliationRoute
+  '/admin/team': typeof ProtectedAdminTeamRoute
   '/admin/withdrawals': typeof ProtectedAdminWithdrawalsRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/admin/': typeof ProtectedAdminIndexRoute
@@ -122,6 +129,7 @@ export interface FileRoutesByTo {
   '/admin/bank-verification': typeof ProtectedAdminBankVerificationRoute
   '/admin/kyc': typeof ProtectedAdminKycRoute
   '/admin/reconciliation': typeof ProtectedAdminReconciliationRoute
+  '/admin/team': typeof ProtectedAdminTeamRoute
   '/admin/withdrawals': typeof ProtectedAdminWithdrawalsRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/admin': typeof ProtectedAdminIndexRoute
@@ -139,6 +147,7 @@ export interface FileRoutesById {
   '/_protected/admin/bank-verification': typeof ProtectedAdminBankVerificationRoute
   '/_protected/admin/kyc': typeof ProtectedAdminKycRoute
   '/_protected/admin/reconciliation': typeof ProtectedAdminReconciliationRoute
+  '/_protected/admin/team': typeof ProtectedAdminTeamRoute
   '/_protected/admin/withdrawals': typeof ProtectedAdminWithdrawalsRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/_protected/admin/': typeof ProtectedAdminIndexRoute
@@ -156,6 +165,7 @@ export interface FileRouteTypes {
     | '/admin/bank-verification'
     | '/admin/kyc'
     | '/admin/reconciliation'
+    | '/admin/team'
     | '/admin/withdrawals'
     | '/api/auth/callback'
     | '/admin/'
@@ -170,6 +180,7 @@ export interface FileRouteTypes {
     | '/admin/bank-verification'
     | '/admin/kyc'
     | '/admin/reconciliation'
+    | '/admin/team'
     | '/admin/withdrawals'
     | '/api/auth/callback'
     | '/admin'
@@ -186,6 +197,7 @@ export interface FileRouteTypes {
     | '/_protected/admin/bank-verification'
     | '/_protected/admin/kyc'
     | '/_protected/admin/reconciliation'
+    | '/_protected/admin/team'
     | '/_protected/admin/withdrawals'
     | '/api/auth/callback'
     | '/_protected/admin/'
@@ -272,6 +284,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedAdminWithdrawalsRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
+    '/_protected/admin/team': {
+      id: '/_protected/admin/team'
+      path: '/team'
+      fullPath: '/admin/team'
+      preLoaderRoute: typeof ProtectedAdminTeamRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
     '/_protected/admin/reconciliation': {
       id: '/_protected/admin/reconciliation'
       path: '/reconciliation'
@@ -308,6 +327,7 @@ interface ProtectedAdminRouteChildren {
   ProtectedAdminBankVerificationRoute: typeof ProtectedAdminBankVerificationRoute
   ProtectedAdminKycRoute: typeof ProtectedAdminKycRoute
   ProtectedAdminReconciliationRoute: typeof ProtectedAdminReconciliationRoute
+  ProtectedAdminTeamRoute: typeof ProtectedAdminTeamRoute
   ProtectedAdminWithdrawalsRoute: typeof ProtectedAdminWithdrawalsRoute
   ProtectedAdminIndexRoute: typeof ProtectedAdminIndexRoute
 }
@@ -317,6 +337,7 @@ const ProtectedAdminRouteChildren: ProtectedAdminRouteChildren = {
   ProtectedAdminBankVerificationRoute: ProtectedAdminBankVerificationRoute,
   ProtectedAdminKycRoute: ProtectedAdminKycRoute,
   ProtectedAdminReconciliationRoute: ProtectedAdminReconciliationRoute,
+  ProtectedAdminTeamRoute: ProtectedAdminTeamRoute,
   ProtectedAdminWithdrawalsRoute: ProtectedAdminWithdrawalsRoute,
   ProtectedAdminIndexRoute: ProtectedAdminIndexRoute,
 }

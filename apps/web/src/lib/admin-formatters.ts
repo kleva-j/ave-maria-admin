@@ -27,6 +27,18 @@ export function formatFullName(parts: Array<string | null | undefined>) {
   return value.length > 0 ? value : "Unknown user";
 }
 
+const ADMIN_ROLE_LABELS: Record<string, string> = {
+  super_admin: "Super Admin",
+  operations: "Operations",
+  finance: "Finance",
+  compliance: "Compliance",
+  support: "Support",
+};
+
+export function formatAdminRole(role: string): string {
+  return ADMIN_ROLE_LABELS[role] ?? role;
+}
+
 export function formatBytes(size?: number) {
   if (!size && size !== 0) {
     return "—";

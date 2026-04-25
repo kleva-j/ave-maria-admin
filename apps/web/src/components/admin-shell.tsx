@@ -16,23 +16,34 @@ type AdminShellProps = {
   children: React.ReactNode;
 };
 
-const navigationItems = [
+type NavigationItem = {
+  to: string;
+  label: string;
+};
+
+const baseNavigationItems: ReadonlyArray<NavigationItem> = [
   { to: "/admin", label: "Overview" },
   { to: "/admin/alerts", label: "Alerts" },
   { to: "/admin/withdrawals", label: "Withdrawals" },
   { to: "/admin/kyc", label: "KYC" },
   { to: "/admin/bank-verification", label: "Bank Verification" },
   { to: "/admin/reconciliation", label: "Reconciliation" },
-] as const;
+];
+
+const navigationItemsByRole: Record<string, ReadonlyArray<NavigationItem>> = {
+  super_admin: [...baseNavigationItems, { to: "/admin/team", label: "Team" }],
+};
 
 export function AdminShell({ admin, children }: AdminShellProps) {
   const pathname = useRouterState({
-    select: (state) => state.location.pathname,
+    select: ({ location }) => location.pathname,
   });
+
   const unreadAlertsQuery = useQuery({
     ...convexQuery(api.adminAlerts.getMyUnreadCount, {}),
     retry: false,
   });
+
   const unreadCount = unreadAlertsQuery.data?.unreadCount ?? 0;
 
   return (
@@ -62,34 +73,36 @@ export function AdminShell({ admin, children }: AdminShellProps) {
           </div>
 
           <nav className="mt-6 space-y-2">
-            {navigationItems.map((item) => {
-              const active =
-                pathname === item.to ||
-                (item.to !== "/admin" && pathname.startsWith(item.to));
+            {(navigationItemsByRole[admin.role] ?? baseNavigationItems).map(
+              (item) => {
+                const active =
+                  pathname === item.to ||
+                  (item.to !== "/admin" && pathname.startsWith(item.to));
 
-              return (
-                <Button
-                  key={item.to}
-                  variant={active ? "default" : "outline"}
-                  className={cn(
-                    "w-full justify-start rounded-2xl",
-                    !active && "border-zinc-200 bg-transparent text-zinc-700",
-                  )}
-                  render={
-                    <Link to={item.to}>
-                      <span className="flex w-full items-center justify-between gap-3">
-                        <span>{item.label}</span>
-                        {item.to === "/admin/alerts" && unreadCount > 0 ? (
-                          <Badge variant={active ? "secondary" : "outline"}>
-                            {unreadCount}
-                          </Badge>
-                        ) : null}
-                      </span>
-                    </Link>
-                  }
-                />
-              );
-            })}
+                return (
+                  <Button
+                    key={item.to}
+                    variant={active ? "default" : "outline"}
+                    className={cn(
+                      "w-full justify-start rounded-2xl",
+                      !active && "border-zinc-200 bg-transparent text-zinc-700",
+                    )}
+                    render={
+                      <Link to={item.to}>
+                        <span className="flex w-full items-center justify-between gap-3">
+                          <span>{item.label}</span>
+                          {item.to === "/admin/alerts" && unreadCount > 0 ? (
+                            <Badge variant={active ? "secondary" : "outline"}>
+                              {unreadCount}
+                            </Badge>
+                          ) : null}
+                        </span>
+                      </Link>
+                    }
+                  />
+                );
+              },
+            )}
           </nav>
         </aside>
 
