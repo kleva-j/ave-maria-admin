@@ -43,23 +43,32 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
  * for `ConvexProviderWithAuth`.
  *
  * Convex re-calls `fetchAccessToken` on every WebSocket reconnect and any time
- * it needs a fresh JWT. AuthKit's `useAccessToken().getAccessToken()` returns a
- * guaranteed-fresh token (auto-refreshes on its own), so we always forward it.
+ * it needs a fresh JWT.
+ *
+ * - `getAccessToken()` returns a guaranteed-fresh token but only auto-refreshes
+ *   based on local expiry — it will serve a cached token if it hasn't expired
+ *   locally, even if the server has already rejected it.
+ * - `refresh()` forces a server-side round-trip to obtain a new token. We call
+ *   it first when Convex signals `forceRefreshToken: true` (e.g. after a
+ *   server-side 401), so the stale token is replaced before we return.
  */
 function useAuthForConvex() {
   const { user, loading } = useAuth();
-  const { getAccessToken } = useAccessToken();
+  const { getAccessToken, refresh } = useAccessToken();
 
   const fetchAccessToken = useCallback(
     async (_args: { forceRefreshToken: boolean }) => {
       try {
+        if (_args.forceRefreshToken) {
+          await refresh();
+        }
         const token = await getAccessToken();
         return token ?? null;
       } catch {
         return null;
       }
     },
-    [getAccessToken],
+    [getAccessToken, refresh],
   );
 
   return useMemo(
