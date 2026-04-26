@@ -550,7 +550,8 @@ async function callWorkOSInvite(args: {
   first_name: string;
   last_name: string;
   apiKey: string;
-  organizationId?: string;
+  organizationId: string;
+  roleSlug: string;
 }): Promise<WorkOSInviteResult> {
   const baseHeaders: Record<string, string> = {
     Authorization: `Bearer ${args.apiKey}`,
@@ -614,10 +615,14 @@ async function callWorkOSInvite(args: {
   }
 
   // 3. Send invitation email — compensate by deleting the new user on failure.
-  const invitePayload: Record<string, unknown> = { email: args.email };
-  if (args.organizationId) {
-    invitePayload.organization_id = args.organizationId;
-  }
+  // Including organization_id + role_slug ensures that on invitation accept,
+  // WorkOS auto-creates an OrganizationMembership in the admin org with the
+  // correct role mapped from our AdminRole enum.
+  const invitePayload: Record<string, unknown> = {
+    email: args.email,
+    organization_id: args.organizationId,
+    role_slug: args.roleSlug,
+  };
 
   let inviteResp: Response;
   try {
@@ -670,7 +675,12 @@ async function callWorkOSInvite(args: {
  *
  * Required Convex env vars:
  *   - WORKOS_API_KEY
- *   - WORKOS_ADMIN_ORG_ID (optional — set if admins live in a dedicated org)
+ *   - WORKOS_ADMIN_ORG_ID (target organization for all admin staff)
+ *
+ * Required WorkOS dashboard config:
+ *   - Roles configured with slugs that match the AdminRole enum:
+ *     super_admin, operations, finance, compliance, support
+ *     (Dashboard → Roles. Slugs are case-sensitive.)
  */
 export const inviteAdminUser = action({
   args: {
@@ -697,6 +707,12 @@ export const inviteAdminUser = action({
       );
     }
     const organizationId = process.env.WORKOS_ADMIN_ORG_ID;
+    if (!organizationId) {
+      throw new ConvexError(
+        "WORKOS_ADMIN_ORG_ID is not configured on the Convex deployment. " +
+          "Admins must be invited into a WorkOS organization.",
+      );
+    }
 
     const email = args.email.trim().toLowerCase();
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -710,6 +726,7 @@ export const inviteAdminUser = action({
       last_name: args.last_name.trim(),
       apiKey,
       organizationId,
+      roleSlug: args.role,
     });
 
     let adminUserId: AdminUserId;
