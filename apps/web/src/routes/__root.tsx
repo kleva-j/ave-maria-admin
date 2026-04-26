@@ -1,10 +1,15 @@
 import type { ConvexQueryClient } from "@convex-dev/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 
-import { AuthKitProvider } from "@workos/authkit-tanstack-react-start/client";
+import {
+  AuthKitProvider,
+  useAccessToken,
+  useAuth,
+} from "@workos/authkit-tanstack-react-start/client";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { Toaster } from "@avm-daily/ui/components/sonner";
-import { ConvexProvider } from "convex/react";
+import { ConvexProviderWithAuth } from "convex/react";
+import { useCallback, useMemo } from "react";
 
 import {
   createRootRouteWithContext,
@@ -33,11 +38,44 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   component: RootDocument,
 });
 
+/**
+ * Adapter that bridges the WorkOS AuthKit client into the shape Convex expects
+ * for `ConvexProviderWithAuth`.
+ *
+ * Convex re-calls `fetchAccessToken` on every WebSocket reconnect and any time
+ * it needs a fresh JWT. AuthKit's `useAccessToken().getAccessToken()` returns a
+ * guaranteed-fresh token (auto-refreshes on its own), so we always forward it.
+ */
+function useAuthForConvex() {
+  const { user, loading } = useAuth();
+  const { getAccessToken } = useAccessToken();
+
+  const fetchAccessToken = useCallback(
+    async (_args: { forceRefreshToken: boolean }) => {
+      try {
+        const token = await getAccessToken();
+        return token ?? null;
+      } catch {
+        return null;
+      }
+    },
+    [getAccessToken],
+  );
+
+  return useMemo(
+    () => ({
+      isLoading: loading,
+      isAuthenticated: !loading && !!user,
+      fetchAccessToken,
+    }),
+    [loading, user, fetchAccessToken],
+  );
+}
+
 function RootDocument() {
-  const { convexQueryClient } = Route.useRouteContext();
   return (
     <AuthKitProvider>
-      <ConvexProvider client={convexQueryClient.convexClient}>
+      <ConvexAuthBridge>
         <html lang="en" className="dark">
           <head>
             <HeadContent />
@@ -51,7 +89,19 @@ function RootDocument() {
             <Scripts />
           </body>
         </html>
-      </ConvexProvider>
+      </ConvexAuthBridge>
     </AuthKitProvider>
+  );
+}
+
+function ConvexAuthBridge({ children }: { children: React.ReactNode }) {
+  const { convexQueryClient } = Route.useRouteContext();
+  return (
+    <ConvexProviderWithAuth
+      client={convexQueryClient.convexClient}
+      useAuth={useAuthForConvex}
+    >
+      {children}
+    </ConvexProviderWithAuth>
   );
 }
