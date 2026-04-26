@@ -43,25 +43,31 @@ That separation reduces reversal complexity, keeps the ledger cleaner, and makes
 ## Core Modules
 
 ### API / Orchestration
+
 - `packages/backend/convex/withdrawals.ts`
 
 ### Domain rules
+
 - `packages/domain/src/services/withdrawalLifecycle.ts`
 - `packages/domain/src/services/withdrawalPolicy.ts`
 
 ### Application use cases
+
 - `packages/application/src/use-cases/index.ts`
 
 ### Backend adapters
+
 - `packages/backend/convex/adapters/withdrawalAdapter.ts`
 - `packages/backend/convex/adapters/withdrawalReservationAdapter.ts`
 - `packages/backend/convex/adapters/bankAccountAdapter.ts`
 - `packages/backend/convex/adapters/withdrawalPayoutAdapter.ts`
 
 ### Ledger integration
+
 - `packages/backend/convex/transactions.ts`
 
 ### Risk integration
+
 - `packages/backend/convex/risk.ts`
 - `packages/backend/convex/withdrawalPolicy.ts`
 
@@ -406,7 +412,7 @@ Cash withdrawals have stricter action permissions.
 
 Current allowed roles for cash `approve`, `reject`, and `process` are:
 
-- `super_admin`
+- `super-admin`
 - `operations`
 - `finance`
 

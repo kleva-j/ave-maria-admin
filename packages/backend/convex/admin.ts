@@ -216,7 +216,7 @@ export const list = query({
 });
 
 // ============================================================================
-// Admin User Management (super_admin only)
+// Admin User Management (super-admin only)
 // ============================================================================
 
 const adminUserRecordValidator = v.object({
@@ -240,7 +240,7 @@ const ADMIN_USER_LIST_LIMIT = 200;
  * List admin users with optional role/status/search filters.
  * Bounded to ADMIN_USER_LIST_LIMIT rows to avoid unbounded scans.
  *
- * SECURITY: super_admin only.
+ * SECURITY: super-admin only.
  */
 export const listAdminUsers = query({
   args: {
@@ -287,7 +287,7 @@ export const listAdminUsers = query({
 /**
  * Fetch a single admin user by id.
  *
- * SECURITY: super_admin only.
+ * SECURITY: super-admin only.
  */
 export const getAdminUserById = query({
   args: { id: v.id("admin_users") },
@@ -312,11 +312,11 @@ async function countActiveSuperAdmins(ctx: MutationCtx): Promise<number> {
  * Update an admin user's role.
  *
  * Guards:
- *  - caller must be super_admin
+ *  - caller must be super-admin
  *  - cannot demote self
- *  - cannot demote the last active super_admin
+ *  - cannot demote the last active super-admin
  *
- * SECURITY: super_admin only.
+ * SECURITY: super-admin only.
  */
 export const updateAdminUserRole = mutation({
   args: {
@@ -373,13 +373,13 @@ export const updateAdminUserRole = mutation({
  * Deactivate (soft-delete) an admin user.
  *
  * Guards:
- *  - caller must be super_admin
+ *  - caller must be super-admin
  *  - cannot deactivate self
- *  - cannot deactivate the last active super_admin
+ *  - cannot deactivate the last active super-admin
  *
  * Sets `deleted_at` and `status = "suspended"`. Does not touch WorkOS.
  *
- * SECURITY: super_admin only.
+ * SECURITY: super-admin only.
  */
 export const deactivateAdminUser = mutation({
   args: { id: v.id("admin_users") },
@@ -431,7 +431,7 @@ export const deactivateAdminUser = mutation({
  * Reactivate a previously deactivated admin user.
  * Clears `deleted_at` and sets `status = "active"`.
  *
- * SECURITY: super_admin only.
+ * SECURITY: super-admin only.
  */
 export const reactivateAdminUser = mutation({
   args: { id: v.id("admin_users") },
@@ -671,7 +671,7 @@ async function callWorkOSInvite(args: {
  * Calls WorkOS to provision the identity + send invite email,
  * then inserts the local admin_users row via internal mutation.
  *
- * SECURITY: super_admin only.
+ * SECURITY: super-admin only.
  *
  * Required Convex env vars:
  *   - WORKOS_API_KEY
@@ -679,7 +679,7 @@ async function callWorkOSInvite(args: {
  *
  * Required WorkOS dashboard config:
  *   - Roles configured with slugs that match the AdminRole enum:
- *     super_admin, operations, finance, compliance, support
+ *     super-admin, admin, operations, finance, compliance, support
  *     (Dashboard → Roles. Slugs are case-sensitive.)
  */
 export const inviteAdminUser = action({
@@ -731,17 +731,14 @@ export const inviteAdminUser = action({
 
     let adminUserId: AdminUserId;
     try {
-      adminUserId = await ctx.runMutation(
-        internal.admin._insertAdminUser,
-        {
-          workosId: result.workosId,
-          email,
-          first_name: args.first_name.trim(),
-          last_name: args.last_name.trim(),
-          role: args.role,
-          invited_by_admin_id: viewer._id,
-        },
-      );
+      adminUserId = await ctx.runMutation(internal.admin._insertAdminUser, {
+        workosId: result.workosId,
+        email,
+        first_name: args.first_name.trim(),
+        last_name: args.last_name.trim(),
+        role: args.role,
+        invited_by_admin_id: viewer._id,
+      });
     } catch (err) {
       // Compensate: clean up the WorkOS user so the invite can be retried.
       await fetch(

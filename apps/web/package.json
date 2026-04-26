@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@avm-daily/backend": "workspace:*",
+    "@avm-daily/domain": "workspace:*",
     "@avm-daily/env": "workspace:*",
     "@avm-daily/ui": "workspace:*",
     "@convex-dev/react-query": "^0.1.0",

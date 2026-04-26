@@ -81,7 +81,8 @@ export const KycStatus = {
 export type KycStatus = (typeof KycStatus)[keyof typeof KycStatus];
 
 export const AdminRole = {
-  SUPER_ADMIN: "super_admin",
+  SUPER_ADMIN: "super-admin",
+  ADMIN: "admin",
   OPERATIONS: "operations",
   FINANCE: "finance",
   COMPLIANCE: "compliance",

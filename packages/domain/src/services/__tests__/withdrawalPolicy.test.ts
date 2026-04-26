@@ -93,9 +93,9 @@ describe("withdrawalPolicy", () => {
       expect(result).toBeUndefined();
     });
 
-    it("should allow cash withdrawals for super_admin role", () => {
+    it("should allow cash withdrawals for super-admin role", () => {
       const result = getCashWithdrawalRoleBlockedReason(
-        "super_admin",
+        "super-admin",
         { method: "cash" },
         "reject",
       );
@@ -178,7 +178,7 @@ describe("withdrawalPolicy", () => {
       expect(data.method).toBe("cash");
       expect(data.allowed_roles).toContain("finance");
       expect(data.allowed_roles).toContain("operations");
-      expect(data.allowed_roles).toContain("super_admin");
+      expect(data.allowed_roles).toContain("super-admin");
     });
   });
 });

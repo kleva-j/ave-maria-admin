@@ -1,3 +1,5 @@
+import { AdminRole } from "@avm-daily/domain";
+
 export function formatAdminDateTime(timestamp?: number | null) {
   if (!timestamp) {
     return "—";
@@ -27,15 +29,16 @@ export function formatFullName(parts: Array<string | null | undefined>) {
   return value.length > 0 ? value : "Unknown user";
 }
 
-const ADMIN_ROLE_LABELS: Record<string, string> = {
-  super_admin: "Super Admin",
-  operations: "Operations",
-  finance: "Finance",
-  compliance: "Compliance",
-  support: "Support",
+const ADMIN_ROLE_LABELS: Record<AdminRole, string> = {
+  [AdminRole.SUPER_ADMIN]: "Super Admin",
+  [AdminRole.ADMIN]: "Admin",
+  [AdminRole.OPERATIONS]: "Operations",
+  [AdminRole.FINANCE]: "Finance",
+  [AdminRole.COMPLIANCE]: "Compliance",
+  [AdminRole.SUPPORT]: "Support",
 };
 
-export function formatAdminRole(role: string): string {
+export function formatAdminRole(role: AdminRole): string {
   return ADMIN_ROLE_LABELS[role] ?? role;
 }
 

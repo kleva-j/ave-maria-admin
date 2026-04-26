@@ -184,7 +184,7 @@ export async function getAdminUser(ctx: Context) {
 }
 
 /**
- * Retrieves the authenticated admin user and asserts the super_admin role.
+ * Retrieves the authenticated admin user and asserts the super-admin role.
  *
  * SECURITY: Use to gate admin-user-management operations
  * (invite, role change, deactivate, reactivate).

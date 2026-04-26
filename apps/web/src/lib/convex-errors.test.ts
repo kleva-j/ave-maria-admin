@@ -14,7 +14,7 @@ describe("convex error helpers", () => {
         code: "withdrawal_action_forbidden",
         action: "reject",
         method: "cash",
-        allowed_roles: ["super_admin", "operations", "finance"],
+        allowed_roles: ["super-admin", "operations", "finance"],
         message:
           "Cash withdrawals can only be rejected by Finance, Operations, or Super Admin.",
       },
@@ -36,9 +36,9 @@ describe("convex error helpers", () => {
   });
 
   it("uses the fallback when the value is not an error", () => {
-    expect(normalizeConvexErrorMessage(null, "Unable to update withdrawal")).toBe(
-      "Unable to update withdrawal",
-    );
+    expect(
+      normalizeConvexErrorMessage(null, "Unable to update withdrawal"),
+    ).toBe("Unable to update withdrawal");
   });
 
   it("recognizes valid structured withdrawal role errors", () => {
@@ -47,7 +47,7 @@ describe("convex error helpers", () => {
         code: "withdrawal_action_forbidden",
         action: "approve",
         method: "cash",
-        allowed_roles: ["super_admin", "operations", "finance"],
+        allowed_roles: ["super-admin", "operations", "finance"],
         message:
           "Cash withdrawals can only be approved by Finance, Operations, or Super Admin.",
       },
@@ -62,7 +62,8 @@ describe("convex error helpers", () => {
         code: "withdrawal_risk_blocked",
         scope: "withdrawals",
         rule: "manual_hold",
-        message: "Withdrawals are currently blocked for this user: Compliance review",
+        message:
+          "Withdrawals are currently blocked for this user: Compliance review",
         details: {
           hold_id: "hold_1",
         },
@@ -74,6 +75,8 @@ describe("convex error helpers", () => {
     expect(isWithdrawalRiskBlockedErrorData(data)).toBe(true);
     expect(
       normalizeConvexErrorMessage(error, "Unable to request withdrawal"),
-    ).toBe("Withdrawals are currently blocked for this user: Compliance review");
+    ).toBe(
+      "Withdrawals are currently blocked for this user: Compliance review",
+    );
   });
 });
