@@ -4,6 +4,7 @@ import { Button } from "@avm-daily/ui/components/button";
 import { Badge } from "@avm-daily/ui/components/badge";
 import { convexQuery } from "@convex-dev/react-query";
 import { useQuery } from "@tanstack/react-query";
+import { AdminRole } from "@avm-daily/domain";
 import { cn } from "@avm-daily/ui/lib/utils";
 
 type AdminShellProps = {
@@ -11,15 +12,12 @@ type AdminShellProps = {
     first_name: string;
     last_name: string;
     email: string;
-    role: string;
+    role: AdminRole;
   };
   children: React.ReactNode;
 };
 
-type NavigationItem = {
-  to: string;
-  label: string;
-};
+type NavigationItem = { to: string; label: string };
 
 const baseNavigationItems: ReadonlyArray<NavigationItem> = [
   { to: "/admin", label: "Overview" },
@@ -30,8 +28,19 @@ const baseNavigationItems: ReadonlyArray<NavigationItem> = [
   { to: "/admin/reconciliation", label: "Reconciliation" },
 ];
 
-const navigationItemsByRole: Record<string, ReadonlyArray<NavigationItem>> = {
-  super_admin: [...baseNavigationItems, { to: "/admin/team", label: "Team" }],
+const navigationItemsByRole: Record<
+  AdminRole,
+  ReadonlyArray<NavigationItem>
+> = {
+  [AdminRole.SUPER_ADMIN]: [
+    ...baseNavigationItems,
+    { to: "/admin/team", label: "Team" },
+  ],
+  [AdminRole.ADMIN]: baseNavigationItems,
+  [AdminRole.OPERATIONS]: baseNavigationItems,
+  [AdminRole.FINANCE]: baseNavigationItems,
+  [AdminRole.COMPLIANCE]: baseNavigationItems,
+  [AdminRole.SUPPORT]: baseNavigationItems,
 };
 
 export function AdminShell({ admin, children }: AdminShellProps) {

@@ -221,7 +221,8 @@ export type KycStatus = typeof kycStatus.type;
  * Admin roles
  */
 export const AdminRole = {
-  SUPER_ADMIN: "super_admin",
+  SUPER_ADMIN: "super-admin",
+  ADMIN: "admin",
   OPERATIONS: "operations",
   FINANCE: "finance",
   COMPLIANCE: "compliance",
@@ -230,6 +231,7 @@ export const AdminRole = {
 
 export const adminRole = v.union(
   v.literal(AdminRole.SUPER_ADMIN),
+  v.literal(AdminRole.ADMIN),
   v.literal(AdminRole.OPERATIONS),
   v.literal(AdminRole.FINANCE),
   v.literal(AdminRole.COMPLIANCE),

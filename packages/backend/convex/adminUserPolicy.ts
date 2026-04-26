@@ -36,7 +36,7 @@ export function assertRoleChangeAllowed(args: {
   const isDemotingSelf =
     target._id === viewer._id && newRole !== AdminRole.SUPER_ADMIN;
   if (isDemotingSelf) {
-    throw new ConvexError("You cannot remove your own super_admin role");
+    throw new ConvexError("You cannot remove your own super-admin role");
   }
 
   const isDemotingActiveSuperAdmin =
@@ -44,7 +44,7 @@ export function assertRoleChangeAllowed(args: {
     target.status === UserStatus.ACTIVE &&
     newRole !== AdminRole.SUPER_ADMIN;
   if (isDemotingActiveSuperAdmin && activeSuperAdminCount <= 1) {
-    throw new ConvexError("Cannot demote the last active super_admin");
+    throw new ConvexError("Cannot demote the last active super-admin");
   }
 }
 
@@ -54,7 +54,7 @@ export function assertRoleChangeAllowed(args: {
  * Throws ConvexError on:
  *  - target is the viewer (cannot deactivate self)
  *  - target is already deactivated
- *  - target is the last active super_admin
+ *  - target is the last active super-admin
  */
 export function assertDeactivationAllowed(args: {
   viewer: AdminLite;
@@ -74,6 +74,6 @@ export function assertDeactivationAllowed(args: {
     target.status === UserStatus.ACTIVE &&
     activeSuperAdminCount <= 1
   ) {
-    throw new ConvexError("Cannot deactivate the last active super_admin");
+    throw new ConvexError("Cannot deactivate the last active super-admin");
   }
 }

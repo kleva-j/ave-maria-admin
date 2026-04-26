@@ -281,6 +281,9 @@ importers:
       '@avm-daily/backend':
         specifier: workspace:*
         version: link:../../packages/backend
+      '@avm-daily/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       '@avm-daily/env':
         specifier: workspace:*
         version: link:../../packages/env

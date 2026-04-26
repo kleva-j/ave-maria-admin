@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { ConvexError } from "convex/values";
 
+import { AdminRole, UserStatus } from "../shared";
 import {
   assertDeactivationAllowed,
   assertRoleChangeAllowed,
 } from "../adminUserPolicy";
-import { AdminRole, UserStatus } from "../shared";
 
 const VIEWER = {
   _id: "viewer_id",
@@ -54,7 +54,7 @@ describe("assertRoleChangeAllowed", () => {
     ).not.toThrow();
   });
 
-  it("rejects a viewer demoting themselves from super_admin", () => {
+  it("rejects a viewer demoting themselves from super-admin", () => {
     const self = {
       _id: VIEWER._id,
       role: AdminRole.SUPER_ADMIN,
@@ -70,9 +70,9 @@ describe("assertRoleChangeAllowed", () => {
     ).toThrowError(ConvexError);
   });
 
-  it("rejects demoting the last active super_admin", () => {
+  it("rejects demoting the last active super-admin", () => {
     const target = makeAdmin({
-      _id: "other_super_admin",
+      _id: "other_super-admin",
       role: AdminRole.SUPER_ADMIN,
       status: UserStatus.ACTIVE,
     });
@@ -86,9 +86,9 @@ describe("assertRoleChangeAllowed", () => {
     ).toThrowError(ConvexError);
   });
 
-  it("allows demoting a super_admin when more than one active super_admin exists", () => {
+  it("allows demoting a super-admin when more than one active super-admin exists", () => {
     const target = makeAdmin({
-      _id: "other_super_admin",
+      _id: "other_super-admin",
       role: AdminRole.SUPER_ADMIN,
       status: UserStatus.ACTIVE,
     });
@@ -102,11 +102,11 @@ describe("assertRoleChangeAllowed", () => {
     ).not.toThrow();
   });
 
-  it("allows demoting a suspended super_admin even when count is 1", () => {
-    // A suspended super_admin does not count toward active coverage,
+  it("allows demoting a suspended super-admin even when count is 1", () => {
+    // A suspended super-admin does not count toward active coverage,
     // so demoting them is safe regardless of activeSuperAdminCount.
     const target = makeAdmin({
-      _id: "suspended_super_admin",
+      _id: "suspended_super-admin",
       role: AdminRole.SUPER_ADMIN,
       status: UserStatus.SUSPENDED,
     });
@@ -144,9 +144,9 @@ describe("assertDeactivationAllowed", () => {
     ).toThrowError(ConvexError);
   });
 
-  it("rejects deactivating the last active super_admin", () => {
+  it("rejects deactivating the last active super-admin", () => {
     const target = makeAdmin({
-      _id: "other_super_admin",
+      _id: "other_super-admin",
       role: AdminRole.SUPER_ADMIN,
       status: UserStatus.ACTIVE,
     });
@@ -159,9 +159,9 @@ describe("assertDeactivationAllowed", () => {
     ).toThrowError(ConvexError);
   });
 
-  it("allows deactivating a super_admin when more than one active exists", () => {
+  it("allows deactivating a super-admin when more than one active exists", () => {
     const target = makeAdmin({
-      _id: "other_super_admin",
+      _id: "other_super-admin",
       role: AdminRole.SUPER_ADMIN,
       status: UserStatus.ACTIVE,
     });

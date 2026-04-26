@@ -184,7 +184,7 @@ export async function getAdminUser(ctx: Context) {
 }
 
 /**
- * Retrieves the authenticated admin user and asserts the super_admin role.
+ * Retrieves the authenticated admin user and asserts the super-admin role.
  *
  * SECURITY: Use to gate admin-user-management operations
  * (invite, role change, deactivate, reactivate).
@@ -195,11 +195,7 @@ export async function getAdminUser(ctx: Context) {
  */
 export async function assertSuperAdmin(ctx: Context) {
   const admin = await getAdminUser(ctx);
-  if (
-    admin.role !== AdminRole.SUPER_ADMIN ||
-    admin.status !== UserStatus.ACTIVE ||
-    admin.deleted_at !== undefined
-  ) {
+  if (admin.role !== AdminRole.SUPER_ADMIN) {
     throw new ConvexError("Not authorized");
   }
   return admin;

@@ -32,7 +32,8 @@ import Loader from "@/components/loader";
 type AdminUserRecord = Doc<"admin_users">;
 
 const ADMIN_ROLES = [
-  "super_admin",
+  "super-admin",
+  "admin",
   "operations",
   "finance",
   "compliance",
@@ -75,7 +76,7 @@ function AdminTeamPage() {
     role: "operations" as (typeof ADMIN_ROLES)[number],
   });
 
-  const isSuperAdmin = viewerQuery.data?.role === "super_admin";
+  const isSuperAdmin = viewerQuery.data?.role === "super-admin";
 
   // Redirect non-super_admins back to /admin.
   useEffect(() => {
