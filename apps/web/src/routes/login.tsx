@@ -33,6 +33,7 @@ import {
   createFileRoute,
   useNavigate,
   useRouter,
+  Link,
 } from "@tanstack/react-router";
 
 import {
@@ -43,6 +44,8 @@ import {
   completeTotp,
   verifyEmail,
 } from "@/server/auth.functions";
+
+import { startProviderAuth } from "@/server/hosted-auth.functions";
 
 import {
   FieldDescription,
@@ -619,11 +622,34 @@ function LoginPage() {
           <CardTitle className="text-lg">{heading}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          {step === "credentials" && (
+            <>
+              <SocialAuthButtons
+                disabled={isBusy}
+                returnTo={returnTo}
+              />
+              <OrSeparator />
+            </>
+          )}
+
           {step === "credentials" && renderCredentials()}
           {step === "email_verification" && renderEmailVerification()}
           {(step === "mfa_enrollment" || step === "mfa_challenge") &&
             renderTotp()}
           {step === "organization_selection" && renderOrganizations()}
+
+          {step === "credentials" && (
+            <p className="text-center text-sm text-muted-foreground">
+              No account?{" "}
+              <Link
+                to="/signup"
+                search={{ returnTo }}
+                className="font-medium underline-offset-4 hover:underline"
+              >
+                Sign up
+              </Link>
+            </p>
+          )}
 
           {step !== "credentials" && (
             <Button
@@ -638,6 +664,59 @@ function LoginPage() {
           )}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function SocialAuthButtons({
+  disabled,
+  returnTo,
+}: {
+  disabled: boolean;
+  returnTo: string;
+}) {
+  const handleProvider = (provider: "GoogleOAuth" | "GitHubOAuth") => {
+    // startProviderAuth is a server fn that throws a redirect; navigate the
+    // browser to its endpoint to follow the 302 to WorkOS.
+    void startProviderAuth({ data: { provider, returnTo } });
+  };
+
+  return (
+    <FieldGroup>
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        disabled={disabled}
+        onClick={() => handleProvider("GoogleOAuth")}
+      >
+        Continue with Google
+      </Button>
+      <Button
+        type="button"
+        variant="outline"
+        className="w-full"
+        disabled={disabled}
+        onClick={() => handleProvider("GitHubOAuth")}
+      >
+        Continue with GitHub
+      </Button>
+    </FieldGroup>
+  );
+}
+
+function OrSeparator() {
+  return (
+    <div className="relative my-2">
+      <div
+        className="absolute inset-0 flex items-center"
+        aria-hidden="true"
+      >
+        <div className="w-full border-t border-zinc-200" />
+      </div>
+      <div className="relative flex justify-center text-xs uppercase">
+        <span className="bg-background px-2 text-muted-foreground">or</span>
+      </div>
     </div>
   );
 }
