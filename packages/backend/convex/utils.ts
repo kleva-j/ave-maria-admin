@@ -172,7 +172,11 @@ export async function getAdminUser(ctx: Context) {
     .withIndex("by_workos_id", (q) => q.eq("workosId", authUser.id))
     .unique();
 
-  if (!admin) {
+  if (
+    !admin ||
+    admin.deleted_at !== undefined ||
+    admin.status !== UserStatus.ACTIVE
+  ) {
     throw new ConvexError("Not authorized");
   }
 
@@ -191,7 +195,11 @@ export async function getAdminUser(ctx: Context) {
  */
 export async function assertSuperAdmin(ctx: Context) {
   const admin = await getAdminUser(ctx);
-  if (admin.role !== AdminRole.SUPER_ADMIN) {
+  if (
+    admin.role !== AdminRole.SUPER_ADMIN ||
+    admin.status !== UserStatus.ACTIVE ||
+    admin.deleted_at !== undefined
+  ) {
     throw new ConvexError("Not authorized");
   }
   return admin;

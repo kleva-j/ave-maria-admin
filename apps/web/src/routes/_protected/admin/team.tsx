@@ -232,6 +232,15 @@ function AdminTeamPage() {
     }
   };
 
+  if (viewerQuery.isError) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
+        <p className="text-sm text-zinc-600">Failed to load your session. Please try again.</p>
+        <Button onClick={() => void viewerQuery.refetch()}>Retry</Button>
+      </div>
+    );
+  }
+
   if (viewerQuery.isLoading || !viewerQuery.data) {
     return <Loader />;
   }
@@ -536,7 +545,10 @@ function AdminTeamPage() {
                           event.target.value as (typeof ADMIN_ROLES)[number],
                         )
                       }
-                      disabled={selected.deleted_at !== undefined}
+                      disabled={
+                        selected.deleted_at !== undefined ||
+                        selected._id === viewerQuery.data._id
+                      }
                     >
                       {ADMIN_ROLES.map((role) => (
                         <option key={role} value={role}>
@@ -550,7 +562,8 @@ function AdminTeamPage() {
                     disabled={
                       pendingAction === "role" ||
                       pendingRole === selected.role ||
-                      selected.deleted_at !== undefined
+                      selected.deleted_at !== undefined ||
+                      selected._id === viewerQuery.data._id
                     }
                   >
                     {pendingAction === "role" ? "Saving..." : "Save role"}

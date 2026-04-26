@@ -538,6 +538,13 @@ interface WorkOSInviteResult {
   invitationId: string;
 }
 
+const WORKOS_TIMEOUT_MS = 10_000;
+
+/** Scrub WorkOS response bodies before surfacing them in ConvexError messages. */
+function safeWorkOSError(status: number): string {
+  return `WorkOS request failed (HTTP ${status})`;
+}
+
 async function callWorkOSInvite(args: {
   email: string;
   first_name: string;
@@ -550,50 +557,102 @@ async function callWorkOSInvite(args: {
     "Content-Type": "application/json",
   };
 
-  // 1. Create the WorkOS user (no password — they set it via invite link).
-  const createUserResp = await fetch(
-    "https://api.workos.com/user_management/users",
+  // 1. Look up existing WorkOS user by email to avoid creating orphan users.
+  let workosId: string | undefined;
+
+  const lookupResp = await fetch(
+    `https://api.workos.com/user_management/users?email=${encodeURIComponent(args.email)}`,
     {
-      method: "POST",
+      method: "GET",
       headers: baseHeaders,
-      body: JSON.stringify({
-        email: args.email,
-        first_name: args.first_name,
-        last_name: args.last_name,
-        email_verified: false,
-      }),
+      signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
     },
-  );
+  ).catch(() => null);
 
-  if (!createUserResp.ok) {
-    const text = await createUserResp.text();
-    throw new ConvexError(`WorkOS createUser failed: ${text}`);
+  if (lookupResp && lookupResp.ok) {
+    const lookupBody = (await lookupResp.json()) as { data?: { id: string }[] };
+    workosId = lookupBody.data?.[0]?.id;
   }
 
-  const createUserBody = (await createUserResp.json()) as { id?: string };
-  const workosId = createUserBody.id;
+  let createdNewUser = false;
+
   if (!workosId) {
-    throw new ConvexError("WorkOS createUser returned no id");
+    // 2. Create the WorkOS user (no password — they set it via invite link).
+    let createUserResp: Response;
+    try {
+      createUserResp = await fetch(
+        "https://api.workos.com/user_management/users",
+        {
+          method: "POST",
+          headers: baseHeaders,
+          body: JSON.stringify({
+            email: args.email,
+            first_name: args.first_name,
+            last_name: args.last_name,
+            email_verified: false,
+          }),
+          signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
+        },
+      );
+    } catch (err) {
+      if (err instanceof Error && err.name === "TimeoutError") {
+        throw new ConvexError("WorkOS createUser timed out");
+      }
+      throw new ConvexError("WorkOS createUser request failed");
+    }
+
+    if (!createUserResp.ok) {
+      throw new ConvexError(safeWorkOSError(createUserResp.status));
+    }
+
+    const createUserBody = (await createUserResp.json()) as { id?: string };
+    workosId = createUserBody.id;
+    if (!workosId) {
+      throw new ConvexError("WorkOS createUser returned no id");
+    }
+    createdNewUser = true;
   }
 
-  // 2. Send invitation email.
+  // 3. Send invitation email — compensate by deleting the new user on failure.
   const invitePayload: Record<string, unknown> = { email: args.email };
   if (args.organizationId) {
     invitePayload.organization_id = args.organizationId;
   }
 
-  const inviteResp = await fetch(
-    "https://api.workos.com/user_management/invitations",
-    {
-      method: "POST",
-      headers: baseHeaders,
-      body: JSON.stringify(invitePayload),
-    },
-  );
+  let inviteResp: Response;
+  try {
+    inviteResp = await fetch(
+      "https://api.workos.com/user_management/invitations",
+      {
+        method: "POST",
+        headers: baseHeaders,
+        body: JSON.stringify(invitePayload),
+        signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
+      },
+    );
+  } catch (err) {
+    if (createdNewUser) {
+      await fetch(`https://api.workos.com/user_management/users/${workosId}`, {
+        method: "DELETE",
+        headers: baseHeaders,
+        signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
+      }).catch(() => undefined);
+    }
+    if (err instanceof Error && err.name === "TimeoutError") {
+      throw new ConvexError("WorkOS sendInvitation timed out");
+    }
+    throw new ConvexError("WorkOS sendInvitation request failed");
+  }
 
   if (!inviteResp.ok) {
-    const text = await inviteResp.text();
-    throw new ConvexError(`WorkOS sendInvitation failed: ${text}`);
+    if (createdNewUser) {
+      await fetch(`https://api.workos.com/user_management/users/${workosId}`, {
+        method: "DELETE",
+        headers: baseHeaders,
+        signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
+      }).catch(() => undefined);
+    }
+    throw new ConvexError(safeWorkOSError(inviteResp.status));
   }
 
   const inviteBody = (await inviteResp.json()) as { id?: string };
@@ -640,7 +699,8 @@ export const inviteAdminUser = action({
     const organizationId = process.env.WORKOS_ADMIN_ORG_ID;
 
     const email = args.email.trim().toLowerCase();
-    if (!email.includes("@")) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
       throw new ConvexError("Invalid email address");
     }
 
@@ -652,17 +712,36 @@ export const inviteAdminUser = action({
       organizationId,
     });
 
-    const adminUserId: AdminUserId = await ctx.runMutation(
-      internal.admin._insertAdminUser,
-      {
-        workosId: result.workosId,
-        email,
-        first_name: args.first_name.trim(),
-        last_name: args.last_name.trim(),
-        role: args.role,
-        invited_by_admin_id: viewer._id,
-      },
-    );
+    let adminUserId: AdminUserId;
+    try {
+      adminUserId = await ctx.runMutation(
+        internal.admin._insertAdminUser,
+        {
+          workosId: result.workosId,
+          email,
+          first_name: args.first_name.trim(),
+          last_name: args.last_name.trim(),
+          role: args.role,
+          invited_by_admin_id: viewer._id,
+        },
+      );
+    } catch (err) {
+      // Compensate: clean up the WorkOS user so the invite can be retried.
+      await fetch(
+        `https://api.workos.com/user_management/users/${result.workosId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+          },
+          signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
+        },
+      ).catch(() => undefined);
+      throw new ConvexError(
+        "Failed to create admin user record; WorkOS user has been cleaned up. Please retry.",
+      );
+    }
 
     return {
       adminUserId,
