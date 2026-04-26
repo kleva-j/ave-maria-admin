@@ -31,6 +31,10 @@ const TITLE_TEXT = `
 
 function HomeComponent() {
   const healthCheck = useQuery(convexQuery(api.healthCheck.get, {}));
+  const debugAuth = useQuery({
+    ...convexQuery(api.debugAuth.debugAuth, {}),
+    retry: false,
+  });
   const { user, loading: authLoading } = useAuth();
   const signOutMutation = useMutation({
     mutationFn: async () => {
@@ -89,6 +93,22 @@ function HomeComponent() {
             )}
           </section>
 
+          {/* Convex Auth Diagnostic — REMOVE once root cause is fixed */}
+          <section className="rounded-lg border p-4 text-gray-800">
+            <h2 className="mb-2 font-medium">Convex Auth Diagnostic</h2>
+            {debugAuth.isLoading ? (
+              <p className="text-muted-foreground text-sm">Querying...</p>
+            ) : debugAuth.error ? (
+              <p className="text-sm text-red-600">
+                Query error: {String(debugAuth.error)}
+              </p>
+            ) : (
+              <pre className="overflow-x-auto whitespace-pre-wrap rounded bg-zinc-100 p-2 text-xs">
+                {JSON.stringify(debugAuth.data, null, 2)}
+              </pre>
+            )}
+          </section>
+
           {/* API Status Section */}
           <section className="rounded-lg border p-4">
             <h2 className="mb-2 font-medium">API Status</h2>
@@ -98,16 +118,16 @@ function HomeComponent() {
                   healthCheck.data === "OK"
                     ? "bg-green-500"
                     : healthCheck.isLoading
-                    ? "bg-orange-400"
-                    : "bg-red-500"
+                      ? "bg-orange-400"
+                      : "bg-red-500"
                 }`}
               />
               <span className="text-muted-foreground text-sm">
                 {healthCheck.isLoading
                   ? "Checking..."
                   : healthCheck.data === "OK"
-                  ? "Connected"
-                  : "Error"}
+                    ? "Connected"
+                    : "Error"}
               </span>
             </div>
           </section>

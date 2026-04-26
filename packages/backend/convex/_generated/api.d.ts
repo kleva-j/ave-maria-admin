@@ -32,6 +32,7 @@ import type * as auth from "../auth.js";
 import type * as bankAccountDocumentComments from "../bankAccountDocumentComments.js";
 import type * as bankAccountDocuments from "../bankAccountDocuments.js";
 import type * as bankAccounts from "../bankAccounts.js";
+import type * as debugAuth from "../debugAuth.js";
 import type * as healthCheck from "../healthCheck.js";
 import type * as http from "../http.js";
 import type * as init from "../init.js";
@@ -104,6 +105,7 @@ declare const fullApi: ApiFromModules<{
   bankAccountDocumentComments: typeof bankAccountDocumentComments;
   bankAccountDocuments: typeof bankAccountDocuments;
   bankAccounts: typeof bankAccounts;
+  debugAuth: typeof debugAuth;
   healthCheck: typeof healthCheck;
   http: typeof http;
   init: typeof init;
