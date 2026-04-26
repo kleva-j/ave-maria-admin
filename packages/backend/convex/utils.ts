@@ -9,7 +9,7 @@ import type {
 
 import { ConvexError } from "convex/values";
 
-import { TABLE_NAMES, UserStatus } from "./shared";
+import { TABLE_NAMES, UserStatus, AdminRole } from "./shared";
 import { authKit } from "./auth";
 
 export function withUser(
@@ -176,6 +176,24 @@ export async function getAdminUser(ctx: Context) {
     throw new ConvexError("Not authorized");
   }
 
+  return admin;
+}
+
+/**
+ * Retrieves the authenticated admin user and asserts the super_admin role.
+ *
+ * SECURITY: Use to gate admin-user-management operations
+ * (invite, role change, deactivate, reactivate).
+ *
+ * @param ctx - Query or mutation context
+ * @returns Admin user record
+ * @throws ConvexError("Not authenticated") | ConvexError("Not authorized")
+ */
+export async function assertSuperAdmin(ctx: Context) {
+  const admin = await getAdminUser(ctx);
+  if (admin.role !== AdminRole.SUPER_ADMIN) {
+    throw new ConvexError("Not authorized");
+  }
   return admin;
 }
 

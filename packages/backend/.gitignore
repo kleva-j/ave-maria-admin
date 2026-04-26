@@ -1,2 +1,7 @@
 
 .env.local
+.agents
+.claude
+AGENTS.md
+CLAUDE.md
+skills-lock.json
