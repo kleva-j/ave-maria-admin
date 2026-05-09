@@ -18,8 +18,8 @@ type AdminLite = {
  * Validate that a role change is allowed.
  *
  * Throws ConvexError on:
- *  - target is the viewer and is being demoted from super_admin
- *  - target is the last active super_admin and is being demoted
+ *  - target is the viewer and is being demoted from super-admin
+ *  - target is the last active super-admin and is being demoted
  */
 export function assertRoleChangeAllowed(args: {
   viewer: AdminLite;
