@@ -389,7 +389,9 @@ export const _deactivateAdminUserLocal = internalMutation({
   returns: adminUserRecordValidator,
   handler: async (ctx, args) => {
     const viewer = await ctx.db.get(args.viewerId);
-    if (!viewer) throw new ConvexError("Not authorized");
+    if (!viewer || viewer.role !== AdminRole.SUPER_ADMIN || viewer.status !== UserStatus.ACTIVE) {
+      throw new ConvexError("Not authorized");
+    }
 
     const target = await ctx.db.get(args.id);
     if (!target) {
@@ -445,7 +447,9 @@ export const _reactivateAdminUserLocal = internalMutation({
   returns: adminUserRecordValidator,
   handler: async (ctx, args) => {
     const viewer = await ctx.db.get(args.viewerId);
-    if (!viewer) throw new ConvexError("Not authorized");
+    if (!viewer || viewer.role !== AdminRole.SUPER_ADMIN || viewer.status !== UserStatus.ACTIVE) {
+      throw new ConvexError("Not authorized");
+    }
 
     const target = await ctx.db.get(args.id);
     if (!target) {
