@@ -152,14 +152,19 @@ export const _upsertSuperAdmin = internalMutation({
       .unique();
 
     if (existing) {
-      if (existing.role === AdminRole.SUPER_ADMIN) {
+      if (existing.role === AdminRole.SUPER_ADMIN && existing.status === UserStatus.ACTIVE && existing.deleted_at === undefined) {
         console.log(
-          `Super-admin already exists for ${args.email} — nothing to do.`,
+          `Super-admin already active for workosId=${existing.workosId} — nothing to do.`,
         );
       } else {
-        await ctx.db.patch(existing._id, { role: AdminRole.SUPER_ADMIN });
+        // Promote role and reactivate if suspended/soft-deleted.
+        await ctx.db.patch(existing._id, {
+          role: AdminRole.SUPER_ADMIN,
+          status: UserStatus.ACTIVE,
+          deleted_at: undefined,
+        });
         console.log(
-          `Promoted existing admin ${args.email} from "${existing.role}" to super-admin.`,
+          `Promoted/reactivated admin workosId=${existing.workosId} to super-admin (was role="${existing.role}", status="${existing.status}").`,
         );
       }
       return null;
@@ -185,7 +190,7 @@ export const _upsertSuperAdmin = internalMutation({
       metadata: { email: args.email, role: AdminRole.SUPER_ADMIN },
     });
 
-    console.log(`Super-admin seeded for ${args.email} (id: ${String(id)}).`);
+    console.log(`Super-admin seeded: id=${String(id)}, workosId=${args.workosId}.`);
     return null;
   },
 });
