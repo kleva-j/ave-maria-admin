@@ -13,7 +13,6 @@ import {
 import {
   internalMutation,
   internalQuery,
-  mutation,
   action,
   query,
 } from "./_generated/server";
@@ -310,23 +309,24 @@ async function countActiveSuperAdmins(ctx: MutationCtx): Promise<number> {
 }
 
 /**
- * Update an admin user's role.
+ * Internal mutation: update an admin user's role.
+ * Called only from the updateAdminUserRole action.
  *
  * Guards:
  *  - caller must be super-admin
  *  - cannot demote self
  *  - cannot demote the last active super-admin
- *
- * SECURITY: super-admin only.
  */
-export const updateAdminUserRole = mutation({
+export const _updateAdminUserRoleLocal = internalMutation({
   args: {
     id: v.id("admin_users"),
     role: adminRole,
+    viewerId: v.id("admin_users"),
   },
-  returns: adminUserRecordValidator,
+  returns: v.union(adminUserRecordValidator, v.null()),
   handler: async (ctx, args) => {
-    const viewer = await assertSuperAdmin(ctx);
+    const viewer = await ctx.db.get(args.viewerId);
+    if (!viewer) throw new ConvexError("Not authorized");
 
     const target = await ctx.db.get(args.id);
     if (!target) {
@@ -334,7 +334,7 @@ export const updateAdminUserRole = mutation({
     }
 
     if (target.role === args.role) {
-      return target;
+      return null; // no-op signal — caller skips WorkOS call
     }
 
     const activeSuperAdminCount = await countActiveSuperAdmins(ctx);
@@ -872,6 +872,129 @@ async function setWorkOSMembershipStatus(
     throw new ConvexError(safeWorkOSError(resp.status));
   }
 }
+
+/**
+ * Update the role slug on a WorkOS OrganizationMembership.
+ */
+async function setWorkOSMembershipRole(
+  membershipId: string,
+  roleSlug: string,
+  apiKey: string,
+): Promise<void> {
+  const url = `https://api.workos.com/user_management/organization_memberships/${encodeURIComponent(membershipId)}`;
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ role_slug: roleSlug }),
+      signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      throw new ConvexError("WorkOS membership role update timed out");
+    }
+    throw new ConvexError("WorkOS membership role update request failed");
+  }
+  if (!resp.ok) {
+    throw new ConvexError(safeWorkOSError(resp.status));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public action: updateAdminUserRole (local-first + WorkOS sync + rollback)
+// ---------------------------------------------------------------------------
+
+/**
+ * Update an admin user's role.
+ *
+ * Writes locally first (guards run, role patched), then syncs the WorkOS
+ * OrganizationMembership role slug. On WorkOS failure the local write is
+ * rolled back to the previous role.
+ *
+ * If the invite was never accepted (no membership found), the WorkOS step is
+ * skipped. The membership will carry the role from invite time until the admin
+ * accepts and a subsequent role change syncs it.
+ *
+ * SECURITY: super-admin only.
+ */
+export const updateAdminUserRole = action({
+  args: {
+    id: v.id("admin_users"),
+    role: adminRole,
+  },
+  returns: v.union(adminUserRecordValidator, v.null()),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<Infer<typeof adminUserRecordValidator> | null> => {
+    const viewer: Infer<typeof adminUserRecordValidator> =
+      await ctx.runQuery(internal.admin._viewerForAction, {});
+
+    const apiKey = process.env.WORKOS_API_KEY;
+    if (!apiKey) throw new ConvexError("WORKOS_API_KEY is not configured");
+    const organizationId = process.env.WORKOS_ADMIN_ORG_ID;
+    if (!organizationId)
+      throw new ConvexError("WORKOS_ADMIN_ORG_ID is not configured");
+
+    const target: Infer<typeof adminUserRecordValidator> | null =
+      await ctx.runQuery(internal.admin._getAdminUserForAction, {
+        id: args.id,
+      });
+    if (!target) throw new ConvexError("Admin user not found");
+
+    const previousRole = target.role;
+
+    // 1. Local write first — guards run here.
+    const updated: Infer<typeof adminUserRecordValidator> | null =
+      await ctx.runMutation(internal.admin._updateAdminUserRoleLocal, {
+        id: args.id,
+        role: args.role,
+        viewerId: viewer._id,
+      });
+
+    // null means role was already the requested value — nothing to do.
+    if (updated === null) return null;
+
+    // 2. Sync WorkOS membership role.
+    const membership = await findWorkOSMembership(
+      target.workosId,
+      organizationId,
+      apiKey,
+    );
+    if (membership) {
+      try {
+        await setWorkOSMembershipRole(membership.id, args.role, apiKey);
+      } catch (err) {
+        // Rollback local write.
+        await ctx.runMutation(internal.admin._updateAdminUserRoleLocal, {
+          id: args.id,
+          role: previousRole as Infer<typeof adminRole>,
+          viewerId: viewer._id,
+        });
+        await auditLog.log(ctx, {
+          action: "admin_user.role_change.workos_failed",
+          actorId: viewer._id,
+          resourceType: RESOURCE_TYPE.ADMIN_USER,
+          resourceId: args.id,
+          severity: "critical",
+          metadata: {
+            target_admin_user_id: args.id,
+            attempted_role: args.role,
+            previous_role: previousRole,
+            error: err instanceof Error ? err.message : String(err),
+          },
+        });
+        throw err;
+      }
+    }
+
+    return updated;
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Public actions: deactivate / reactivate (local-first + WorkOS sync + rollback)
