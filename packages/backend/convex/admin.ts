@@ -41,6 +41,7 @@ const adminViewerValidator = v.object({
   created_at: v.number(),
   deleted_at: v.optional(v.number()),
   last_login_at: v.nullable(v.number()),
+  _creationTime: v.number(),
 });
 
 const adminOperationsSummaryValidator = v.object({

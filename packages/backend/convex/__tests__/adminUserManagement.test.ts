@@ -67,7 +67,7 @@ describe("assertRoleChangeAllowed", () => {
         newRole: AdminRole.OPERATIONS,
         activeSuperAdminCount: 5,
       }),
-    ).toThrowError(ConvexError);
+    ).toThrow(ConvexError);
   });
 
   it("rejects demoting the last active super-admin", () => {
@@ -83,7 +83,7 @@ describe("assertRoleChangeAllowed", () => {
         newRole: AdminRole.OPERATIONS,
         activeSuperAdminCount: 1,
       }),
-    ).toThrowError(ConvexError);
+    ).toThrow(ConvexError);
   });
 
   it("allows demoting a super-admin when more than one active super-admin exists", () => {
@@ -130,7 +130,7 @@ describe("assertDeactivationAllowed", () => {
         target: self,
         activeSuperAdminCount: 5,
       }),
-    ).toThrowError(ConvexError);
+    ).toThrow(ConvexError);
   });
 
   it("rejects deactivating an already-deactivated admin", () => {
@@ -141,7 +141,7 @@ describe("assertDeactivationAllowed", () => {
         target,
         activeSuperAdminCount: 5,
       }),
-    ).toThrowError(ConvexError);
+    ).toThrow(ConvexError);
   });
 
   it("rejects deactivating the last active super-admin", () => {
@@ -156,7 +156,7 @@ describe("assertDeactivationAllowed", () => {
         target,
         activeSuperAdminCount: 1,
       }),
-    ).toThrowError(ConvexError);
+    ).toThrow(ConvexError);
   });
 
   it("allows deactivating a super-admin when more than one active exists", () => {
