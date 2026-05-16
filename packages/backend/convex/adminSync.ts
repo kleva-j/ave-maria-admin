@@ -25,16 +25,18 @@ const WORKOS_TIMEOUT_MS = 10_000;
 // ---------------------------------------------------------------------------
 
 /**
- * Returns all non-deleted admin_users rows.
- * Used by checkAdminRoleDrift to get the local truth.
+ * Returns all admin_users rows. Used by checkAdminRoleDrift to get local truth.
+ *
+ * Deactivation sets both `status: SUSPENDED` and `deleted_at: <ts>` (soft-delete),
+ * so filtering on `deleted_at === undefined` would exclude suspended admins
+ * entirely — the drift comparator could then never detect deactivation_orphan
+ * or deactivation_drift cases. Return everything; the comparator already
+ * branches on status.
  */
 export const _fetchAllAdminUsers = internalQuery({
   args: {},
   handler: async (ctx) => {
-    const rows = await ctx.db.query(TABLE_NAMES.ADMIN_USERS).collect();
-    // Exclude hard-deleted rows (should not exist given soft-delete pattern,
-    // but guard defensively).
-    return rows.filter((r) => r.deleted_at === undefined);
+    return await ctx.db.query(TABLE_NAMES.ADMIN_USERS).collect();
   },
 });
 
@@ -45,8 +47,11 @@ export const _fetchAllAdminUsers = internalQuery({
 /**
  * Compares every Convex admin_users row against WorkOS OrganizationMembership.
  *
- * Divergences are audit-logged at "critical" severity so they surface in the
- * audit log UI and trigger any alert watchers on the watchCritical query.
+ * Most divergences are audit-logged at "critical" severity so they surface in
+ * the audit log UI and trigger alert watchers on the watchCritical query.
+ * The one exception is `admin_user.drift.membership_missing` for an ACTIVE
+ * admin (pending-invite case), which is logged at "warning" because it is an
+ * expected transient state, not a bug.
  *
  * Detection only — no auto-correct, to avoid masking bugs.
  *
@@ -61,7 +66,7 @@ export const checkAdminRoleDrift = internalAction({
     const organizationId = process.env.WORKOS_ADMIN_ORG_ID;
 
     if (!apiKey || !organizationId) {
-      // Dev environment — skip silently.
+      // Dev environment — skip with an info log so the no-op is visible in logs.
       console.log(
         "[adminSync] WORKOS_API_KEY or WORKOS_ADMIN_ORG_ID not set — skipping drift check.",
       );
