@@ -908,7 +908,12 @@ async function setWorkOSMembershipRole(
 
 /**
  * Find a pending WorkOS invitation for a given email + organization.
- * Returns the first pending invitation `{ id }` or null.
+ * Returns the first pending invitation `{ id }`, or null when the API succeeds
+ * with no pending invitation in the result set.
+ *
+ * Throws ConvexError on network failure, timeout, or non-2xx response so the
+ * caller can roll back local writes instead of silently skipping the invite
+ * lifecycle step.
  */
 async function findPendingWorkOSInvitation(
   email: string,
@@ -916,13 +921,20 @@ async function findPendingWorkOSInvitation(
   apiKey: string,
 ): Promise<{ id: string } | null> {
   const url = `https://api.workos.com/user_management/invitations?email=${encodeURIComponent(email)}&organization_id=${encodeURIComponent(organizationId)}`;
-  const resp = await fetch(url, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${apiKey}` },
-    signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
-  }).catch(() => null);
-
-  if (!resp || !resp.ok) return null;
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      throw new ConvexError("WorkOS invitation lookup timed out");
+    }
+    throw new ConvexError("WorkOS invitation lookup request failed");
+  }
+  if (!resp.ok) throw new ConvexError(safeWorkOSError(resp.status));
 
   const body = (await resp.json()) as {
     data?: { id: string; state: string }[];
@@ -1087,11 +1099,37 @@ export const updateAdminUserRole = action({
       // No membership yet — admin has a pending invitation.
       // Revoke the stale invite (which carries the old role slug) and resend
       // with the new role so the admin lands with the correct role on first login.
-      const invitation = await findPendingWorkOSInvitation(
-        target.email,
-        organizationId,
-        apiKey,
-      );
+      let invitation: { id: string } | null;
+      try {
+        invitation = await findPendingWorkOSInvitation(
+          target.email,
+          organizationId,
+          apiKey,
+        );
+      } catch (err) {
+        // Lookup failure — rollback local role write. The pending invite may
+        // still carry the old role; leaving local DB with the new role while
+        // we cannot verify or update the invite would silently desync state.
+        await ctx.runMutation(internal.admin._updateAdminUserRoleLocal, {
+          id: args.id,
+          role: previousRole as Infer<typeof adminRole>,
+          viewerId: viewer._id,
+        });
+        await auditLog.log(ctx, {
+          action: "admin_user.role_change.invite_lookup_failed",
+          actorId: viewer._id,
+          resourceType: RESOURCE_TYPE.ADMIN_USER,
+          resourceId: args.id,
+          severity: "critical",
+          metadata: {
+            target_admin_user_id: args.id,
+            attempted_role: args.role,
+            previous_role: previousRole,
+            error: err instanceof Error ? err.message : String(err),
+          },
+        });
+        throw err;
+      }
       if (invitation) {
         // a. Revoke stale invite.
         try {
