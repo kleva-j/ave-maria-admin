@@ -906,6 +906,73 @@ async function setWorkOSMembershipRole(
   }
 }
 
+/**
+ * Find a pending WorkOS invitation for a given email + organization.
+ * Returns the first pending invitation `{ id }`, or null when the API succeeds
+ * with no pending invitation in the result set.
+ *
+ * Throws ConvexError on network failure, timeout, or non-2xx response so the
+ * caller can roll back local writes instead of silently skipping the invite
+ * lifecycle step.
+ */
+async function findPendingWorkOSInvitation(
+  email: string,
+  organizationId: string,
+  apiKey: string,
+): Promise<{ id: string } | null> {
+  const url = `https://api.workos.com/user_management/invitations?email=${encodeURIComponent(email)}&organization_id=${encodeURIComponent(organizationId)}`;
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      throw new ConvexError("WorkOS invitation lookup timed out");
+    }
+    throw new ConvexError("WorkOS invitation lookup request failed");
+  }
+  if (!resp.ok) throw new ConvexError(safeWorkOSError(resp.status));
+
+  const body = (await resp.json()) as {
+    data?: { id: string; state: string }[];
+  };
+  const pending = body.data?.find((inv) => inv.state === "pending");
+  return pending ? { id: pending.id } : null;
+}
+
+/**
+ * Revoke a WorkOS invitation by ID.
+ * No-ops if already revoked (WorkOS returns 200 for idempotent revokes).
+ */
+async function revokeWorkOSInvitation(
+  invitationId: string,
+  apiKey: string,
+): Promise<void> {
+  const url = `https://api.workos.com/user_management/invitations/${encodeURIComponent(invitationId)}/revoke`;
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      throw new ConvexError("WorkOS invitation revoke timed out");
+    }
+    throw new ConvexError("WorkOS invitation revoke request failed");
+  }
+  if (!resp.ok) {
+    throw new ConvexError(safeWorkOSError(resp.status));
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Public action: updateAdminUserRole (local-first + WorkOS sync + rollback)
 // ---------------------------------------------------------------------------
@@ -917,9 +984,10 @@ async function setWorkOSMembershipRole(
  * OrganizationMembership role slug. On WorkOS failure the local write is
  * rolled back to the previous role.
  *
- * If the invite was never accepted (no membership found), the WorkOS step is
- * skipped. The membership will carry the role from invite time until the admin
- * accepts and a subsequent role change syncs it.
+ * If the invite is still pending (no membership found), the stale invitation is
+ * revoked and a new one is sent with the updated role slug so the admin lands
+ * with the correct role on first login. If no invitation exists (never invited
+ * or expired), the WorkOS step is skipped.
  *
  * SECURITY: super-admin only.
  */
@@ -963,8 +1031,8 @@ export const updateAdminUserRole = action({
     // (consistent with other admin actions that never return null on success).
     if (updated === null) return target;
 
-    // 2. Sync WorkOS membership role. Wraps lookup + role flip so a lookup
-    //    failure (timeout / non-2xx) also rolls back the local write.
+    // 2. Sync WorkOS. Lookup is wrapped so a fetch/non-2xx failure also rolls
+    //    back the local write instead of silently skipping WorkOS sync.
     //
     //    Known limitation: this rollback is not compare-and-swap. A concurrent
     //    role change between the local write at step 1 and a WorkOS failure
@@ -972,17 +1040,14 @@ export const updateAdminUserRole = action({
     //    low-frequency and serialized through the UI, so we accept this race
     //    rather than introduce a versioning scheme. Revisit if collisions
     //    become observable in audit logs.
+    let membership;
     try {
-      const membership = await findWorkOSMembership(
+      membership = await findWorkOSMembership(
         target.workosId,
         organizationId,
         apiKey,
       );
-      if (membership) {
-        await setWorkOSMembershipRole(membership.id, args.role, apiKey);
-      }
     } catch (err) {
-      // Rollback local write.
       await ctx.runMutation(internal.admin._updateAdminUserRoleLocal, {
         id: args.id,
         role: previousRole as Infer<typeof adminRole>,
@@ -998,10 +1063,134 @@ export const updateAdminUserRole = action({
           target_admin_user_id: args.id,
           attempted_role: args.role,
           previous_role: previousRole,
+          stage: "membership_lookup",
           error: err instanceof Error ? err.message : String(err),
         },
       });
       throw err;
+    }
+
+    if (membership) {
+      try {
+        await setWorkOSMembershipRole(membership.id, args.role, apiKey);
+      } catch (err) {
+        // Rollback local write.
+        await ctx.runMutation(internal.admin._updateAdminUserRoleLocal, {
+          id: args.id,
+          role: previousRole as Infer<typeof adminRole>,
+          viewerId: viewer._id,
+        });
+        await auditLog.log(ctx, {
+          action: "admin_user.role_change.workos_failed",
+          actorId: viewer._id,
+          resourceType: RESOURCE_TYPE.ADMIN_USER,
+          resourceId: args.id,
+          severity: "critical",
+          metadata: {
+            target_admin_user_id: args.id,
+            attempted_role: args.role,
+            previous_role: previousRole,
+            error: err instanceof Error ? err.message : String(err),
+          },
+        });
+        throw err;
+      }
+    } else {
+      // No membership yet — admin has a pending invitation.
+      // Revoke the stale invite (which carries the old role slug) and resend
+      // with the new role so the admin lands with the correct role on first login.
+      let invitation: { id: string } | null;
+      try {
+        invitation = await findPendingWorkOSInvitation(
+          target.email,
+          organizationId,
+          apiKey,
+        );
+      } catch (err) {
+        // Lookup failure — rollback local role write. The pending invite may
+        // still carry the old role; leaving local DB with the new role while
+        // we cannot verify or update the invite would silently desync state.
+        await ctx.runMutation(internal.admin._updateAdminUserRoleLocal, {
+          id: args.id,
+          role: previousRole as Infer<typeof adminRole>,
+          viewerId: viewer._id,
+        });
+        await auditLog.log(ctx, {
+          action: "admin_user.role_change.invite_lookup_failed",
+          actorId: viewer._id,
+          resourceType: RESOURCE_TYPE.ADMIN_USER,
+          resourceId: args.id,
+          severity: "critical",
+          metadata: {
+            target_admin_user_id: args.id,
+            attempted_role: args.role,
+            previous_role: previousRole,
+            error: err instanceof Error ? err.message : String(err),
+          },
+        });
+        throw err;
+      }
+      if (invitation) {
+        // a. Revoke stale invite.
+        try {
+          await revokeWorkOSInvitation(invitation.id, apiKey);
+        } catch (err) {
+          // Rollback local write — old invite still alive, state consistent.
+          await ctx.runMutation(internal.admin._updateAdminUserRoleLocal, {
+            id: args.id,
+            role: previousRole as Infer<typeof adminRole>,
+            viewerId: viewer._id,
+          });
+          await auditLog.log(ctx, {
+            action: "admin_user.role_change.revoke_failed",
+            actorId: viewer._id,
+            resourceType: RESOURCE_TYPE.ADMIN_USER,
+            resourceId: args.id,
+            severity: "critical",
+            metadata: {
+              target_admin_user_id: args.id,
+              invitation_id: invitation.id,
+              attempted_role: args.role,
+              previous_role: previousRole,
+              error: err instanceof Error ? err.message : String(err),
+            },
+          });
+          throw err;
+        }
+
+        // b. Resend with new role slug.
+        // If this fails, local DB already has the correct new role and the old
+        // invite is gone — admin must be manually re-invited.
+        try {
+          await callWorkOSInvite({
+            email: target.email,
+            first_name: target.first_name,
+            last_name: target.last_name,
+            apiKey,
+            organizationId,
+            roleSlug: args.role,
+          });
+        } catch (err) {
+          await auditLog.log(ctx, {
+            action: "admin_user.role_change.resend_failed",
+            actorId: viewer._id,
+            resourceType: RESOURCE_TYPE.ADMIN_USER,
+            resourceId: args.id,
+            severity: "critical",
+            metadata: {
+              target_admin_user_id: args.id,
+              attempted_role: args.role,
+              error: err instanceof Error ? err.message : String(err),
+              note: "Old invite revoked. Manual re-invite required.",
+            },
+          });
+          throw new ConvexError(
+            "Role updated locally but re-invite failed. Please manually invite the admin again.",
+          );
+        }
+      }
+      // No pending invitation found — admin was never invited or invite expired.
+      // No WorkOS action needed.
     }
 
     return updated;
