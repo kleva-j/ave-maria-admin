@@ -811,7 +811,11 @@ interface WorkOSMembership {
 
 /**
  * Look up a WorkOS OrganizationMembership for a given user in a given org.
- * Returns the membership object or null if not found (invite still pending).
+ * Returns the membership object, or null when the API succeeds with an empty
+ * result (no membership yet — invite still pending).
+ *
+ * Throws ConvexError on network failure, timeout, or non-2xx response so the
+ * caller can roll back local writes instead of silently skipping WorkOS sync.
  */
 async function findWorkOSMembership(
   workosUserId: string,
@@ -819,13 +823,20 @@ async function findWorkOSMembership(
   apiKey: string,
 ): Promise<WorkOSMembership | null> {
   const url = `https://api.workos.com/user_management/organization_memberships?user_id=${encodeURIComponent(workosUserId)}&organization_id=${encodeURIComponent(organizationId)}`;
-  const resp = await fetch(url, {
-    method: "GET",
-    headers: { Authorization: `Bearer ${apiKey}` },
-    signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
-  }).catch(() => null);
-
-  if (!resp || !resp.ok) return null;
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      throw new ConvexError("WorkOS membership lookup timed out");
+    }
+    throw new ConvexError("WorkOS membership lookup request failed");
+  }
+  if (!resp.ok) throw new ConvexError(safeWorkOSError(resp.status));
 
   const body = (await resp.json()) as { data?: WorkOSMembership[] };
   return body.data?.[0] ?? null;
@@ -904,34 +915,36 @@ export const deactivateAdminUser = action({
         viewerId: viewer._id,
       });
 
-    // 2. Sync WorkOS membership.
-    const membership = await findWorkOSMembership(
-      target.workosId,
-      organizationId,
-      apiKey,
-    );
-    if (membership) {
-      try {
+    // 2. Sync WorkOS membership. Wraps both lookup and status flip so a lookup
+    //    failure (timeout / non-2xx) also triggers rollback instead of silently
+    //    skipping the WorkOS sync.
+    try {
+      const membership = await findWorkOSMembership(
+        target.workosId,
+        organizationId,
+        apiKey,
+      );
+      if (membership) {
         await setWorkOSMembershipStatus(membership.id, "deactivate", apiKey);
-      } catch (err) {
-        // Rollback local write so state stays consistent.
-        await ctx.runMutation(internal.admin._reactivateAdminUserLocal, {
-          id: args.id,
-          viewerId: viewer._id,
-        });
-        await auditLog.log(ctx, {
-          action: "admin_user.deactivate.workos_failed",
-          actorId: viewer._id,
-          resourceType: RESOURCE_TYPE.ADMIN_USER,
-          resourceId: args.id,
-          severity: "critical",
-          metadata: {
-            target_admin_user_id: args.id,
-            error: err instanceof Error ? err.message : String(err),
-          },
-        });
-        throw err;
       }
+    } catch (err) {
+      // Rollback local write so state stays consistent.
+      await ctx.runMutation(internal.admin._reactivateAdminUserLocal, {
+        id: args.id,
+        viewerId: viewer._id,
+      });
+      await auditLog.log(ctx, {
+        action: "admin_user.deactivate.workos_failed",
+        actorId: viewer._id,
+        resourceType: RESOURCE_TYPE.ADMIN_USER,
+        resourceId: args.id,
+        severity: "critical",
+        metadata: {
+          target_admin_user_id: args.id,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+      throw err;
     }
 
     return updated;
@@ -965,6 +978,13 @@ export const reactivateAdminUser = action({
       });
     if (!target) throw new ConvexError("Admin user not found");
 
+    // Capture pre-state so rollback is only applied when the local mutation
+    // actually changed something. _reactivateAdminUserLocal is a no-op when
+    // the target is already ACTIVE — rolling back in that case would wrongly
+    // deactivate an already-active admin.
+    const wasSuspended =
+      target.status !== UserStatus.ACTIVE || target.deleted_at !== undefined;
+
     // 1. Local write first.
     const updated: Infer<typeof adminUserRecordValidator> =
       await ctx.runMutation(internal.admin._reactivateAdminUserLocal, {
@@ -972,34 +992,38 @@ export const reactivateAdminUser = action({
         viewerId: viewer._id,
       });
 
-    // 2. Sync WorkOS membership.
-    const membership = await findWorkOSMembership(
-      target.workosId,
-      organizationId,
-      apiKey,
-    );
-    if (membership) {
-      try {
+    // 2. Sync WorkOS membership. Wraps both lookup and status flip so a lookup
+    //    failure (timeout / non-2xx) also triggers rollback.
+    try {
+      const membership = await findWorkOSMembership(
+        target.workosId,
+        organizationId,
+        apiKey,
+      );
+      if (membership) {
         await setWorkOSMembershipStatus(membership.id, "reactivate", apiKey);
-      } catch (err) {
-        // Rollback local write.
+      }
+    } catch (err) {
+      if (wasSuspended) {
+        // Only rollback if the local write actually changed state.
         await ctx.runMutation(internal.admin._deactivateAdminUserLocal, {
           id: args.id,
           viewerId: viewer._id,
         });
-        await auditLog.log(ctx, {
-          action: "admin_user.reactivate.workos_failed",
-          actorId: viewer._id,
-          resourceType: RESOURCE_TYPE.ADMIN_USER,
-          resourceId: args.id,
-          severity: "critical",
-          metadata: {
-            target_admin_user_id: args.id,
-            error: err instanceof Error ? err.message : String(err),
-          },
-        });
-        throw err;
       }
+      await auditLog.log(ctx, {
+        action: "admin_user.reactivate.workos_failed",
+        actorId: viewer._id,
+        resourceType: RESOURCE_TYPE.ADMIN_USER,
+        resourceId: args.id,
+        severity: "critical",
+        metadata: {
+          target_admin_user_id: args.id,
+          was_suspended: wasSuspended,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+      throw err;
     }
 
     return updated;
