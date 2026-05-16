@@ -928,11 +928,11 @@ export const updateAdminUserRole = action({
     id: v.id("admin_users"),
     role: adminRole,
   },
-  returns: v.union(adminUserRecordValidator, v.null()),
+  returns: adminUserRecordValidator,
   handler: async (
     ctx,
     args,
-  ): Promise<Infer<typeof adminUserRecordValidator> | null> => {
+  ): Promise<Infer<typeof adminUserRecordValidator>> => {
     const viewer: Infer<typeof adminUserRecordValidator> =
       await ctx.runQuery(internal.admin._viewerForAction, {});
 
@@ -959,39 +959,49 @@ export const updateAdminUserRole = action({
       });
 
     // null means role was already the requested value — nothing to do.
-    if (updated === null) return null;
+    // Return the current target row so callers always get the admin record
+    // (consistent with other admin actions that never return null on success).
+    if (updated === null) return target;
 
-    // 2. Sync WorkOS membership role.
-    const membership = await findWorkOSMembership(
-      target.workosId,
-      organizationId,
-      apiKey,
-    );
-    if (membership) {
-      try {
+    // 2. Sync WorkOS membership role. Wraps lookup + role flip so a lookup
+    //    failure (timeout / non-2xx) also rolls back the local write.
+    //
+    //    Known limitation: this rollback is not compare-and-swap. A concurrent
+    //    role change between the local write at step 1 and a WorkOS failure
+    //    here could be clobbered by the rollback. Admin role changes are
+    //    low-frequency and serialized through the UI, so we accept this race
+    //    rather than introduce a versioning scheme. Revisit if collisions
+    //    become observable in audit logs.
+    try {
+      const membership = await findWorkOSMembership(
+        target.workosId,
+        organizationId,
+        apiKey,
+      );
+      if (membership) {
         await setWorkOSMembershipRole(membership.id, args.role, apiKey);
-      } catch (err) {
-        // Rollback local write.
-        await ctx.runMutation(internal.admin._updateAdminUserRoleLocal, {
-          id: args.id,
-          role: previousRole as Infer<typeof adminRole>,
-          viewerId: viewer._id,
-        });
-        await auditLog.log(ctx, {
-          action: "admin_user.role_change.workos_failed",
-          actorId: viewer._id,
-          resourceType: RESOURCE_TYPE.ADMIN_USER,
-          resourceId: args.id,
-          severity: "critical",
-          metadata: {
-            target_admin_user_id: args.id,
-            attempted_role: args.role,
-            previous_role: previousRole,
-            error: err instanceof Error ? err.message : String(err),
-          },
-        });
-        throw err;
       }
+    } catch (err) {
+      // Rollback local write.
+      await ctx.runMutation(internal.admin._updateAdminUserRoleLocal, {
+        id: args.id,
+        role: previousRole as Infer<typeof adminRole>,
+        viewerId: viewer._id,
+      });
+      await auditLog.log(ctx, {
+        action: "admin_user.role_change.workos_failed",
+        actorId: viewer._id,
+        resourceType: RESOURCE_TYPE.ADMIN_USER,
+        resourceId: args.id,
+        severity: "critical",
+        metadata: {
+          target_admin_user_id: args.id,
+          attempted_role: args.role,
+          previous_role: previousRole,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+      throw err;
     }
 
     return updated;
