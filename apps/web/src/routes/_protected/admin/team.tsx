@@ -7,7 +7,7 @@ import { Button } from "@avm-daily/ui/components/button";
 import { toast } from "@avm-daily/ui/components/sonner";
 import { Input } from "@avm-daily/ui/components/input";
 import { Badge } from "@avm-daily/ui/components/badge";
-import { useConvex, useMutation } from "convex/react";
+import { useConvex } from "convex/react";
 import { convexQuery } from "@convex-dev/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
@@ -121,8 +121,6 @@ function AdminTeamPage() {
     setPendingRole(selected?.role ?? null);
   }, [selected?._id, selected?.role]);
 
-  const updateRole = useMutation(api.admin.updateAdminUserRole);
-
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: listOptions.queryKey });
   };
@@ -178,7 +176,10 @@ function AdminTeamPage() {
 
     try {
       setPendingAction("role");
-      await updateRole({ id: selected._id, role: pendingRole });
+      await convex.action(api.admin.updateAdminUserRole, {
+        id: selected._id,
+        role: pendingRole,
+      });
       toast.success("Role updated.");
       await refresh();
     } catch (error) {
