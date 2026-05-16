@@ -42,6 +42,11 @@ export const setup = internalAction({
         fn: internal.adminAlerts.processPendingEvents,
         schedule: { kind: "interval" as const, ms: 60 * 1000 }, // 1 minute
       },
+      {
+        name: "check admin role drift",
+        fn: internal.adminSync.checkAdminRoleDrift,
+        schedule: { kind: "interval" as const, ms: 60 * 60 * 1000 }, // 1 hour
+      },
     ];
 
     for (const job of cronJobs) {

@@ -24,6 +24,7 @@ import type * as adapters_withdrawalReservationAdapter from "../adapters/withdra
 import type * as admin from "../admin.js";
 import type * as adminAlertPolicies from "../adminAlertPolicies.js";
 import type * as adminAlerts from "../adminAlerts.js";
+import type * as adminSync from "../adminSync.js";
 import type * as adminUserPolicy from "../adminUserPolicy.js";
 import type * as aggregateHelpers from "../aggregateHelpers.js";
 import type * as aggregates from "../aggregates.js";
@@ -97,6 +98,7 @@ declare const fullApi: ApiFromModules<{
   admin: typeof admin;
   adminAlertPolicies: typeof adminAlertPolicies;
   adminAlerts: typeof adminAlerts;
+  adminSync: typeof adminSync;
   adminUserPolicy: typeof adminUserPolicy;
   aggregateHelpers: typeof aggregateHelpers;
   aggregates: typeof aggregates;
