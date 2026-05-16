@@ -163,6 +163,17 @@ export const _upsertSuperAdmin = internalMutation({
           status: UserStatus.ACTIVE,
           deleted_at: undefined,
         });
+        await auditLog.log(ctx, {
+          action: "admin_user.promoted_to_super_admin",
+          resourceType: RESOURCE_TYPE.ADMIN_USER,
+          resourceId: existing._id,
+          severity: "warning",
+          metadata: {
+            workos_id: existing.workosId,
+            previous_role: existing.role,
+            previous_status: existing.status,
+          },
+        });
         console.log(
           `Promoted/reactivated admin workosId=${existing.workosId} to super-admin (was role="${existing.role}", status="${existing.status}").`,
         );
