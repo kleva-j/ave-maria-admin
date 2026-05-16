@@ -78,7 +78,7 @@ function AdminTeamPage() {
 
   const isSuperAdmin = viewerQuery.data?.role === "super-admin";
 
-  // Redirect non-super_admins back to /admin.
+  // Redirect non-super-admins back to /admin.
   useEffect(() => {
     if (viewerQuery.isLoading) {
       return;
@@ -122,8 +122,6 @@ function AdminTeamPage() {
   }, [selected?._id, selected?.role]);
 
   const updateRole = useMutation(api.admin.updateAdminUserRole);
-  const deactivate = useMutation(api.admin.deactivateAdminUser);
-  const reactivate = useMutation(api.admin.reactivateAdminUser);
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: listOptions.queryKey });
@@ -205,7 +203,7 @@ function AdminTeamPage() {
 
     try {
       setPendingAction("deactivate");
-      await deactivate({ id: selected._id });
+      await convex.action(api.admin.deactivateAdminUser, { id: selected._id });
       toast.success("Admin user deactivated.");
       await refresh();
     } catch (error) {
@@ -221,7 +219,7 @@ function AdminTeamPage() {
     if (!selected) return;
     try {
       setPendingAction("reactivate");
-      await reactivate({ id: selected._id });
+      await convex.action(api.admin.reactivateAdminUser, { id: selected._id });
       toast.success("Admin user reactivated.");
       await refresh();
     } catch (error) {

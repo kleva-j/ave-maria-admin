@@ -1,4 +1,4 @@
-import { ConvexError, v } from "convex/values";
+import { ConvexError, v, type Infer } from "convex/values";
 
 import type { MutationCtx } from "./_generated/server";
 import type { AdminUserId } from "./types";
@@ -371,22 +371,27 @@ export const updateAdminUserRole = mutation({
 });
 
 /**
- * Deactivate (soft-delete) an admin user.
+ * Internal mutation: deactivate (soft-delete) an admin user.
+ * Called only from the deactivateAdminUser action.
  *
  * Guards:
  *  - caller must be super-admin
  *  - cannot deactivate self
  *  - cannot deactivate the last active super-admin
  *
- * Sets `deleted_at` and `status = "suspended"`. Does not touch WorkOS.
- *
- * SECURITY: super-admin only.
+ * Sets `deleted_at` and `status = "suspended"`.
  */
-export const deactivateAdminUser = mutation({
-  args: { id: v.id("admin_users") },
+export const _deactivateAdminUserLocal = internalMutation({
+  args: {
+    id: v.id("admin_users"),
+    viewerId: v.id("admin_users"),
+  },
   returns: adminUserRecordValidator,
   handler: async (ctx, args) => {
-    const viewer = await assertSuperAdmin(ctx);
+    const viewer = await ctx.db.get(args.viewerId);
+    if (!viewer || viewer.role !== AdminRole.SUPER_ADMIN || viewer.status !== UserStatus.ACTIVE) {
+      throw new ConvexError("Not authorized");
+    }
 
     const target = await ctx.db.get(args.id);
     if (!target) {
@@ -429,16 +434,22 @@ export const deactivateAdminUser = mutation({
 });
 
 /**
- * Reactivate a previously deactivated admin user.
- * Clears `deleted_at` and sets `status = "active"`.
+ * Internal mutation: reactivate a previously deactivated admin user.
+ * Called only from the reactivateAdminUser action.
  *
- * SECURITY: super-admin only.
+ * Clears `deleted_at` and sets `status = "active"`.
  */
-export const reactivateAdminUser = mutation({
-  args: { id: v.id("admin_users") },
+export const _reactivateAdminUserLocal = internalMutation({
+  args: {
+    id: v.id("admin_users"),
+    viewerId: v.id("admin_users"),
+  },
   returns: adminUserRecordValidator,
   handler: async (ctx, args) => {
-    const viewer = await assertSuperAdmin(ctx);
+    const viewer = await ctx.db.get(args.viewerId);
+    if (!viewer || viewer.role !== AdminRole.SUPER_ADMIN || viewer.status !== UserStatus.ACTIVE) {
+      throw new ConvexError("Not authorized");
+    }
 
     const target = await ctx.db.get(args.id);
     if (!target) {
@@ -766,13 +777,255 @@ export const inviteAdminUser = action({
 });
 
 /**
- * Internal helper for the inviteAdminUser action.
- * Returns the calling admin's record (super_admin only).
+ * Internal helper for actions that require a super-admin caller.
+ * Returns the calling admin's record (super-admin only).
  */
 export const _viewerForAction = internalQuery({
   args: {},
   returns: adminUserRecordValidator,
   handler: async (ctx) => {
     return await assertSuperAdmin(ctx);
+  },
+});
+
+/**
+ * Internal query: fetch a target admin user by ID for use inside actions.
+ * Returns the full record so actions can read workosId, role, status, deleted_at.
+ */
+export const _getAdminUserForAction = internalQuery({
+  args: { id: v.id("admin_users") },
+  returns: v.union(adminUserRecordValidator, v.null()),
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// WorkOS membership helpers (used by deactivate / reactivate / role-change actions)
+// ---------------------------------------------------------------------------
+
+interface WorkOSMembership {
+  id: string;
+  status: string;
+}
+
+/**
+ * Look up a WorkOS OrganizationMembership for a given user in a given org.
+ * Returns the membership object, or null when the API succeeds with an empty
+ * result (no membership yet — invite still pending).
+ *
+ * Throws ConvexError on network failure, timeout, or non-2xx response so the
+ * caller can roll back local writes instead of silently skipping WorkOS sync.
+ */
+async function findWorkOSMembership(
+  workosUserId: string,
+  organizationId: string,
+  apiKey: string,
+): Promise<WorkOSMembership | null> {
+  const url = `https://api.workos.com/user_management/organization_memberships?user_id=${encodeURIComponent(workosUserId)}&organization_id=${encodeURIComponent(organizationId)}`;
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${apiKey}` },
+      signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      throw new ConvexError("WorkOS membership lookup timed out");
+    }
+    throw new ConvexError("WorkOS membership lookup request failed");
+  }
+  if (!resp.ok) throw new ConvexError(safeWorkOSError(resp.status));
+
+  const body = (await resp.json()) as { data?: WorkOSMembership[] };
+  return body.data?.[0] ?? null;
+}
+
+/**
+ * Flip the status of a WorkOS OrganizationMembership.
+ * action: "deactivate" | "reactivate"
+ */
+async function setWorkOSMembershipStatus(
+  membershipId: string,
+  action: "deactivate" | "reactivate",
+  apiKey: string,
+): Promise<void> {
+  const url = `https://api.workos.com/user_management/organization_memberships/${encodeURIComponent(membershipId)}/${action}`;
+  let resp: Response;
+  try {
+    resp = await fetch(url, {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
+      },
+      signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === "TimeoutError") {
+      throw new ConvexError(`WorkOS membership ${action} timed out`);
+    }
+    throw new ConvexError(`WorkOS membership ${action} request failed`);
+  }
+  if (!resp.ok) {
+    throw new ConvexError(safeWorkOSError(resp.status));
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public actions: deactivate / reactivate (local-first + WorkOS sync + rollback)
+// ---------------------------------------------------------------------------
+
+/**
+ * Deactivate an admin user.
+ *
+ * Writes locally first (guards run, row suspended), then deactivates the
+ * WorkOS OrganizationMembership. On WorkOS failure the local write is rolled
+ * back so the two systems stay in sync.
+ *
+ * If the invite was never accepted (no membership found), WorkOS step is
+ * skipped — the admin never had WorkOS access anyway.
+ *
+ * SECURITY: super-admin only.
+ */
+export const deactivateAdminUser = action({
+  args: { id: v.id("admin_users") },
+  returns: adminUserRecordValidator,
+  handler: async (ctx, args) => {
+    const viewer: Infer<typeof adminUserRecordValidator> =
+      await ctx.runQuery(internal.admin._viewerForAction, {});
+
+    const apiKey = process.env.WORKOS_API_KEY;
+    if (!apiKey) throw new ConvexError("WORKOS_API_KEY is not configured");
+    const organizationId = process.env.WORKOS_ADMIN_ORG_ID;
+    if (!organizationId)
+      throw new ConvexError("WORKOS_ADMIN_ORG_ID is not configured");
+
+    const target: Infer<typeof adminUserRecordValidator> | null =
+      await ctx.runQuery(internal.admin._getAdminUserForAction, {
+        id: args.id,
+      });
+    if (!target) throw new ConvexError("Admin user not found");
+
+    // 1. Local write first — guards run here.
+    const updated: Infer<typeof adminUserRecordValidator> =
+      await ctx.runMutation(internal.admin._deactivateAdminUserLocal, {
+        id: args.id,
+        viewerId: viewer._id,
+      });
+
+    // 2. Sync WorkOS membership. Wraps both lookup and status flip so a lookup
+    //    failure (timeout / non-2xx) also triggers rollback instead of silently
+    //    skipping the WorkOS sync.
+    try {
+      const membership = await findWorkOSMembership(
+        target.workosId,
+        organizationId,
+        apiKey,
+      );
+      if (membership) {
+        await setWorkOSMembershipStatus(membership.id, "deactivate", apiKey);
+      }
+    } catch (err) {
+      // Rollback local write so state stays consistent.
+      await ctx.runMutation(internal.admin._reactivateAdminUserLocal, {
+        id: args.id,
+        viewerId: viewer._id,
+      });
+      await auditLog.log(ctx, {
+        action: "admin_user.deactivate.workos_failed",
+        actorId: viewer._id,
+        resourceType: RESOURCE_TYPE.ADMIN_USER,
+        resourceId: args.id,
+        severity: "critical",
+        metadata: {
+          target_admin_user_id: args.id,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+      throw err;
+    }
+
+    return updated;
+  },
+});
+
+/**
+ * Reactivate a previously deactivated admin user.
+ *
+ * Writes locally first, then reactivates the WorkOS OrganizationMembership.
+ * On WorkOS failure the local write is rolled back.
+ *
+ * SECURITY: super-admin only.
+ */
+export const reactivateAdminUser = action({
+  args: { id: v.id("admin_users") },
+  returns: adminUserRecordValidator,
+  handler: async (ctx, args) => {
+    const viewer: Infer<typeof adminUserRecordValidator> =
+      await ctx.runQuery(internal.admin._viewerForAction, {});
+
+    const apiKey = process.env.WORKOS_API_KEY;
+    if (!apiKey) throw new ConvexError("WORKOS_API_KEY is not configured");
+    const organizationId = process.env.WORKOS_ADMIN_ORG_ID;
+    if (!organizationId)
+      throw new ConvexError("WORKOS_ADMIN_ORG_ID is not configured");
+
+    const target: Infer<typeof adminUserRecordValidator> | null =
+      await ctx.runQuery(internal.admin._getAdminUserForAction, {
+        id: args.id,
+      });
+    if (!target) throw new ConvexError("Admin user not found");
+
+    // Capture pre-state so rollback is only applied when the local mutation
+    // actually changed something. _reactivateAdminUserLocal is a no-op when
+    // the target is already ACTIVE — rolling back in that case would wrongly
+    // deactivate an already-active admin.
+    const wasSuspended =
+      target.status !== UserStatus.ACTIVE || target.deleted_at !== undefined;
+
+    // 1. Local write first.
+    const updated: Infer<typeof adminUserRecordValidator> =
+      await ctx.runMutation(internal.admin._reactivateAdminUserLocal, {
+        id: args.id,
+        viewerId: viewer._id,
+      });
+
+    // 2. Sync WorkOS membership. Wraps both lookup and status flip so a lookup
+    //    failure (timeout / non-2xx) also triggers rollback.
+    try {
+      const membership = await findWorkOSMembership(
+        target.workosId,
+        organizationId,
+        apiKey,
+      );
+      if (membership) {
+        await setWorkOSMembershipStatus(membership.id, "reactivate", apiKey);
+      }
+    } catch (err) {
+      if (wasSuspended) {
+        // Only rollback if the local write actually changed state.
+        await ctx.runMutation(internal.admin._deactivateAdminUserLocal, {
+          id: args.id,
+          viewerId: viewer._id,
+        });
+      }
+      await auditLog.log(ctx, {
+        action: "admin_user.reactivate.workos_failed",
+        actorId: viewer._id,
+        resourceType: RESOURCE_TYPE.ADMIN_USER,
+        resourceId: args.id,
+        severity: "critical",
+        metadata: {
+          target_admin_user_id: args.id,
+          was_suspended: wasSuspended,
+          error: err instanceof Error ? err.message : String(err),
+        },
+      });
+      throw err;
+    }
+
+    return updated;
   },
 });
