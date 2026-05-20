@@ -14,6 +14,7 @@ import { useConvex, useMutation } from "convex/react";
 import { convexQuery } from "@convex-dev/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Loader } from "@/components/loader";
+import { posthog } from "@/lib/posthog";
 
 import {
   CardDescription,
@@ -160,9 +161,14 @@ function AdminBankVerificationPage() {
     try {
       setPendingAction("approve");
       await approveVerification({ accountId: selectedAccountId });
+      posthog.capture("admin_bank_verification_approved", {
+        account_id: selectedAccountId,
+        bank_name: selectedAccount?.bank_name ?? null,
+      });
       toast.success("Bank account verified.");
       await refreshQueue();
     } catch (error) {
+      posthog.captureException(error);
       toast.error(
         normalizeConvexErrorMessage(error, "Unable to approve verification"),
       );
@@ -187,10 +193,15 @@ function AdminBankVerificationPage() {
         accountId: selectedAccountId,
         reason: rejectionReason.trim(),
       });
+      posthog.capture("admin_bank_verification_rejected", {
+        account_id: selectedAccountId,
+        bank_name: selectedAccount?.bank_name ?? null,
+      });
       setRejectionReason("");
       toast.success("Bank verification rejected.");
       await refreshQueue();
     } catch (error) {
+      posthog.captureException(error);
       toast.error(
         normalizeConvexErrorMessage(error, "Unable to reject verification"),
       );

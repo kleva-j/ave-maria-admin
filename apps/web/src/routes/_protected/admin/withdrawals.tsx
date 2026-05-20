@@ -28,7 +28,8 @@ import {
   formatFullName,
 } from "@/lib/admin-formatters";
 
-import Loader from "@/components/loader";
+import { Loader } from "@/components/loader";
+import { posthog } from "@/lib/posthog";
 
 const WITHDRAWAL_STATUSES = [
   "pending",
@@ -170,9 +171,15 @@ function AdminWithdrawalsPage() {
       await approveWithdrawal({
         withdrawal_id: selectedWithdrawal.withdrawal._id,
       });
+      posthog.capture("admin_withdrawal_approved", {
+        withdrawal_id: selectedWithdrawal.withdrawal._id,
+        amount_kobo: selectedWithdrawal.withdrawal.requested_amount_kobo,
+        method: selectedWithdrawal.withdrawal.method,
+      });
       toast.success("Withdrawal approved.");
       await refreshQueues();
     } catch (error) {
+      posthog.captureException(error);
       toast.error(
         normalizeConvexErrorMessage(error, "Unable to approve withdrawal"),
       );
@@ -197,10 +204,16 @@ function AdminWithdrawalsPage() {
         withdrawal_id: selectedWithdrawal.withdrawal._id,
         reason: rejectionReason.trim(),
       });
+      posthog.capture("admin_withdrawal_rejected", {
+        withdrawal_id: selectedWithdrawal.withdrawal._id,
+        amount_kobo: selectedWithdrawal.withdrawal.requested_amount_kobo,
+        method: selectedWithdrawal.withdrawal.method,
+      });
       setRejectionReason("");
       toast.success("Withdrawal rejected and funds restored.");
       await refreshQueues();
     } catch (error) {
+      posthog.captureException(error);
       toast.error(
         normalizeConvexErrorMessage(error, "Unable to reject withdrawal"),
       );
@@ -219,9 +232,15 @@ function AdminWithdrawalsPage() {
       await processWithdrawal({
         withdrawal_id: selectedWithdrawal.withdrawal._id,
       });
+      posthog.capture("admin_withdrawal_processed", {
+        withdrawal_id: selectedWithdrawal.withdrawal._id,
+        amount_kobo: selectedWithdrawal.withdrawal.requested_amount_kobo,
+        method: selectedWithdrawal.withdrawal.method,
+      });
       toast.success("Withdrawal marked as processed.");
       await refreshQueues();
     } catch (error) {
+      posthog.captureException(error);
       toast.error(
         normalizeConvexErrorMessage(error, "Unable to process withdrawal"),
       );
@@ -246,10 +265,15 @@ function AdminWithdrawalsPage() {
         userId: selectedWithdrawal.user._id,
         reason: holdReason.trim(),
       });
+      posthog.capture("admin_user_hold_placed", {
+        held_user_id: selectedWithdrawal.user._id,
+        withdrawal_id: selectedWithdrawal.withdrawal._id,
+      });
       setHoldReason("");
       toast.success("Withdrawal hold placed.");
       await refreshQueues();
     } catch (error) {
+      posthog.captureException(error);
       toast.error(
         normalizeConvexErrorMessage(error, "Unable to place withdrawal hold"),
       );
@@ -266,9 +290,14 @@ function AdminWithdrawalsPage() {
     try {
       setPendingAction("release_hold");
       await releaseUserHold({ userId: selectedWithdrawal.user._id });
+      posthog.capture("admin_user_hold_released", {
+        held_user_id: selectedWithdrawal.user._id,
+        withdrawal_id: selectedWithdrawal.withdrawal._id,
+      });
       toast.success("Withdrawal hold released.");
       await refreshQueues();
     } catch (error) {
+      posthog.captureException(error);
       toast.error(
         normalizeConvexErrorMessage(error, "Unable to release withdrawal hold"),
       );

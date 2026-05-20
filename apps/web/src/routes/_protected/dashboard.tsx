@@ -10,6 +10,7 @@ import { Button } from "@avm-daily/ui/components/button";
 import { Label } from "@avm-daily/ui/components/label";
 import { convexQuery } from "@convex-dev/react-query";
 import { useMemo, useRef, useState } from "react";
+import { posthog } from "@/lib/posthog";
 
 import {
   CardDescription,
@@ -136,12 +137,19 @@ function RouteComponent() {
         mimeType,
       });
 
+      posthog.capture("kyc_document_uploaded", {
+        document_type: documentType,
+        file_size: selectedFile.size,
+        mime_type: mimeType,
+      });
+
       setFeedback("Document uploaded successfully.");
       setSelectedFile(null);
       if (fileInputRef.current) {
         fileInputRef.current.value = "";
       }
     } catch (uploadError) {
+      posthog.captureException(uploadError);
       setError(
         uploadError instanceof Error
           ? uploadError.message
@@ -158,13 +166,19 @@ function RouteComponent() {
 
     try {
       setIsVerifying(true);
+      posthog.capture("kyc_verification_triggered");
       const result = await verifyIdentity({});
+      posthog.capture("kyc_verification_completed", {
+        approved: result.approved,
+        reason: result.reason ?? null,
+      });
       setFeedback(
         result.approved
           ? "KYC verified successfully. Your account is now active."
           : `KYC rejected: ${result.reason}`,
       );
     } catch (verifyError) {
+      posthog.captureException(verifyError);
       setError(
         verifyError instanceof Error
           ? verifyError.message
@@ -180,8 +194,10 @@ function RouteComponent() {
     setFeedback(null);
     try {
       await deleteDocument({ documentId });
+      posthog.capture("kyc_document_deleted", { document_id: documentId });
       setFeedback("Document deleted.");
     } catch (deleteError) {
+      posthog.captureException(deleteError);
       setError(
         deleteError instanceof Error
           ? deleteError.message

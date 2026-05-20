@@ -20,13 +20,15 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 
-import Loader from "@/components/loader";
+import { normalizeConvexErrorMessage } from "@/lib/convex-errors";
+import { posthog } from "@/lib/posthog";
+import { Loader } from "@/components/loader";
+
 import {
   formatAdminDateTime,
-  formatBytes,
   formatFullName,
+  formatBytes,
 } from "@/lib/admin-formatters";
-import { normalizeConvexErrorMessage } from "@/lib/convex-errors";
 
 export const Route = createFileRoute("/_protected/admin/kyc")({
   component: AdminKycPage,
@@ -35,9 +37,13 @@ export const Route = createFileRoute("/_protected/admin/kyc")({
 function AdminKycPage() {
   const convex = useConvex();
   const queryClient = useQueryClient();
-  const [selectedUserId, setSelectedUserId] = useState<Id<"users"> | null>(null);
+  const [selectedUserId, setSelectedUserId] = useState<Id<"users"> | null>(
+    null,
+  );
   const [rejectionReason, setRejectionReason] = useState("");
-  const [pendingAction, setPendingAction] = useState<"approve" | "reject" | null>(null);
+  const [pendingAction, setPendingAction] = useState<
+    "approve" | "reject" | null
+  >(null);
 
   const pendingKycQueryOptions = convexQuery(api.kyc.adminListPendingKyc, {});
   const pendingKycQuery = useQuery({
@@ -46,7 +52,10 @@ function AdminKycPage() {
   });
 
   const selectedEntry = useMemo(() => {
-    return pendingKycQuery.data?.find((entry) => entry.user_id === selectedUserId) ?? null;
+    return (
+      pendingKycQuery.data?.find((entry) => entry.user_id === selectedUserId) ??
+      null
+    );
   }, [pendingKycQuery.data, selectedUserId]);
 
   const reviewKyc = useMutation(api.kyc.adminReviewKyc);
@@ -68,7 +77,9 @@ function AdminKycPage() {
 
   const handleOpenDocument = async (documentId: Id<"kyc_documents">) => {
     try {
-      const url = await convex.query(api.kycDocuments.getDocumentUrl, { documentId });
+      const url = await convex.query(api.kycDocuments.getDocumentUrl, {
+        documentId,
+      });
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (error) {
       toast.error(
@@ -87,7 +98,9 @@ function AdminKycPage() {
 
   const refreshKyc = async () => {
     await Promise.all([
-      queryClient.invalidateQueries({ queryKey: pendingKycQueryOptions.queryKey }),
+      queryClient.invalidateQueries({
+        queryKey: pendingKycQueryOptions.queryKey,
+      }),
       queryClient.invalidateQueries({
         queryKey: convexQuery(api.admin.getOperationsSummary, {}).queryKey,
       }),
@@ -103,9 +116,14 @@ function AdminKycPage() {
       setPendingAction("approve");
       applyOptimisticRemoval(selectedEntry.user_id);
       await reviewKyc({ userId: selectedEntry.user_id, approved: true });
+      posthog.capture("admin_kyc_approved", {
+        reviewed_user_id: selectedEntry.user_id,
+        document_count: selectedEntry.pending_documents.length,
+      });
       toast.success("KYC approved.");
       await refreshKyc();
     } catch (error) {
+      posthog.captureException(error);
       toast.error(normalizeConvexErrorMessage(error, "Unable to approve KYC"));
       await refreshKyc();
     } finally {
@@ -131,10 +149,15 @@ function AdminKycPage() {
         approved: false,
         reason: rejectionReason.trim(),
       });
+      posthog.capture("admin_kyc_rejected", {
+        reviewed_user_id: selectedEntry.user_id,
+        document_count: selectedEntry.pending_documents.length,
+      });
       setRejectionReason("");
       toast.success("KYC rejected.");
       await refreshKyc();
     } catch (error) {
+      posthog.captureException(error);
       toast.error(normalizeConvexErrorMessage(error, "Unable to reject KYC"));
       await refreshKyc();
     } finally {
@@ -176,7 +199,9 @@ function AdminKycPage() {
                       <p className="font-medium">
                         {formatFullName([entry.first_name, entry.last_name])}
                       </p>
-                      <p className={`text-sm ${selected ? "text-zinc-300" : "text-zinc-500"}`}>
+                      <p
+                        className={`text-sm ${selected ? "text-zinc-300" : "text-zinc-500"}`}
+                      >
                         {entry.phone}
                         {entry.email ? ` • ${entry.email}` : ""}
                       </p>
@@ -185,8 +210,13 @@ function AdminKycPage() {
                       {entry.pending_documents.length} docs
                     </Badge>
                   </div>
-                  <p className={`mt-3 text-xs ${selected ? "text-zinc-300" : "text-zinc-500"}`}>
-                    Oldest submission {formatAdminDateTime(entry.pending_documents[0]?.created_at)}
+                  <p
+                    className={`mt-3 text-xs ${selected ? "text-zinc-300" : "text-zinc-500"}`}
+                  >
+                    Oldest submission{" "}
+                    {formatAdminDateTime(
+                      entry.pending_documents[0]?.created_at,
+                    )}
                   </p>
                 </button>
               );
@@ -214,7 +244,8 @@ function AdminKycPage() {
                     ])}
                   </CardTitle>
                   <CardDescription>
-                    Review pending documents, then approve or reject the identity check.
+                    Review pending documents, then approve or reject the
+                    identity check.
                   </CardDescription>
                 </div>
                 <Badge variant="outline">{selectedEntry.status}</Badge>
@@ -227,7 +258,9 @@ function AdminKycPage() {
               </div>
 
               <div className="rounded-2xl border border-zinc-200 bg-zinc-50 p-4">
-                <p className="text-sm font-medium text-zinc-950">Pending documents</p>
+                <p className="text-sm font-medium text-zinc-950">
+                  Pending documents
+                </p>
                 <div className="mt-3 space-y-3">
                   {selectedEntry.pending_documents.map((document) => (
                     <DocumentCard
@@ -239,7 +272,9 @@ function AdminKycPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleOpenDocument(document.document_id)}
+                          onClick={() =>
+                            handleOpenDocument(document.document_id)
+                          }
                         >
                           Open document
                         </Button>
@@ -253,25 +288,35 @@ function AdminKycPage() {
                 <ReviewActionCard
                   title="Approve KYC"
                   description="Set the user to active and mark all pending documents as approved."
-                  buttonLabel={pendingAction === "approve" ? "Approving..." : "Approve KYC"}
+                  buttonLabel={
+                    pendingAction === "approve" ? "Approving..." : "Approve KYC"
+                  }
                   onClick={handleApprove}
                 />
                 <ReviewActionCard
                   title="Reject KYC"
                   description="Reject the documents, close the account, and capture the reason."
-                  buttonLabel={pendingAction === "reject" ? "Rejecting..." : "Reject KYC"}
+                  buttonLabel={
+                    pendingAction === "reject" ? "Rejecting..." : "Reject KYC"
+                  }
                   onClick={handleReject}
                   extra={
                     <Field>
-                      <FieldLabel htmlFor="kycRejectionReason">Rejection reason</FieldLabel>
+                      <FieldLabel htmlFor="kycRejectionReason">
+                        Rejection reason
+                      </FieldLabel>
                       <Input
                         id="kycRejectionReason"
                         value={rejectionReason}
-                        onChange={(event) => setRejectionReason(event.target.value)}
+                        onChange={(event) =>
+                          setRejectionReason(event.target.value)
+                        }
                         placeholder="Tell the user why KYC was rejected"
                       />
                       {!rejectionReason.trim() ? (
-                        <FieldError>Required when rejecting a KYC submission.</FieldError>
+                        <FieldError>
+                          Required when rejecting a KYC submission.
+                        </FieldError>
                       ) : null}
                     </Field>
                   }
