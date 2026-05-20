@@ -1,5 +1,6 @@
 import { getAuth } from "@workos/authkit-tanstack-react-start";
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
+import { PostHogIdentity } from "@/components/posthog-identity";
 
 export const Route = createFileRoute("/_protected")({
   component: RouteComponent,
@@ -16,5 +17,10 @@ export const Route = createFileRoute("/_protected")({
 });
 
 function RouteComponent() {
-  return <Outlet />;
+  return (
+    <>
+      <PostHogIdentity />
+      <Outlet />
+    </>
+  );
 }
