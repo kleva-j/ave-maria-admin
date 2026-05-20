@@ -34,6 +34,7 @@ import { createConvexUserRepository } from "./adapters/userAdapters";
 import { postTransactionEntry } from "./transactions";
 import { mutation, query } from "./_generated/server";
 import { getAdminUser, getUser } from "./utils";
+import { posthog } from "./posthog";
 
 import {
   assertWithdrawalAdminActionAllowed,
@@ -513,6 +514,15 @@ export const request = mutation({
         result.withdrawal._id as WithdrawalId,
       );
       await syncWithdrawalInsert(ctx, created);
+      await posthog.capture(ctx, {
+        distinctId: String(user._id),
+        event: "withdrawal_requested",
+        properties: {
+          withdrawalId: String(created._id),
+          amountKobo: Number(args.amount_kobo),
+          method: args.method,
+        },
+      });
 
       return await buildWithdrawalSummary(ctx, created);
     } catch (error) {
@@ -641,6 +651,15 @@ export const process = mutation({
         result.withdrawal._id as WithdrawalId,
       );
       await syncWithdrawalUpdate(ctx, before, after);
+      await posthog.capture(ctx, {
+        distinctId: String(admin._id),
+        event: "withdrawal_processed",
+        properties: {
+          withdrawalId: String(args.withdrawal_id),
+          amountKobo: Number(after.requested_amount_kobo),
+          userId: String(after.requested_by),
+        },
+      });
       return await buildWithdrawalSummary(ctx, after);
     } catch (error) {
       toConvexError(error);

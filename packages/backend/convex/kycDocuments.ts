@@ -11,6 +11,7 @@ import { createConvexAuditLogService } from "./adapters/auditLogAdapter";
 import { createConvexUserRepository } from "./adapters/userAdapters";
 import { ensureAuthedUser, getAdminUser, getUser } from "./utils";
 import { mutation, query } from "./_generated/server";
+import { posthog } from "./posthog";
 import {
   bankAccountDocumentType,
   ALLOWED_EXTENSIONS,
@@ -124,6 +125,16 @@ export const uploadDocument = mutation({
         fileName: args.fileName,
         fileSize: args.fileSize,
         mimeType: args.mimeType,
+      });
+
+      await posthog.capture(ctx, {
+        distinctId: String(user._id),
+        event: "kyc_document_uploaded",
+        properties: {
+          documentType: args.documentType,
+          fileSize: args.fileSize,
+          mimeType: args.mimeType,
+        },
       });
 
       return {

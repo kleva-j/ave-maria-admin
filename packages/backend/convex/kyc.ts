@@ -21,6 +21,7 @@ import { action, mutation, query } from "./_generated/server";
 import { KYCStatus, TABLE_NAMES } from "./shared";
 import { internal } from "./_generated/api";
 import { getAdminUser } from "./utils";
+import { posthog } from "./posthog";
 
 function toDomainUser(user: ConvexUser): DomainUser {
   return {
@@ -292,6 +293,17 @@ export const adminReviewKyc = mutation({
       approved: args.approved,
       reason: args.reason,
       reviewedBy: admin._id,
+    });
+
+    await posthog.capture(ctx, {
+      distinctId: String(admin._id),
+      event: "admin_kyc_reviewed",
+      properties: {
+        targetUserId: String(args.userId),
+        approved: args.approved,
+        reason: args.reason,
+        documentsReviewed: result.documentsReviewed,
+      },
     });
 
     return {
