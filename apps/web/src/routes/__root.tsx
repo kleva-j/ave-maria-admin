@@ -18,6 +18,8 @@ import {
   Outlet,
 } from "@tanstack/react-router";
 
+import { PostHogProvider } from "@/components/posthog-provider";
+
 import appCss from "../index.css?url";
 
 export interface RouterAppContext {
@@ -84,7 +86,8 @@ function useAuthForConvex() {
 function RootDocument() {
   return (
     <AuthKitProvider>
-      <ConvexAuthBridge>
+      <PostHogProvider>
+        <ConvexAuthBridge>
         <html lang="en" className="dark">
           <head>
             <HeadContent />
@@ -99,6 +102,7 @@ function RootDocument() {
           </body>
         </html>
       </ConvexAuthBridge>
+      </PostHogProvider>
     </AuthKitProvider>
   );
 }
