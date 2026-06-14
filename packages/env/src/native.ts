@@ -10,6 +10,13 @@ export const env = createEnv({
     EXPO_PUBLIC_NOVU_APP_ID: z.string().min(1).optional(),
     EXPO_PUBLIC_NOVU_BACKEND_URL: z.url().optional(),
     EXPO_PUBLIC_NOVU_SOCKET_URL: z.url().optional(),
+    EXPO_PUBLIC_SENTRY_DSN: z.url().optional(),
+    EXPO_PUBLIC_SENTRY_ENVIRONMENT: z.string().min(1).optional(),
+    EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: z.coerce
+      .number()
+      .min(0)
+      .max(1)
+      .default(0.1),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
