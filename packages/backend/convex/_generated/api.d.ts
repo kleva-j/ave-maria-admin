@@ -41,6 +41,9 @@ import type * as kpis from "../kpis.js";
 import type * as kyc from "../kyc.js";
 import type * as kycDocuments from "../kycDocuments.js";
 import type * as kycInternal from "../kycInternal.js";
+import type * as lib_axiomAction from "../lib/axiomAction.js";
+import type * as lib_logger from "../lib/logger.js";
+import type * as posthog from "../posthog.js";
 import type * as risk from "../risk.js";
 import type * as savingsPlanRules from "../savingsPlanRules.js";
 import type * as savingsPlanTemplates from "../savingsPlanTemplates.js";
@@ -115,6 +118,9 @@ declare const fullApi: ApiFromModules<{
   kyc: typeof kyc;
   kycDocuments: typeof kycDocuments;
   kycInternal: typeof kycInternal;
+  "lib/axiomAction": typeof lib_axiomAction;
+  "lib/logger": typeof lib_logger;
+  posthog: typeof posthog;
   risk: typeof risk;
   savingsPlanRules: typeof savingsPlanRules;
   savingsPlanTemplates: typeof savingsPlanTemplates;
@@ -210,4 +216,5 @@ export declare const components: {
   workOSAuthKit: import("@convex-dev/workos-authkit/_generated/component.js").ComponentApi<"workOSAuthKit">;
   auditLog: import("convex-audit-log/_generated/component.js").ComponentApi<"auditLog">;
   crons: import("@convex-dev/crons/_generated/component.js").ComponentApi<"crons">;
+  posthog: import("@posthog/convex/_generated/component.js").ComponentApi<"posthog">;
 };
