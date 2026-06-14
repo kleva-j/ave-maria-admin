@@ -1,5 +1,6 @@
 import { internalAction, internalQuery } from "./_generated/server";
 import { RESOURCE_TYPE, TABLE_NAMES, UserStatus } from "./shared";
+import { captureCriticalError } from "./sentry";
 import { internal } from "./_generated/api";
 import { auditLog } from "./auditLog";
 
@@ -95,8 +96,17 @@ export const checkAdminRoleDrift = internalAction({
       }).catch(() => null);
 
       if (!resp || !resp.ok) {
+        const status = resp?.status ?? "network error";
         console.error(
-          `[adminSync] Failed to fetch WorkOS memberships (HTTP ${resp?.status ?? "network error"}) — aborting drift check.`,
+          `[adminSync] Failed to fetch WorkOS memberships (HTTP ${status}) — aborting drift check.`,
+        );
+        captureCriticalError(
+          new Error(`Drift check aborted: WorkOS memberships fetch failed (${status})`),
+          {
+            action: "checkAdminRoleDrift",
+            stage: "memberships_fetch",
+            http_status: resp?.status,
+          },
         );
         return;
       }
