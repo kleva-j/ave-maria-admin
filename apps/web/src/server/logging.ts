@@ -1,4 +1,5 @@
 import { createIsomorphicFn } from "@tanstack/react-start";
+import * as Sentry from "@sentry/tanstackstart-react";
 import { Axiom } from "@axiomhq/js";
 
 export const LOG_LEVELS = {
@@ -20,6 +21,24 @@ function getAxiom(): { client: Axiom; dataset: string } | null {
   return { client: (_axiom ??= new Axiom({ token })), dataset };
 }
 
+// Forward error-level logs to Sentry as captured messages. Unhandled throws
+// are already caught by sentryGlobalRequestMiddleware + sentryGlobalFunctionMiddleware
+// in start.ts — this covers explicit logger.error(...) calls that don't throw.
+// No-op when Sentry was not initialized (DSN unset in instrument.server.mjs).
+function forwardErrorToSentry(
+  level: LogLevel,
+  event: string,
+  data?: unknown,
+): void {
+  if (level !== "error") return;
+  const err = data instanceof Error ? data : undefined;
+  if (err) {
+    Sentry.captureException(err, { extra: { event } });
+  } else {
+    Sentry.captureMessage(event, { level: "error", extra: { data } });
+  }
+}
+
 export const logger = createIsomorphicFn()
   .server((level: LogLevel, event: string, data?: any) => {
     const timestamp = new Date().toISOString();
@@ -39,9 +58,13 @@ export const logger = createIsomorphicFn()
       const ax = getAxiom();
       ax?.client.ingest(ax.dataset, [entry]);
     }
+
+    forwardErrorToSentry(level, event, data);
   })
   .client((level: LogLevel, event: string, data?: any) => {
     if (process.env.NODE_ENV === "development") {
       console[level](`[CLIENT] [${level.toUpperCase()}]`, event, data);
     }
+
+    forwardErrorToSentry(level, event, data);
   });

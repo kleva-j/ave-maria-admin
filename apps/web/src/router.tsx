@@ -7,6 +7,7 @@ import { env } from "@avm-daily/env/web";
 import { routeTree } from "./routeTree.gen";
 
 import Loader from "./components/loader";
+import { initSentry } from "./lib/sentry";
 
 import "./index.css";
 
@@ -42,6 +43,9 @@ export function getRouter() {
 
   // Connect the TanStack Router to the TanStack Query client
   setupRouterSsrQueryIntegration({ router, queryClient });
+
+  // No-op on server / when VITE_SENTRY_DSN is unset.
+  initSentry(router);
 
   return router;
 }
