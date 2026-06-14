@@ -4,6 +4,7 @@ import type { MutationCtx } from "./_generated/server";
 import type { AdminUserId } from "./types";
 
 import { assertSuperAdmin, getAdminUser } from "./utils";
+import { captureCriticalError } from "./sentry";
 import { internal } from "./_generated/api";
 import { auditLog } from "./auditLog";
 import {
@@ -766,6 +767,12 @@ export const inviteAdminUser = action({
           signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
         },
       ).catch(() => undefined);
+      captureCriticalError(err, {
+        action: "inviteAdminUser",
+        stage: "insert_admin_user_after_workos_invite",
+        workos_user_id: result.workosId,
+        target_email: args.email,
+      });
       throw new ConvexError(
         "Failed to create admin user record; WorkOS user has been cleaned up. Please retry.",
       );
@@ -1067,6 +1074,12 @@ export const updateAdminUserRole = action({
           error: err instanceof Error ? err.message : String(err),
         },
       });
+      captureCriticalError(err, {
+        action: "updateAdminUserRole",
+        stage: "membership_lookup",
+        target_admin_user_id: args.id,
+        attempted_role: args.role,
+      });
       throw err;
     }
 
@@ -1092,6 +1105,12 @@ export const updateAdminUserRole = action({
             previous_role: previousRole,
             error: err instanceof Error ? err.message : String(err),
           },
+        });
+        captureCriticalError(err, {
+          action: "updateAdminUserRole",
+          stage: "role_flip",
+          target_admin_user_id: args.id,
+          attempted_role: args.role,
         });
         throw err;
       }
@@ -1128,6 +1147,12 @@ export const updateAdminUserRole = action({
             error: err instanceof Error ? err.message : String(err),
           },
         });
+        captureCriticalError(err, {
+          action: "updateAdminUserRole",
+          stage: "invite_lookup",
+          target_admin_user_id: args.id,
+          attempted_role: args.role,
+        });
         throw err;
       }
       if (invitation) {
@@ -1154,6 +1179,13 @@ export const updateAdminUserRole = action({
               previous_role: previousRole,
               error: err instanceof Error ? err.message : String(err),
             },
+          });
+          captureCriticalError(err, {
+            action: "updateAdminUserRole",
+            stage: "revoke_invite",
+            target_admin_user_id: args.id,
+            invitation_id: invitation.id,
+            attempted_role: args.role,
           });
           throw err;
         }
@@ -1183,6 +1215,13 @@ export const updateAdminUserRole = action({
               error: err instanceof Error ? err.message : String(err),
               note: "Old invite revoked. Manual re-invite required.",
             },
+          });
+          captureCriticalError(err, {
+            action: "updateAdminUserRole",
+            stage: "resend_invite",
+            target_admin_user_id: args.id,
+            attempted_role: args.role,
+            note: "Local role committed; old invite revoked; manual re-invite needed.",
           });
           throw new ConvexError(
             "Role updated locally but re-invite failed. Please manually invite the admin again.",
@@ -1268,6 +1307,10 @@ export const deactivateAdminUser = action({
           error: err instanceof Error ? err.message : String(err),
         },
       });
+      captureCriticalError(err, {
+        action: "deactivateAdminUser",
+        target_admin_user_id: args.id,
+      });
       throw err;
     }
 
@@ -1346,6 +1389,11 @@ export const reactivateAdminUser = action({
           was_suspended: wasSuspended,
           error: err instanceof Error ? err.message : String(err),
         },
+      });
+      captureCriticalError(err, {
+        action: "reactivateAdminUser",
+        target_admin_user_id: args.id,
+        was_suspended: wasSuspended,
       });
       throw err;
     }

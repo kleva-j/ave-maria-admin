@@ -50,6 +50,7 @@ import { createConvexSavingsPlanRepository } from "./adapters/savingsPlanAdapter
 import { createConvexEventOutboxService } from "./adapters/eventOutboxAdapter";
 import { createConvexUserRepository } from "./adapters/userAdapters";
 import { getAdminUser, getUser, isRecord } from "./utils";
+import { captureCriticalError } from "./sentry";
 import { internal } from "./_generated/api";
 import { auditLog } from "./auditLog";
 
@@ -1800,6 +1801,14 @@ export const runReconciliation = internalAction({
       const completedAt = Date.now();
       const failureMessage =
         error instanceof Error ? error.message : "Unknown error";
+
+      // Reconciliation runs hourly via cron and currently records failure to
+      // the DB without re-throwing. Without this capture, silent failures
+      // are easy to miss until a user reports a balance mismatch.
+      captureCriticalError(error, {
+        action: "runReconciliation",
+        runId,
+      });
 
       try {
         for (const issueIds of chunkArray(
