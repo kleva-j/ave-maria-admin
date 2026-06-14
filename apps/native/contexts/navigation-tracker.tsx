@@ -7,8 +7,8 @@ export function NavigationTracker() {
   const pathname = usePathname();
 
   useEffect(() => {
-    posthog.capture("$screen", { $screen_name: pathname });
-  }, [pathname]);
+    posthog?.capture("$screen", { $screen_name: pathname });
+  }, [pathname, posthog]);
 
   return null;
 }
