@@ -1,9 +1,10 @@
-import { Button } from "@avm-daily/ui/components/button";
-import { Link } from "@tanstack/react-router";
-import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "@workos/authkit-tanstack-react-start/client";
+import { Button } from "@avm-daily/ui/components/button";
+import { useMutation } from "@tanstack/react-query";
+import { Link } from "@tanstack/react-router";
 
 import { signOutUser } from "@/server/auth.functions";
+import { posthog } from "@/lib/posthog";
 
 export default function Header() {
   const { user, loading } = useAuth();
@@ -17,6 +18,8 @@ export default function Header() {
       return result;
     },
     onSuccess: ({ logoutUrl }) => {
+      posthog.capture("user_signed_out");
+      posthog.reset();
       window.location.assign(logoutUrl);
     },
   });
