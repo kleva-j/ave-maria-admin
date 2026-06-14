@@ -16,8 +16,8 @@ export const env = createEnv({
       .int()
       .positive()
       .optional(),
-    AXIOM_DATASET: z.string().min(1),
-    AXIOM_TOKEN: z.string().min(1),
+    AXIOM_DATASET: z.string().min(1).optional(),
+    AXIOM_TOKEN: z.string().min(1).optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
