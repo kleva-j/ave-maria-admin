@@ -19,6 +19,7 @@ export default function Header() {
     },
     onSuccess: ({ logoutUrl }) => {
       posthog.capture("user_signed_out");
+      posthog.reset();
       window.location.assign(logoutUrl);
     },
   });

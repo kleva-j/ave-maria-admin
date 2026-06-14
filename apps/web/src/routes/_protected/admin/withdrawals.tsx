@@ -173,7 +173,7 @@ function AdminWithdrawalsPage() {
       });
       posthog.capture("admin_withdrawal_approved", {
         withdrawal_id: selectedWithdrawal.withdrawal._id,
-        amount_kobo: selectedWithdrawal.withdrawal.requested_amount_kobo,
+        amount_kobo: String(selectedWithdrawal.withdrawal.requested_amount_kobo),
         method: selectedWithdrawal.withdrawal.method,
       });
       toast.success("Withdrawal approved.");
@@ -206,7 +206,7 @@ function AdminWithdrawalsPage() {
       });
       posthog.capture("admin_withdrawal_rejected", {
         withdrawal_id: selectedWithdrawal.withdrawal._id,
-        amount_kobo: selectedWithdrawal.withdrawal.requested_amount_kobo,
+        amount_kobo: String(selectedWithdrawal.withdrawal.requested_amount_kobo),
         method: selectedWithdrawal.withdrawal.method,
       });
       setRejectionReason("");
@@ -234,7 +234,7 @@ function AdminWithdrawalsPage() {
       });
       posthog.capture("admin_withdrawal_processed", {
         withdrawal_id: selectedWithdrawal.withdrawal._id,
-        amount_kobo: selectedWithdrawal.withdrawal.requested_amount_kobo,
+        amount_kobo: String(selectedWithdrawal.withdrawal.requested_amount_kobo),
         method: selectedWithdrawal.withdrawal.method,
       });
       toast.success("Withdrawal marked as processed.");
