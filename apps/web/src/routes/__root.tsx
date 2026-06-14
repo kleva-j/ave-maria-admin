@@ -9,7 +9,7 @@ import {
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { Toaster } from "@avm-daily/ui/components/sonner";
 import { ConvexProviderWithAuth } from "convex/react";
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 
 import {
   createRootRouteWithContext,
@@ -19,12 +19,31 @@ import {
 } from "@tanstack/react-router";
 
 import { PostHogProvider } from "@/components/posthog-provider";
+import { Sentry } from "@/lib/sentry";
 
 import appCss from "../index.css?url";
 
 export interface RouterAppContext {
   queryClient: QueryClient;
   convexQueryClient: ConvexQueryClient;
+}
+
+// SSR exceptions are not auto-captured by the request middleware (they fire
+// during React render, not request handling). Forward them to Sentry from the
+// root errorComponent so server-rendering crashes surface in the dashboard.
+function RootErrorComponent({ error }: { error: Error }) {
+  useEffect(() => {
+    Sentry.captureException(error);
+  }, [error]);
+
+  return (
+    <div className="flex h-svh items-center justify-center p-8 text-center">
+      <div>
+        <h1 className="mb-2 text-2xl font-semibold">Something went wrong</h1>
+        <p className="text-sm opacity-70">{error.message}</p>
+      </div>
+    </div>
+  );
 }
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
@@ -38,6 +57,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   }),
 
   component: RootDocument,
+  errorComponent: RootErrorComponent,
 });
 
 /**
