@@ -295,16 +295,20 @@ export const adminReviewKyc = mutation({
       reviewedBy: admin._id,
     });
 
-    await posthog.capture(ctx, {
-      distinctId: String(admin._id),
-      event: "admin_kyc_reviewed",
-      properties: {
-        targetUserId: String(args.userId),
-        approved: args.approved,
-        reason: args.reason,
-        documentsReviewed: result.documentsReviewed,
-      },
-    });
+    try {
+      await posthog.capture(ctx, {
+        distinctId: String(admin._id),
+        event: "admin_kyc_reviewed",
+        properties: {
+          targetUserId: String(args.userId),
+          approved: args.approved,
+          reason: args.reason,
+          documentsReviewed: result.documentsReviewed,
+        },
+      });
+    } catch (err) {
+      console.error("[posthog] capture failed", err);
+    }
 
     return {
       userId: args.userId,

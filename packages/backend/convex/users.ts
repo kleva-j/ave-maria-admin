@@ -159,11 +159,15 @@ export const upsertFromWorkOS = internalMutation({
       await syncUserInsert(ctx, newUser);
     }
 
-    await posthog.capture(ctx, {
-      distinctId: String(userId),
-      event: "user_signed_up",
-      properties: { workosId: args.workosId, status: "pending_kyc" },
-    });
+    try {
+      await posthog.capture(ctx, {
+        distinctId: String(userId),
+        event: "user_signed_up",
+        properties: { workosId: args.workosId, status: "pending_kyc" },
+      });
+    } catch (err) {
+      console.error("[posthog] capture failed", err);
+    }
 
     return userId;
   },
@@ -234,16 +238,20 @@ export const processKycResult = internalMutation({
     const updatedUser = await ensureUser(ctx, args.userId);
     await syncUserUpdate(ctx, oldUser, updatedUser);
 
-    await posthog.capture(ctx, {
-      distinctId: String(args.userId),
-      event: "kyc_completed",
-      properties: {
-        approved: args.approved,
-        reason: args.reason,
-        documentsReviewed: result.documentsReviewed,
-        providerReference: args.providerReference,
-      },
-    });
+    try {
+      await posthog.capture(ctx, {
+        distinctId: String(args.userId),
+        event: "kyc_completed",
+        properties: {
+          approved: args.approved,
+          reason: args.reason,
+          documentsReviewed: result.documentsReviewed,
+          providerReference: args.providerReference,
+        },
+      });
+    } catch (err) {
+      console.error("[posthog] capture failed", err);
+    }
 
     await auditLog.log(ctx, {
       action: args.approved

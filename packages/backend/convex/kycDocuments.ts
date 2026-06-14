@@ -127,15 +127,19 @@ export const uploadDocument = mutation({
         mimeType: args.mimeType,
       });
 
-      await posthog.capture(ctx, {
-        distinctId: String(user._id),
-        event: "kyc_document_uploaded",
-        properties: {
-          documentType: args.documentType,
-          fileSize: args.fileSize,
-          mimeType: args.mimeType,
-        },
-      });
+      try {
+        await posthog.capture(ctx, {
+          distinctId: String(user._id),
+          event: "kyc_document_uploaded",
+          properties: {
+            documentType: args.documentType,
+            fileSize: args.fileSize,
+            mimeType: args.mimeType,
+          },
+        });
+      } catch (err) {
+        console.error("[posthog] capture failed", err);
+      }
 
       return {
         _id: document._id as KycDocumentId,

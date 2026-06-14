@@ -544,15 +544,21 @@ export const create = mutation({
         created._id as UserSavingsPlanId,
       );
       await syncSavingsPlanInsert(ctx, doc);
-      await posthog.capture(ctx, {
-        distinctId: String(user._id),
-        event: "savings_plan_created",
-        properties: {
-          planId: String(created._id),
-          templateId: args.templateId,
-          targetKobo: Number(args.customTargetKobo ?? 0),
-        },
-      });
+      try {
+        await posthog.capture(ctx, {
+          distinctId: String(user._id),
+          event: "savings_plan_created",
+          properties: {
+            planId: String(created._id),
+            templateId: args.templateId,
+            ...(args.customTargetKobo !== undefined && {
+              targetKobo: args.customTargetKobo.toString(),
+            }),
+          },
+        });
+      } catch (err) {
+        console.error("[posthog] capture failed", err);
+      }
       return serializePlanSummary(doc);
     } catch (error) {
       toConvexError(error);
@@ -683,14 +689,18 @@ export const close = mutation({
         ctx,
         updated._id as UserSavingsPlanId,
       );
-      await posthog.capture(ctx, {
-        distinctId: String(user._id),
-        event: "savings_plan_closed",
-        properties: {
-          planId: String(args.planId),
-          status: doc.status,
-        },
-      });
+      try {
+        await posthog.capture(ctx, {
+          distinctId: String(user._id),
+          event: "savings_plan_closed",
+          properties: {
+            planId: String(args.planId),
+            status: doc.status,
+          },
+        });
+      } catch (err) {
+        console.error("[posthog] capture failed", err);
+      }
       return serializePlanSummary(doc);
     } catch (error) {
       toConvexError(error);
