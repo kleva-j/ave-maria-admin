@@ -19,6 +19,7 @@ import { createConvexUserRepository } from "./adapters/userAdapters";
 import { TABLE_NAMES, planStatus, txnType } from "./shared";
 import { postTransactionEntry } from "./transactions";
 import { getAdminUser, getUser } from "./utils";
+import { posthog } from "./posthog";
 
 import {
   createRecordSavingsPlanContributionUseCase,
@@ -543,6 +544,21 @@ export const create = mutation({
         created._id as UserSavingsPlanId,
       );
       await syncSavingsPlanInsert(ctx, doc);
+      try {
+        await posthog.capture(ctx, {
+          distinctId: String(user._id),
+          event: "savings_plan_created",
+          properties: {
+            planId: String(created._id),
+            templateId: args.templateId,
+            ...(args.customTargetKobo !== undefined && {
+              targetKobo: args.customTargetKobo.toString(),
+            }),
+          },
+        });
+      } catch (err) {
+        console.error("[posthog] capture failed", err);
+      }
       return serializePlanSummary(doc);
     } catch (error) {
       toConvexError(error);
@@ -673,6 +689,18 @@ export const close = mutation({
         ctx,
         updated._id as UserSavingsPlanId,
       );
+      try {
+        await posthog.capture(ctx, {
+          distinctId: String(user._id),
+          event: "savings_plan_closed",
+          properties: {
+            planId: String(args.planId),
+            status: doc.status,
+          },
+        });
+      } catch (err) {
+        console.error("[posthog] capture failed", err);
+      }
       return serializePlanSummary(doc);
     } catch (error) {
       toConvexError(error);
