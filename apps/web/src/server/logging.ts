@@ -12,10 +12,12 @@ export type LogLevel = (typeof LOG_LEVELS)[keyof typeof LOG_LEVELS];
 
 let _axiom: Axiom | null = null;
 
-function getAxiom(): Axiom | null {
+function getAxiom(): { client: Axiom; dataset: string } | null {
   if (process.env.NODE_ENV !== "production") return null;
-  if (!process.env.AXIOM_TOKEN || !process.env.AXIOM_DATASET) return null;
-  return (_axiom ??= new Axiom({ token: process.env.AXIOM_TOKEN }));
+  const token = process.env.AXIOM_TOKEN;
+  const dataset = process.env.AXIOM_DATASET;
+  if (!token || !dataset) return null;
+  return { client: (_axiom ??= new Axiom({ token })), dataset };
 }
 
 export const logger = createIsomorphicFn()
@@ -34,7 +36,8 @@ export const logger = createIsomorphicFn()
       console[level](`[${timestamp}] [${level.toUpperCase()}]`, event, data);
     } else {
       console.log(JSON.stringify(entry));
-      getAxiom()?.ingest(process.env.AXIOM_DATASET!, [entry]);
+      const ax = getAxiom();
+      ax?.client.ingest(ax.dataset, [entry]);
     }
   })
   .client((level: LogLevel, event: string, data?: any) => {
