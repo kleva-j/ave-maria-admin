@@ -7,6 +7,13 @@ export const env = createEnv({
     EXPO_PUBLIC_CONVEX_URL: z.url(),
     EXPO_PUBLIC_POSTHOG_KEY: z.string().min(1).optional(),
     EXPO_PUBLIC_POSTHOG_HOST: z.url().default("https://us.i.posthog.com"),
+    EXPO_PUBLIC_SENTRY_DSN: z.url().optional(),
+    EXPO_PUBLIC_SENTRY_ENVIRONMENT: z.string().min(1).optional(),
+    EXPO_PUBLIC_SENTRY_TRACES_SAMPLE_RATE: z.coerce
+      .number()
+      .min(0)
+      .max(1)
+      .default(0.1),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,
