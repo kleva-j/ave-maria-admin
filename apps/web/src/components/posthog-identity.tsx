@@ -14,7 +14,7 @@ export function PostHogIdentity() {
       email: user.email,
       name: `${user.firstName ?? ""} ${user.lastName ?? ""}`.trim() || undefined,
     });
-  }, [user?.id]);
+  }, [user]);
 
   return null;
 }
