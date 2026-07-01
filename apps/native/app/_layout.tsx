@@ -9,6 +9,7 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { NavigationTracker } from "@/contexts/navigation-tracker";
 import { AppThemeProvider } from "@/contexts/app-theme-context";
 import { PostHogProvider } from "@/contexts/posthog-context";
+import { NovuInboxProvider } from "@/components/novu-provider";
 
 export const unstable_settings = {
   initialRouteName: "(drawer)",
@@ -38,7 +39,9 @@ export default function Layout() {
         <KeyboardProvider>
           <AppThemeProvider>
             <HeroUINativeProvider>
-              <StackLayout />
+              <NovuInboxProvider>
+                <StackLayout />
+              </NovuInboxProvider>
             </HeroUINativeProvider>
           </AppThemeProvider>
         </KeyboardProvider>

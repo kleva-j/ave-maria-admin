@@ -6,12 +6,21 @@ import React, { useCallback } from "react";
 import { Pressable, Text } from "react-native";
 
 import { ThemeToggle } from "@/components/theme-toggle";
+import { NotificationBell } from "@/components/notification-bell";
 
 function DrawerLayout() {
   const themeColorForeground = useThemeColor("foreground");
   const themeColorBackground = useThemeColor("background");
 
-  const renderThemeToggle = useCallback(() => <ThemeToggle />, []);
+  const renderHeaderRight = useCallback(
+    () => (
+      <React.Fragment>
+        <NotificationBell />
+        <ThemeToggle />
+      </React.Fragment>
+    ),
+    [],
+  );
 
   return (
     <Drawer
@@ -22,7 +31,7 @@ function DrawerLayout() {
           fontWeight: "600",
           color: themeColorForeground,
         },
-        headerRight: renderThemeToggle,
+        headerRight: renderHeaderRight,
         drawerStyle: { backgroundColor: themeColorBackground },
       }}
     >
@@ -75,6 +84,24 @@ function DrawerLayout() {
           drawerIcon: ({ size, color, focused }) => (
             <Ionicons
               name="checkbox-outline"
+              size={size}
+              color={focused ? color : themeColorForeground}
+            />
+          ),
+        }}
+      />
+      <Drawer.Screen
+        name="notifications"
+        options={{
+          headerTitle: "Notifications",
+          drawerLabel: ({ color, focused }) => (
+            <Text style={{ color: focused ? color : themeColorForeground }}>
+              Notifications
+            </Text>
+          ),
+          drawerIcon: ({ size, color, focused }) => (
+            <Ionicons
+              name="notifications-outline"
               size={size}
               color={focused ? color : themeColorForeground}
             />
