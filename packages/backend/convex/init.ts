@@ -47,6 +47,11 @@ export const setup = internalAction({
         fn: internal.adminSync.checkAdminRoleDrift,
         schedule: { kind: "interval" as const, ms: 60 * 60 * 1000 }, // 1 hour
       },
+      {
+        name: "sweep user notifications",
+        fn: internal.userNotifications.sweep,
+        schedule: { kind: "interval" as const, ms: 60 * 1000 }, // 1 minute
+      },
     ];
 
     for (const job of cronJobs) {
