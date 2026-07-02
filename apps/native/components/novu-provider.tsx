@@ -28,6 +28,17 @@ export function NovuInboxProvider({ children }: { children: ReactNode }) {
     applicationIdentifier ? {} : "skip",
   );
 
+  // Deliberate one-time remount tradeoff: when a signed-in user's auth query
+  // resolves, the returned root switches from this context-only provider to
+  // NovuProvider, remounting the subtree once. We accept this because:
+  //   - NovuProvider requires subscriberId + subscriberHash, which don't exist
+  //     until the async getNovuInboxAuth query resolves — it can't be mounted
+  //     earlier with valid creds.
+  //   - Gating the subtree render on `auth` would hang SIGNED-OUT users
+  //     forever: getNovuInboxAuth calls getUser(), which throws "Not
+  //     authenticated", so `auth` never resolves for them.
+  // The remount is a single event that fires before the user navigates, so
+  // the practical impact (nav/local state reset) is negligible.
   if (!applicationIdentifier || !auth) {
     return (
       <NovuEnabledContext.Provider value={false}>

@@ -33,7 +33,17 @@ function NotificationsList() {
   const onPressNotification = (notification: NovuNotification) => {
     void notification.read();
     const url = notification.redirect?.url;
-    if (url) router.push(url as never);
+    // Only follow internal app paths. Reject absolute / protocol-relative /
+    // external URLs so a crafted or unexpected payload can't drive navigation
+    // somewhere unsafe.
+    if (
+      url &&
+      url.startsWith("/") &&
+      !url.startsWith("//") &&
+      !url.includes("://")
+    ) {
+      router.push(url as Parameters<typeof router.push>[0]);
+    }
   };
 
   return (
