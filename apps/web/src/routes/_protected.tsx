@@ -1,5 +1,11 @@
 import { getAuth } from "@workos/authkit-tanstack-react-start";
-import { createFileRoute, Link, Outlet, redirect } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  redirect,
+  useRouterState,
+} from "@tanstack/react-router";
 import { PostHogIdentity } from "@/components/posthog-identity";
 import { NotificationBell } from "@/components/notification-bell";
 
@@ -18,6 +24,24 @@ export const Route = createFileRoute("/_protected")({
 });
 
 function RouteComponent() {
+  const pathname = useRouterState({
+    select: ({ location }) => location.pathname,
+  });
+
+  // /_protected is the pathless parent of both /dashboard and /admin/*. Admin
+  // routes render their own chrome via AdminShell, so the consumer top-bar +
+  // bell must not wrap them — render a bare Outlet there.
+  const isAdmin = pathname.startsWith("/admin");
+
+  if (isAdmin) {
+    return (
+      <>
+        <PostHogIdentity />
+        <Outlet />
+      </>
+    );
+  }
+
   return (
     <>
       <PostHogIdentity />

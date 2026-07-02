@@ -5,6 +5,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { env } from "@avm-daily/env/web";
 
+import { isSafeInternalPath } from "@/lib/auth";
+
 /**
  * Novu in-app notification bell for the consumer app.
  *
@@ -32,8 +34,10 @@ export function NotificationBell() {
       backendUrl={env.VITE_NOVU_BACKEND_URL}
       socketUrl={env.VITE_NOVU_SOCKET_URL}
       routerPush={(path: string) => {
-        // Deep-link from a notification's payload.path into the app.
-        void navigate({ to: path });
+        // Deep-link from a notification's payload.path into the app. The path
+        // comes from untrusted notification data — only follow safe internal
+        // paths (open-redirect hardening, same rules as auth returnTo).
+        if (isSafeInternalPath(path)) void navigate({ to: path });
       }}
     />
   );
