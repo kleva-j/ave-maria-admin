@@ -9,7 +9,7 @@ import {
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 import { Toaster } from "@avm-daily/ui/components/sonner";
 import { ConvexProviderWithAuth } from "convex/react";
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useMemo } from "react";
 
 import {
   createRootRouteWithContext,
@@ -31,16 +31,24 @@ export interface RouterAppContext {
 // SSR exceptions are not auto-captured by the request middleware (they fire
 // during React render, not request handling). Forward them to Sentry from the
 // root errorComponent so server-rendering crashes surface in the dashboard.
+//
+// Sentry.captureException runs synchronously in the component body (not in
+// useEffect) so it fires during the SSR render pass — useEffect only runs
+// after client hydration, which would miss SSR-only crashes entirely.
+// The Sentry SDK handles same-instance capture idempotency on the client so
+// the render-once-then-hydrate flow doesn't produce a duplicate event.
 function RootErrorComponent({ error }: { error: Error }) {
-  useEffect(() => {
-    Sentry.captureException(error);
-  }, [error]);
+  Sentry.captureException(error);
+
+  // Only surface raw internals in dev — in production the message may leak
+  // stack hints, API URLs, or DB errors. Prod users see a neutral fallback.
+  const detail = import.meta.env.DEV ? error.message : "Please try again.";
 
   return (
     <div className="flex h-svh items-center justify-center p-8 text-center">
       <div>
         <h1 className="mb-2 text-2xl font-semibold">Something went wrong</h1>
-        <p className="text-sm opacity-70">{error.message}</p>
+        <p className="text-sm opacity-70">{detail}</p>
       </div>
     </div>
   );

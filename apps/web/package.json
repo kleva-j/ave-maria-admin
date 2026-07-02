@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "serve": "vite preview",
+    "serve": "NODE_OPTIONS='--import ./instrument.server.mjs' vite preview",
     "dev": "NODE_OPTIONS='--import ./instrument.server.mjs' vite dev",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
