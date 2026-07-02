@@ -1,6 +1,6 @@
 import { internalAction, internalQuery } from "./_generated/server";
 import { RESOURCE_TYPE, TABLE_NAMES, UserStatus } from "./shared";
-import { captureCriticalError } from "./sentry";
+import { captureCriticalError, flushSentry } from "./sentry";
 import { internal } from "./_generated/api";
 import { auditLog } from "./auditLog";
 
@@ -108,6 +108,9 @@ export const checkAdminRoleDrift = internalAction({
             http_status: resp?.status,
           },
         );
+        // Best-effort flush before returning — the Convex isolate is
+        // short-lived, so a bare return risks losing the event.
+        await flushSentry();
         return;
       }
 

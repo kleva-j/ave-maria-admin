@@ -771,7 +771,9 @@ export const inviteAdminUser = action({
         action: "inviteAdminUser",
         stage: "insert_admin_user_after_workos_invite",
         workos_user_id: result.workosId,
-        target_email: args.email,
+        // Use the normalized local (trim + lowercase) so Sentry context
+        // matches what actually hit WorkOS / the DB — args.email may differ.
+        target_email: email,
       });
       throw new ConvexError(
         "Failed to create admin user record; WorkOS user has been cleaned up. Please retry.",
