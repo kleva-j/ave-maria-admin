@@ -56,6 +56,7 @@ import type * as schemas_bankAccountDocuments from "../schemas/bankAccountDocume
 import type * as schemas_documentReviewNotifications from "../schemas/documentReviewNotifications.js";
 import type * as schemas_kycDocuments from "../schemas/kycDocuments.js";
 import type * as schemas_notificationEvents from "../schemas/notificationEvents.js";
+import type * as schemas_novuEnqueueCursor from "../schemas/novuEnqueueCursor.js";
 import type * as schemas_riskEvents from "../schemas/riskEvents.js";
 import type * as schemas_savingsPlanTemplates from "../schemas/savingsPlanTemplates.js";
 import type * as schemas_transactionReconciliationIssues from "../schemas/transactionReconciliationIssues.js";
@@ -63,6 +64,7 @@ import type * as schemas_transactionReconciliationRuns from "../schemas/transact
 import type * as schemas_transactions from "../schemas/transactions.js";
 import type * as schemas_userBankAccountEvents from "../schemas/userBankAccountEvents.js";
 import type * as schemas_userBankAccounts from "../schemas/userBankAccounts.js";
+import type * as schemas_userNotificationDeliveries from "../schemas/userNotificationDeliveries.js";
 import type * as schemas_userRiskHolds from "../schemas/userRiskHolds.js";
 import type * as schemas_userSavingsPlans from "../schemas/userSavingsPlans.js";
 import type * as schemas_users from "../schemas/users.js";
@@ -72,6 +74,7 @@ import type * as shared from "../shared.js";
 import type * as transactions from "../transactions.js";
 import type * as types from "../types.js";
 import type * as userAudit from "../userAudit.js";
+import type * as userNotifications from "../userNotifications.js";
 import type * as users from "../users.js";
 import type * as utils from "../utils.js";
 import type * as verificationQueue from "../verificationQueue.js";
@@ -133,6 +136,7 @@ declare const fullApi: ApiFromModules<{
   "schemas/documentReviewNotifications": typeof schemas_documentReviewNotifications;
   "schemas/kycDocuments": typeof schemas_kycDocuments;
   "schemas/notificationEvents": typeof schemas_notificationEvents;
+  "schemas/novuEnqueueCursor": typeof schemas_novuEnqueueCursor;
   "schemas/riskEvents": typeof schemas_riskEvents;
   "schemas/savingsPlanTemplates": typeof schemas_savingsPlanTemplates;
   "schemas/transactionReconciliationIssues": typeof schemas_transactionReconciliationIssues;
@@ -140,6 +144,7 @@ declare const fullApi: ApiFromModules<{
   "schemas/transactions": typeof schemas_transactions;
   "schemas/userBankAccountEvents": typeof schemas_userBankAccountEvents;
   "schemas/userBankAccounts": typeof schemas_userBankAccounts;
+  "schemas/userNotificationDeliveries": typeof schemas_userNotificationDeliveries;
   "schemas/userRiskHolds": typeof schemas_userRiskHolds;
   "schemas/userSavingsPlans": typeof schemas_userSavingsPlans;
   "schemas/users": typeof schemas_users;
@@ -149,6 +154,7 @@ declare const fullApi: ApiFromModules<{
   transactions: typeof transactions;
   types: typeof types;
   userAudit: typeof userAudit;
+  userNotifications: typeof userNotifications;
   users: typeof users;
   utils: typeof utils;
   verificationQueue: typeof verificationQueue;

@@ -22,9 +22,30 @@ export const TABLE_NAMES = {
   BANK_ACCOUNT_DOCUMENT_COMMENTS: "bank_account_document_comments",
   TRANSACTION_RECONCILIATION_RUNS: "transaction_reconciliation_runs",
   TRANSACTION_RECONCILIATION_ISSUES: "transaction_reconciliation_issues",
+  USER_NOTIFICATION_DELIVERIES: "user_notification_deliveries",
+  NOVU_ENQUEUE_CURSOR: "novu_enqueue_cursor",
 } as const;
 
 export type TableName = (typeof TABLE_NAMES)[keyof typeof TABLE_NAMES];
+
+// Novu delivery ledger status. Separate from notification_events'
+// processing_status so the Novu dispatch is an independent consumer of the
+// shared event outbox and never contends with the admin-alert sweep.
+export const NovuDeliveryStatus = {
+  PENDING: "pending",
+  SENT: "sent",
+  FAILED: "failed",
+  SKIPPED: "skipped",
+} as const;
+
+export const novuDeliveryStatus = v.union(
+  v.literal(NovuDeliveryStatus.PENDING),
+  v.literal(NovuDeliveryStatus.SENT),
+  v.literal(NovuDeliveryStatus.FAILED),
+  v.literal(NovuDeliveryStatus.SKIPPED),
+);
+
+export type NovuDeliveryStatus = typeof novuDeliveryStatus.type;
 
 // Constants for file validation
 export const MAX_FILE_SIZE = 5 * 1024 * 1024;
