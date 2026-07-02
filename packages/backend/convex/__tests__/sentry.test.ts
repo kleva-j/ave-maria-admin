@@ -92,4 +92,27 @@ describe("packages/backend/convex/sentry", () => {
       expect(fetchMock).not.toHaveBeenCalled();
     });
   });
+
+  describe("self-hosted DSN with path prefix", () => {
+    it("preserves the path prefix in the envelope URL", async () => {
+      // Self-hosted Sentry mounted under a subpath, e.g. /sentry.
+      vi.stubEnv("SENTRY_DSN", "https://key@sentry.example.com/sentry/42");
+      vi.resetModules();
+
+      const { withSentry } = await import("../sentry");
+
+      const wrapped = withSentry(async () => {
+        throw new Error("self-hosted");
+      });
+
+      await expect(wrapped()).rejects.toThrow("self-hosted");
+
+      const [url] = fetchMock.mock.calls[0]!;
+      // The path prefix ("/sentry") must sit BEFORE "/api/{projectId}/envelope/"
+      // — dropping it would POST to the wrong endpoint on self-hosted deploys.
+      expect(url).toBe(
+        "https://sentry.example.com/sentry/api/42/envelope/",
+      );
+    });
+  });
 });

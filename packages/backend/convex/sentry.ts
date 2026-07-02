@@ -63,20 +63,32 @@ interface DsnParts {
   scheme: string;
   publicKey: string;
   host: string;
+  /**
+   * Path prefix between host and `/api/{projectId}/…`. Empty ("") for the
+   * standard sentry.io DSN. Non-empty for self-hosted Sentry mounted under
+   * a subpath, e.g. `https://key@sentry.example.com/sentry/1` → "/sentry".
+   * Always begins with "/" when non-empty; never has a trailing slash.
+   */
+  pathPrefix: string;
   projectId: string;
 }
 
 function parseDsn(dsn: string): DsnParts | null {
   try {
     const url = new URL(dsn);
-    // DSN format: https://{public_key}@{host}[:port]/{project_id}
-    // The project id is the last (usually only) path segment.
-    const projectId = url.pathname.replace(/^\/+/, "").split("/").pop();
+    // DSN format: https://{public_key}@{host}[:port][/{path_prefix}]/{project_id}
+    // The project id is the last non-empty path segment; everything before
+    // it is the ingest path prefix (empty for the standard sentry.io DSN,
+    // non-empty for self-hosted deployments mounted under a subpath).
+    const segments = url.pathname.split("/").filter((s) => s.length > 0);
+    const projectId = segments.pop();
     if (!url.username || !url.host || !projectId) return null;
+    const pathPrefix = segments.length > 0 ? `/${segments.join("/")}` : "";
     return {
       scheme: url.protocol.replace(":", ""),
       publicKey: url.username,
       host: url.host,
+      pathPrefix,
       projectId,
     };
   } catch {
@@ -157,7 +169,10 @@ function buildEnvelope(event: SentryEvent, dsn: DsnParts): string {
   const envelopeHeader = JSON.stringify({
     event_id: event.event_id,
     sent_at: new Date().toISOString(),
-    dsn: `${dsn.scheme}://${dsn.publicKey}@${dsn.host}/${dsn.projectId}`,
+    // Reconstruct the exact DSN, preserving any self-hosted path prefix so
+    // the receiving Sentry instance rebuilds the same store URL it uses
+    // internally.
+    dsn: `${dsn.scheme}://${dsn.publicKey}@${dsn.host}${dsn.pathPrefix}/${dsn.projectId}`,
   });
   const itemHeader = JSON.stringify({
     type: "event",
@@ -169,8 +184,17 @@ function buildEnvelope(event: SentryEvent, dsn: DsnParts): string {
 // Track in-flight sends so flushSentry can await them.
 const pendingSends: Set<Promise<void>> = new Set();
 
+// Log the "invalid DSN" message at most once per isolate. captureCriticalError
+// runs on hot error paths, so a per-call console.error would spam Convex logs
+// and mask the real failures we care about.
+let invalidDsnLogged = false;
+
 function sendEvent(dsn: DsnParts, event: SentryEvent): Promise<void> {
-  const url = `${dsn.scheme}://${dsn.host}/api/${dsn.projectId}/envelope/`;
+  // Self-hosted Sentry can be mounted under a subpath (dsn.pathPrefix), so
+  // the ingest endpoint is `{scheme}://{host}{pathPrefix}/api/{projectId}/envelope/`.
+  // For SaaS sentry.io, pathPrefix is empty and this collapses to the
+  // standard `/api/{projectId}/envelope/` URL.
+  const url = `${dsn.scheme}://${dsn.host}${dsn.pathPrefix}/api/${dsn.projectId}/envelope/`;
   const auth =
     `Sentry sentry_version=7,sentry_client=${SDK_NAME}/${SDK_VERSION},` +
     `sentry_key=${dsn.publicKey}`;
@@ -209,8 +233,12 @@ export function captureCriticalError(
   if (!dsn) return;
   const parts = parseDsn(dsn);
   if (!parts) {
-    // Invalid DSN — log once so misconfig is visible, don't retry per call.
-    console.error("[sentry] SENTRY_DSN is not a valid DSN — capture disabled.");
+    // Invalid DSN — log once per isolate so misconfig is visible without
+    // spamming logs on every capture attempt (see `invalidDsnLogged`).
+    if (!invalidDsnLogged) {
+      invalidDsnLogged = true;
+      console.error("[sentry] SENTRY_DSN is not a valid DSN — capture disabled.");
+    }
     return;
   }
   try {
@@ -232,11 +260,18 @@ export async function flushSentry(
 ): Promise<void> {
   if (pendingSends.size === 0) return;
   const snapshot = Array.from(pendingSends);
-  const timeout = new Promise<void>((resolve) => setTimeout(resolve, timeoutMs));
+  let timerId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<void>((resolve) => {
+    timerId = setTimeout(resolve, timeoutMs);
+  });
   try {
     await Promise.race([Promise.allSettled(snapshot), timeout]);
   } catch {
     // Never throw.
+  } finally {
+    // Clear the timer if the sends settled first — otherwise it keeps the
+    // isolate awake unnecessarily and accumulates on repeated flushSentry calls.
+    if (timerId !== undefined) clearTimeout(timerId);
   }
 }
 
