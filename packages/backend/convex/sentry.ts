@@ -1,85 +1,249 @@
 /**
- * Sentry integration for Convex actions.
+ * Sentry error reporting for Convex functions — DSN envelope over fetch.
  *
- * Convex runs each action in a short-lived V8 isolate, so we cannot rely on
- * a long-lived process-wide init. Instead:
+ * Why this file has no @sentry/* import:
  *
- *   - initSentry() is lazy + idempotent. The first capture in an isolate
- *     pays the init cost; subsequent captures reuse the same client.
- *   - withSentry() wraps an action handler and calls Sentry.flush(2000)
- *     before returning so events are not lost when the isolate is recycled.
- *   - captureCriticalError() is a one-line convenience for the existing
- *     "rollback + critical audit log + throw" pattern in admin.ts /
- *     adminSync.ts. It does not throw on its own.
+ * Convex runs each function in a V8 isolate whose default runtime does not
+ * provide Node built-ins (`node:http`, `node:https`, `node:async_hooks`,
+ * `fs`, `path`, etc.). Every published Sentry runtime SDK we evaluated
+ * pulls one or more of those in transitively at bundle time, which breaks
+ * `npx convex codegen`:
  *
- * Everything is a silent no-op when process.env.SENTRY_DSN is unset, so dev
- * deployments without a Sentry project remain unaffected.
+ *   - @sentry/node        → requires `node:http` / `node:https` via node-core
+ *   - @sentry/cloudflare  → requires `node:async_hooks` for context propagation
+ *   - @sentry/core        → does not export a runtime `init`; the only
+ *                           entrypoint is `initAndBind(Client, options)` and
+ *                           every Client shipped with the platform SDKs pulls
+ *                           in its runtime's Node built-ins
+ *
+ * Adding `"use node"` to sentry.ts is not a fix either: the modules that
+ * import it — admin.ts, adminSync.ts, transactions.ts — export queries and
+ * mutations alongside their actions, and Convex forbids `"use node"` in
+ * files that export anything other than actions.
+ *
+ * Instead this module builds Sentry envelopes by hand and POSTs them via
+ * `fetch` (available in the default runtime). The envelope format is the
+ * public wire protocol Sentry's ingest endpoint accepts, so events show up
+ * in the dashboard exactly as if a real SDK sent them.
+ *
+ * Public API preserved so callers don't change:
+ *   - captureCriticalError(err, context?) — enqueue an error event
+ *   - flushSentry(timeoutMs = 2000)       — await pending sends
+ *   - withSentry(handler)                 — action wrapper: capture + flush
+ *                                            + re-throw
+ *
+ * Every export is a silent no-op when `SENTRY_DSN` is unset. captureCriticalError
+ * and withSentry never throw for reasons unrelated to the caller's handler.
  */
-import * as Sentry from "@sentry/node";
 
-// initAttempted flips true the moment we begin an init call (success OR failure).
-// initialized flips true only on success. Splitting them guarantees the "log
-// once and never retry" contract when Sentry.init throws (e.g. bad DSN, bad
-// integrations config), so subsequent captureCriticalError / withSentry calls
-// don't repeatedly attempt init and spam the log.
-let initAttempted = false;
-let initialized = false;
+const SDK_NAME = "avm-daily-convex";
+const SDK_VERSION = "1.0.0";
+const DEFAULT_FLUSH_TIMEOUT_MS = 2000;
 
-function parseSampleRate(value: string | undefined): number {
-  const parsed = Number(value);
-  if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 1) return parsed;
-  return 0.1;
+type StackFrame = {
+  filename: string;
+  function: string;
+  lineno: number;
+  colno: number;
+};
+
+type SentryEvent = {
+  event_id: string;
+  timestamp: number;
+  platform: "javascript";
+  level: "error";
+  environment?: string;
+  release?: string;
+  exception: { values: Array<Record<string, unknown>> };
+  extra?: Record<string, unknown>;
+  sdk: { name: string; version: string };
+};
+
+interface DsnParts {
+  scheme: string;
+  publicKey: string;
+  host: string;
+  projectId: string;
 }
 
-function initSentry(): void {
-  if (initAttempted) return;
-  const dsn = process.env.SENTRY_DSN;
-  if (!dsn) return;
-
-  initAttempted = true;
+function parseDsn(dsn: string): DsnParts | null {
   try {
-    Sentry.init({
-      dsn,
-      environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV,
-      release: process.env.SENTRY_RELEASE,
-      // Defensive parse — a non-numeric env var would otherwise produce NaN
-      // and can cause Sentry.init to throw. Clamped to [0, 1]; default 0.1.
-      tracesSampleRate: parseSampleRate(process.env.SENTRY_TRACES_SAMPLE_RATE),
-      sendDefaultPii: false,
-      // Convex isolates don't run full Node — opt out of integrations that
-      // hook process / fs / signal handlers. captureException via fetch
-      // transport works without them.
-      defaultIntegrations: false,
-    });
-    initialized = true;
-  } catch (e) {
-    console.error("[sentry] init failed", e);
+    const url = new URL(dsn);
+    // DSN format: https://{public_key}@{host}[:port]/{project_id}
+    // The project id is the last (usually only) path segment.
+    const projectId = url.pathname.replace(/^\/+/, "").split("/").pop();
+    if (!url.username || !url.host || !projectId) return null;
+    return {
+      scheme: url.protocol.replace(":", ""),
+      publicKey: url.username,
+      host: url.host,
+      projectId,
+    };
+  } catch {
+    return null;
   }
+}
+
+function newEventId(): string {
+  // Sentry expects a 32-char hex event_id. crypto.randomUUID is available
+  // in the Convex default runtime; strip the dashes to match.
+  return globalThis.crypto.randomUUID().replace(/-/g, "");
+}
+
+/**
+ * Best-effort V8 stack parse. Sentry accepts any subset of frame fields;
+ * unparseable frames are silently dropped. Returns innermost-first (Sentry's
+ * expected ordering); V8 emits outermost-first.
+ */
+function parseStack(stack: string): StackFrame[] {
+  const frames: StackFrame[] = [];
+  for (const line of stack.split("\n").slice(1)) {
+    // Match `    at fn (file:line:col)`
+    let m = line.match(/^\s*at (.+?) \((.+?):(\d+):(\d+)\)$/);
+    if (m) {
+      frames.push({
+        function: m[1],
+        filename: m[2],
+        lineno: Number(m[3]),
+        colno: Number(m[4]),
+      });
+      continue;
+    }
+    // Match `    at file:line:col` (anonymous)
+    m = line.match(/^\s*at (.+?):(\d+):(\d+)$/);
+    if (m) {
+      frames.push({
+        function: "<anonymous>",
+        filename: m[1],
+        lineno: Number(m[2]),
+        colno: Number(m[3]),
+      });
+    }
+  }
+  return frames.reverse();
+}
+
+function errorToEvent(
+  err: unknown,
+  context?: Record<string, unknown>,
+): SentryEvent {
+  const isErr = err instanceof Error;
+  const values: Array<Record<string, unknown>> = [
+    {
+      type: isErr ? err.name : "Error",
+      value: isErr ? err.message : String(err),
+    },
+  ];
+  if (isErr && err.stack) {
+    const frames = parseStack(err.stack);
+    if (frames.length > 0) values[0].stacktrace = { frames };
+  }
+  return {
+    event_id: newEventId(),
+    timestamp: Date.now() / 1000,
+    platform: "javascript",
+    level: "error",
+    environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV,
+    release: process.env.SENTRY_RELEASE,
+    exception: { values },
+    ...(context ? { extra: context } : {}),
+    sdk: { name: SDK_NAME, version: SDK_VERSION },
+  };
+}
+
+function buildEnvelope(event: SentryEvent, dsn: DsnParts): string {
+  // Sentry envelope = newline-separated JSON:
+  //   {envelope_header}\n{item_header}\n{item_payload}
+  const envelopeHeader = JSON.stringify({
+    event_id: event.event_id,
+    sent_at: new Date().toISOString(),
+    dsn: `${dsn.scheme}://${dsn.publicKey}@${dsn.host}/${dsn.projectId}`,
+  });
+  const itemHeader = JSON.stringify({
+    type: "event",
+    content_type: "application/json",
+  });
+  return `${envelopeHeader}\n${itemHeader}\n${JSON.stringify(event)}`;
+}
+
+// Track in-flight sends so flushSentry can await them.
+const pendingSends: Set<Promise<void>> = new Set();
+
+function sendEvent(dsn: DsnParts, event: SentryEvent): Promise<void> {
+  const url = `${dsn.scheme}://${dsn.host}/api/${dsn.projectId}/envelope/`;
+  const auth =
+    `Sentry sentry_version=7,sentry_client=${SDK_NAME}/${SDK_VERSION},` +
+    `sentry_key=${dsn.publicKey}`;
+  const body = buildEnvelope(event, dsn);
+  // Never throw or propagate — capture is best-effort. Individual failures
+  // are silently swallowed so a Sentry outage can't affect the caller's
+  // control flow.
+  const p = fetch(url, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-sentry-envelope",
+      "X-Sentry-Auth": auth,
+    },
+    body,
+    signal: AbortSignal.timeout(DEFAULT_FLUSH_TIMEOUT_MS),
+  })
+    .then(() => undefined)
+    .catch(() => undefined);
+  pendingSends.add(p);
+  void p.finally(() => {
+    pendingSends.delete(p);
+  });
+  return p;
 }
 
 /**
  * One-line capture for code paths that already handle the error locally
- * (existing audit-log + rollback patterns). Lazy-initializes the SDK on
- * first call. Never throws — capture failures must not mask the original
- * error path.
+ * (existing audit-log + rollback patterns). Never throws — capture failures
+ * must not mask the original error path.
  */
 export function captureCriticalError(
   err: unknown,
   context?: Record<string, unknown>,
 ): void {
-  initSentry();
-  if (!initialized) return;
+  const dsn = process.env.SENTRY_DSN;
+  if (!dsn) return;
+  const parts = parseDsn(dsn);
+  if (!parts) {
+    // Invalid DSN — log once so misconfig is visible, don't retry per call.
+    console.error("[sentry] SENTRY_DSN is not a valid DSN — capture disabled.");
+    return;
+  }
   try {
-    Sentry.captureException(err, context ? { extra: context } : undefined);
+    const event = errorToEvent(err, context);
+    void sendEvent(parts, event);
   } catch {
-    // Capture must never throw on its own.
+    // Never throw.
   }
 }
 
 /**
- * Higher-order wrapper for Convex action handlers. Catches throws, sends them
- * to Sentry, flushes the buffer, then re-throws so existing error semantics
- * (UI surfaces, audit log, rollback) are preserved.
+ * Best-effort flush of the in-flight send buffer, bounded by timeoutMs.
+ * Convex isolates are short-lived, so capture-and-return code paths must
+ * flush before returning or the fetch may be aborted mid-request. Never
+ * throws — the caller's error semantics must not be affected.
+ */
+export async function flushSentry(
+  timeoutMs = DEFAULT_FLUSH_TIMEOUT_MS,
+): Promise<void> {
+  if (pendingSends.size === 0) return;
+  const snapshot = Array.from(pendingSends);
+  const timeout = new Promise<void>((resolve) => setTimeout(resolve, timeoutMs));
+  try {
+    await Promise.race([Promise.allSettled(snapshot), timeout]);
+  } catch {
+    // Never throw.
+  }
+}
+
+/**
+ * Higher-order wrapper for Convex action handlers. Catches throws, captures
+ * them, flushes the buffer, then re-throws so existing error semantics
+ * (rollback, audit log, UI surfaces) are preserved.
  *
  * Usage:
  *   export const myAction = action({
@@ -92,36 +256,12 @@ export function withSentry<TArgs extends unknown[], TResult>(
   handler: (...args: TArgs) => Promise<TResult>,
 ): (...args: TArgs) => Promise<TResult> {
   return async (...args: TArgs): Promise<TResult> => {
-    initSentry();
     try {
       return await handler(...args);
     } catch (err) {
-      if (initialized) {
-        try {
-          Sentry.captureException(err);
-          await Sentry.flush(2000);
-        } catch {
-          // Swallow capture failures so the original throw still propagates.
-        }
-      }
+      captureCriticalError(err);
+      await flushSentry();
       throw err;
     }
   };
 }
-
-/**
- * Best-effort flush of the Sentry buffer. Convex isolates are short-lived, so
- * capture-and-return paths (audit-log-then-return, catch-and-swallow) can lose
- * events without an explicit flush. Never throws — flush failures must not
- * mask the caller's error path. No-op when Sentry was never initialized.
- */
-export async function flushSentry(timeoutMs = 2000): Promise<void> {
-  if (!initialized) return;
-  try {
-    await Sentry.flush(timeoutMs);
-  } catch {
-    // Never throw — the caller's error semantics must not be affected.
-  }
-}
-
-export { Sentry };
