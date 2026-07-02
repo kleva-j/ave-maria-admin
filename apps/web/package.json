@@ -4,8 +4,8 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "serve": "vite preview",
-    "dev": "vite dev",
+    "serve": "NODE_OPTIONS='--import ./instrument.server.mjs' vite preview",
+    "dev": "NODE_OPTIONS='--import ./instrument.server.mjs' vite dev",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
@@ -19,6 +19,7 @@
     "@axiomhq/js": "^1.6.1",
     "@convex-dev/react-query": "^0.1.0",
     "@novu/react": "^3.17.0",
+    "@sentry/tanstackstart-react": "^10.57.0",
     "@tailwindcss/vite": "^4.1.18",
     "@tanstack/pacer": "^0.19.0",
     "@tanstack/react-form": "^1.28.4",

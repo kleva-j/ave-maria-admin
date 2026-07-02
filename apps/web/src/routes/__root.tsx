@@ -19,12 +19,39 @@ import {
 } from "@tanstack/react-router";
 
 import { PostHogProvider } from "@/components/posthog-provider";
+import { Sentry } from "@/lib/sentry";
 
 import appCss from "../index.css?url";
 
 export interface RouterAppContext {
   queryClient: QueryClient;
   convexQueryClient: ConvexQueryClient;
+}
+
+// SSR exceptions are not auto-captured by the request middleware (they fire
+// during React render, not request handling). Forward them to Sentry from the
+// root errorComponent so server-rendering crashes surface in the dashboard.
+//
+// Sentry.captureException runs synchronously in the component body (not in
+// useEffect) so it fires during the SSR render pass — useEffect only runs
+// after client hydration, which would miss SSR-only crashes entirely.
+// The Sentry SDK handles same-instance capture idempotency on the client so
+// the render-once-then-hydrate flow doesn't produce a duplicate event.
+function RootErrorComponent({ error }: { error: Error }) {
+  Sentry.captureException(error);
+
+  // Only surface raw internals in dev — in production the message may leak
+  // stack hints, API URLs, or DB errors. Prod users see a neutral fallback.
+  const detail = import.meta.env.DEV ? error.message : "Please try again.";
+
+  return (
+    <div className="flex h-svh items-center justify-center p-8 text-center">
+      <div>
+        <h1 className="mb-2 text-2xl font-semibold">Something went wrong</h1>
+        <p className="text-sm opacity-70">{detail}</p>
+      </div>
+    </div>
+  );
 }
 
 export const Route = createRootRouteWithContext<RouterAppContext>()({
@@ -38,6 +65,7 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   }),
 
   component: RootDocument,
+  errorComponent: RootErrorComponent,
 });
 
 /**

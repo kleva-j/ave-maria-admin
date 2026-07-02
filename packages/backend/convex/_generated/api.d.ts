@@ -70,6 +70,7 @@ import type * as schemas_userSavingsPlans from "../schemas/userSavingsPlans.js";
 import type * as schemas_users from "../schemas/users.js";
 import type * as schemas_withdrawalReservations from "../schemas/withdrawalReservations.js";
 import type * as schemas_withdrawals from "../schemas/withdrawals.js";
+import type * as sentry from "../sentry.js";
 import type * as shared from "../shared.js";
 import type * as transactions from "../transactions.js";
 import type * as types from "../types.js";
@@ -150,6 +151,7 @@ declare const fullApi: ApiFromModules<{
   "schemas/users": typeof schemas_users;
   "schemas/withdrawalReservations": typeof schemas_withdrawalReservations;
   "schemas/withdrawals": typeof schemas_withdrawals;
+  sentry: typeof sentry;
   shared: typeof shared;
   transactions: typeof transactions;
   types: typeof types;
