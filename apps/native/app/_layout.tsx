@@ -10,6 +10,11 @@ import { NavigationTracker } from "@/contexts/navigation-tracker";
 import { AppThemeProvider } from "@/contexts/app-theme-context";
 import { PostHogProvider } from "@/contexts/posthog-context";
 import { NovuInboxProvider } from "@/components/novu-provider";
+import { Sentry, initSentry } from "@/lib/sentry";
+
+// Initialize at module top so Sentry registers before the first render
+// frame. No-op when EXPO_PUBLIC_SENTRY_DSN is unset.
+initSentry();
 
 export const unstable_settings = {
   initialRouteName: "(drawer)",
@@ -31,7 +36,7 @@ function StackLayout() {
   );
 }
 
-export default function Layout() {
+function Layout() {
   return (
     <PostHogProvider>
     <ConvexProvider client={convex}>
@@ -50,3 +55,7 @@ export default function Layout() {
     </PostHogProvider>
   );
 }
+
+// Sentry.wrap adds automatic touch / nav instrumentation and a root error
+// boundary that forwards to Sentry. Acts as a passthrough when init is a no-op.
+export default Sentry.wrap(Layout);

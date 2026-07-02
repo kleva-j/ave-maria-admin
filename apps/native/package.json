@@ -20,6 +20,7 @@
     "@novu/react-native": "^3.17.0",
     "@react-navigation/drawer": "^7.3.9",
     "@react-navigation/elements": "^2.8.1",
+    "@sentry/react-native": "^8.14.0",
     "convex": "catalog:",
     "dotenv": "catalog:",
     "expo": "^55.0.0",
