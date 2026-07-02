@@ -8,7 +8,18 @@
     },
     "name": "avm-daily",
     "slug": "avm-daily",
-    "plugins": ["expo-font"],
+    "plugins": [
+      "expo-font",
+      [
+        "@sentry/react-native/expo",
+        {
+          "url": "https://sentry.io/",
+          "organization": "YOUR_ORG_SLUG",
+          "project": "avm-daily-native",
+          "disableAutoUpload": true
+        }
+      ]
+    ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
