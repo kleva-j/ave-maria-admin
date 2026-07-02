@@ -17,19 +17,34 @@
  */
 import * as Sentry from "@sentry/node";
 
+// initAttempted flips true the moment we begin an init call (success OR failure).
+// initialized flips true only on success. Splitting them guarantees the "log
+// once and never retry" contract when Sentry.init throws (e.g. bad DSN, bad
+// integrations config), so subsequent captureCriticalError / withSentry calls
+// don't repeatedly attempt init and spam the log.
+let initAttempted = false;
 let initialized = false;
 
+function parseSampleRate(value: string | undefined): number {
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed >= 0 && parsed <= 1) return parsed;
+  return 0.1;
+}
+
 function initSentry(): void {
-  if (initialized) return;
+  if (initAttempted) return;
   const dsn = process.env.SENTRY_DSN;
   if (!dsn) return;
 
+  initAttempted = true;
   try {
     Sentry.init({
       dsn,
       environment: process.env.SENTRY_ENVIRONMENT ?? process.env.NODE_ENV,
       release: process.env.SENTRY_RELEASE,
-      tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0.1),
+      // Defensive parse — a non-numeric env var would otherwise produce NaN
+      // and can cause Sentry.init to throw. Clamped to [0, 1]; default 0.1.
+      tracesSampleRate: parseSampleRate(process.env.SENTRY_TRACES_SAMPLE_RATE),
       sendDefaultPii: false,
       // Convex isolates don't run full Node — opt out of integrations that
       // hook process / fs / signal handlers. captureException via fetch
@@ -92,6 +107,21 @@ export function withSentry<TArgs extends unknown[], TResult>(
       throw err;
     }
   };
+}
+
+/**
+ * Best-effort flush of the Sentry buffer. Convex isolates are short-lived, so
+ * capture-and-return paths (audit-log-then-return, catch-and-swallow) can lose
+ * events without an explicit flush. Never throws — flush failures must not
+ * mask the caller's error path. No-op when Sentry was never initialized.
+ */
+export async function flushSentry(timeoutMs = 2000): Promise<void> {
+  if (!initialized) return;
+  try {
+    await Sentry.flush(timeoutMs);
+  } catch {
+    // Never throw — the caller's error semantics must not be affected.
+  }
 }
 
 export { Sentry };
