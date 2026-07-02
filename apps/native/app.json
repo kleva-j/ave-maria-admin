@@ -15,7 +15,8 @@
         {
           "url": "https://sentry.io/",
           "organization": "YOUR_ORG_SLUG",
-          "project": "avm-daily-native"
+          "project": "avm-daily-native",
+          "disableAutoUpload": true
         }
       ]
     ],
