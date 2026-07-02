@@ -4,6 +4,7 @@ import { transaction_reconciliation_issues } from "./schemas/transactionReconcil
 import { transaction_reconciliation_runs } from "./schemas/transactionReconciliationRuns";
 import { bank_account_document_comments } from "./schemas/bankAccountDocumentComments";
 import { user_notification_deliveries } from "./schemas/userNotificationDeliveries";
+import { novu_enqueue_cursor } from "./schemas/novuEnqueueCursor";
 import { user_bank_account_events } from "./schemas/userBankAccountEvents";
 import { withdrawal_reservations } from "./schemas/withdrawalReservations";
 import { bank_account_documents } from "./schemas/bankAccountDocuments";
@@ -39,6 +40,7 @@ export default defineSchema({
   [TABLE_NAMES.USER_BANK_ACCOUNTS]: user_bank_accounts,
   [TABLE_NAMES.NOTIFICATION_EVENTS]: notification_events,
   [TABLE_NAMES.USER_NOTIFICATION_DELIVERIES]: user_notification_deliveries,
+  [TABLE_NAMES.NOVU_ENQUEUE_CURSOR]: novu_enqueue_cursor,
   [TABLE_NAMES.ADMIN_ALERT_RECEIPTS]: admin_alert_receipts,
   [TABLE_NAMES.ADMIN_DASHBOARD_KPIS]: admin_dashboard_kpis,
   [TABLE_NAMES.BANK_ACCOUNT_DOCUMENTS]: bank_account_documents,

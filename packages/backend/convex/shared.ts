@@ -23,6 +23,7 @@ export const TABLE_NAMES = {
   TRANSACTION_RECONCILIATION_RUNS: "transaction_reconciliation_runs",
   TRANSACTION_RECONCILIATION_ISSUES: "transaction_reconciliation_issues",
   USER_NOTIFICATION_DELIVERIES: "user_notification_deliveries",
+  NOVU_ENQUEUE_CURSOR: "novu_enqueue_cursor",
 } as const;
 
 export type TableName = (typeof TABLE_NAMES)[keyof typeof TABLE_NAMES];

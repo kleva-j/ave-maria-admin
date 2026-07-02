@@ -8,8 +8,12 @@ import { novuDeliveryStatus } from "../shared";
  *
  * One row per (notification_event → user) fan-out. Owns its own status + retry
  * so Novu dispatch is fully independent of the admin-alert sweep that also
- * drains notification_events. The unique index on event_id makes enqueue
- * idempotent: a given event produces at most one delivery row.
+ * drains notification_events.
+ *
+ * Idempotency (at most one delivery row per event) is enforced by the enqueue
+ * mutation's read-before-write on the by_event_id index (a `.unique()` lookup
+ * before insert) — NOT by the index itself. Convex `.index(...)` does not add a
+ * uniqueness constraint.
  *
  * The dispatcher action has no db access, so every field it needs to call
  * Novu (subscriberId = user_id, first_name, workflow_id, payload) is

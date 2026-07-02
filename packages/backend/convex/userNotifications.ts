@@ -60,6 +60,7 @@ const ENQUEUE_SCAN_LIMIT = 200;
 const DISPATCH_BATCH = 50;
 const MAX_ATTEMPTS = 5;
 const RETRY_BACKOFF_MS = 60_000;
+const MAX_RETRY_BACKOFF_MS = 30 * 60_000;
 
 // ---------------------------------------------------------------------------
 // HMAC (Web Crypto — available in the Convex default runtime)
@@ -153,16 +154,28 @@ export const _enqueueUserDeliveries = internalMutation({
   returns: v.object({ enqueued: v.number() }),
   handler: async (ctx) => {
     const now = Date.now();
-    // Bounded recent window. The sweep runs every 60s; user-facing event
-    // volume is far below this window, so nothing is missed at current scale.
-    const recent = await ctx.db
+
+    // Drain deterministically from a watermark instead of head-sampling the
+    // most recent N events (which could permanently skip older user-facing
+    // events when the outbox is dominated by other types). Resume at
+    // occurred_at >= watermark (inclusive): same-millisecond ties are never
+    // skipped, and the by_event_id read-before-write below makes the small
+    // re-scan overlap idempotent.
+    const cursor = await ctx.db
+      .query(TABLE_NAMES.NOVU_ENQUEUE_CURSOR)
+      .first();
+    const watermark = cursor?.last_occurred_at ?? 0;
+
+    const batch = await ctx.db
       .query(TABLE_NAMES.NOTIFICATION_EVENTS)
-      .withIndex("by_occurred_at")
-      .order("desc")
+      .withIndex("by_occurred_at", (q) => q.gte("occurred_at", watermark))
+      .order("asc")
       .take(ENQUEUE_SCAN_LIMIT);
 
     let enqueued = 0;
-    for (const event of recent) {
+    let maxOccurredAt = watermark;
+    for (const event of batch) {
+      if (event.occurred_at > maxOccurredAt) maxOccurredAt = event.occurred_at;
       if (!USER_FACING_EVENT_TYPES.has(event.event_type)) continue;
 
       const existing = await ctx.db
@@ -202,6 +215,22 @@ export const _enqueueUserDeliveries = internalMutation({
         created_at: now,
       });
       enqueued++;
+    }
+
+    // Advance the watermark to the newest occurred_at scanned this batch, so
+    // the next sweep resumes past it. Only moves forward.
+    if (maxOccurredAt > watermark) {
+      if (cursor) {
+        await ctx.db.patch(cursor._id, {
+          last_occurred_at: maxOccurredAt,
+          updated_at: now,
+        });
+      } else {
+        await ctx.db.insert(TABLE_NAMES.NOVU_ENQUEUE_CURSOR, {
+          last_occurred_at: maxOccurredAt,
+          updated_at: now,
+        });
+      }
     }
 
     return { enqueued };
@@ -250,12 +279,18 @@ export const _markDeliveryFailed = internalMutation({
     if (!row) return null;
     const attempt = row.attempt_count + 1;
     const exhausted = attempt >= MAX_ATTEMPTS;
+    // Exponential backoff (capped) so retries don't hammer Novu during an
+    // extended outage: 1m, 2m, 4m, 8m, … capped at 30m.
+    const backoff = Math.min(
+      RETRY_BACKOFF_MS * 2 ** (attempt - 1),
+      MAX_RETRY_BACKOFF_MS,
+    );
     await ctx.db.patch(args.id, {
       attempt_count: attempt,
       novu_status: exhausted
         ? NovuDeliveryStatus.FAILED
         : NovuDeliveryStatus.PENDING,
-      next_attempt_at: Date.now() + RETRY_BACKOFF_MS * attempt,
+      next_attempt_at: Date.now() + backoff,
       last_error: args.error,
     });
     return null;
@@ -314,7 +349,14 @@ export const sweep = internalAction({
           }),
           signal: AbortSignal.timeout(10_000),
         });
-        if (!resp.ok) throw new Error(`Novu trigger failed (HTTP ${resp.status})`);
+        if (!resp.ok) {
+          // Capture a truncated body so failures (invalid workflow id, auth,
+          // validation) are diagnosable from last_error without reproducing.
+          const detail = (await resp.text().catch(() => "")).slice(0, 500);
+          throw new Error(
+            `Novu trigger failed (HTTP ${resp.status})${detail ? `: ${detail}` : ""}`,
+          );
+        }
         const body = (await resp.json().catch(() => ({}))) as {
           data?: { transactionId?: string };
         };

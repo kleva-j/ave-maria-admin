@@ -56,6 +56,7 @@ import type * as schemas_bankAccountDocuments from "../schemas/bankAccountDocume
 import type * as schemas_documentReviewNotifications from "../schemas/documentReviewNotifications.js";
 import type * as schemas_kycDocuments from "../schemas/kycDocuments.js";
 import type * as schemas_notificationEvents from "../schemas/notificationEvents.js";
+import type * as schemas_novuEnqueueCursor from "../schemas/novuEnqueueCursor.js";
 import type * as schemas_riskEvents from "../schemas/riskEvents.js";
 import type * as schemas_savingsPlanTemplates from "../schemas/savingsPlanTemplates.js";
 import type * as schemas_transactionReconciliationIssues from "../schemas/transactionReconciliationIssues.js";
@@ -135,6 +136,7 @@ declare const fullApi: ApiFromModules<{
   "schemas/documentReviewNotifications": typeof schemas_documentReviewNotifications;
   "schemas/kycDocuments": typeof schemas_kycDocuments;
   "schemas/notificationEvents": typeof schemas_notificationEvents;
+  "schemas/novuEnqueueCursor": typeof schemas_novuEnqueueCursor;
   "schemas/riskEvents": typeof schemas_riskEvents;
   "schemas/savingsPlanTemplates": typeof schemas_savingsPlanTemplates;
   "schemas/transactionReconciliationIssues": typeof schemas_transactionReconciliationIssues;
