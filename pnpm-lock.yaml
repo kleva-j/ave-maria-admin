@@ -310,7 +310,7 @@ importers:
         version: 3.17.0(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
       '@sentry/tanstackstart-react':
         specifier: ^10.57.0
-        version: 10.63.0(react@19.2.5)(rollup@4.60.2)
+        version: 10.63.0(@opentelemetry/core@2.8.0(@opentelemetry/api@1.9.1))(react@19.2.5)(rollup@4.60.2)
       '@tailwindcss/vite':
         specifier: ^4.1.18
         version: 4.2.4(vite@7.3.2(@types/node@24.12.2)(jiti@2.6.1)(lightningcss@1.32.0)(terser@5.46.2)(tsx@4.21.0)(yaml@2.8.3))
@@ -469,9 +469,6 @@ importers:
       '@posthog/convex':
         specifier: ^0.2.30
         version: 0.2.30(convex@1.36.1(react@19.2.5))
-      '@sentry/node':
-        specifier: ^10.57.0
-        version: 10.63.0(@opentelemetry/core@2.8.0(@opentelemetry/api@1.9.1))
       convex:
         specifier: 'catalog:'
         version: 1.36.1(react@19.2.5)
@@ -11117,7 +11114,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@sentry/tanstackstart-react@10.63.0(react@19.2.5)(rollup@4.60.2)':
+  '@sentry/tanstackstart-react@10.63.0(@opentelemetry/core@2.8.0(@opentelemetry/api@1.9.1))(react@19.2.5)(rollup@4.60.2)':
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@sentry/browser-utils': 10.63.0

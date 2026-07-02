@@ -1,61 +1,51 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-// Sentry SDK mock — vi.hoisted so it's constructed before the vi.mock factory
-// evaluates. All three exports are the ones sentry.ts touches; per-test we can
-// reconfigure their behavior (e.g., make captureException throw) via .mock*.
-const { initMock, captureExceptionMock, flushMock } = vi.hoisted(() => ({
-  initMock: vi.fn(),
-  captureExceptionMock: vi.fn(),
-  flushMock: vi.fn().mockResolvedValue(true),
-}));
-
-vi.mock("@sentry/node", () => ({
-  init: initMock,
-  captureException: captureExceptionMock,
-  flush: flushMock,
-}));
-
-// The module holds `initAttempted` + `initialized` flags at module scope, so
-// each test needs a fresh copy. resetModules() + dynamic import gives us that.
-async function loadSentryFresh() {
-  vi.resetModules();
-  return await import("../sentry");
-}
+// sentry.ts posts events directly via fetch (no @sentry SDK — see the
+// header comment in sentry.ts for the runtime-compat rationale). Tests mock
+// the global fetch so we can assert send-and-flush behavior without hitting
+// the network.
+const VALID_DSN = "https://public_key@o0.ingest.sentry.io/1234567";
 
 describe("packages/backend/convex/sentry", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
   beforeEach(() => {
-    initMock.mockReset();
-    captureExceptionMock.mockReset();
-    flushMock.mockReset().mockResolvedValue(true);
+    fetchMock = vi.fn().mockResolvedValue(new Response("", { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
     vi.spyOn(console, "error").mockImplementation(() => {});
   });
 
   afterEach(() => {
     vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
   });
 
   describe("captureCriticalError", () => {
-    it("never throws even when the SDK throws", async () => {
-      vi.stubEnv("SENTRY_DSN", "https://public@sentry.example/1");
-      captureExceptionMock.mockImplementation(() => {
-        throw new Error("sdk boom");
+    it("never throws even when fetch throws", async () => {
+      vi.stubEnv("SENTRY_DSN", VALID_DSN);
+      fetchMock.mockImplementation(() => {
+        throw new Error("network boom");
       });
 
-      const { captureCriticalError } = await loadSentryFresh();
+      const { captureCriticalError, flushSentry } = await import("../sentry");
 
-      // Must not propagate the SDK's throw — capture failures must not mask
-      // the original error path in the caller.
-      expect(() => captureCriticalError(new Error("original"))).not.toThrow();
-      expect(captureExceptionMock).toHaveBeenCalledTimes(1);
+      // Must not propagate the fetch failure — capture is best-effort.
+      expect(() =>
+        captureCriticalError(new Error("original"), { where: "test" }),
+      ).not.toThrow();
+      await flushSentry(50);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     });
   });
 
   describe("withSentry", () => {
-    it("flushes with a 2s timeout before re-throwing when the handler throws", async () => {
-      vi.stubEnv("SENTRY_DSN", "https://public@sentry.example/1");
+    it("captures + flushes before re-throwing when the handler throws", async () => {
+      vi.stubEnv("SENTRY_DSN", VALID_DSN);
 
-      const { withSentry } = await loadSentryFresh();
+      // Reset module state so pendingSends buffer is fresh.
+      vi.resetModules();
+      const { withSentry } = await import("../sentry");
 
       const wrapped = withSentry(async () => {
         throw new Error("handler failed");
@@ -63,41 +53,66 @@ describe("packages/backend/convex/sentry", () => {
 
       await expect(wrapped()).rejects.toThrow("handler failed");
 
-      // Capture the error and flush before the re-throw so events aren't
-      // lost when the Convex isolate is recycled after the throw propagates.
-      expect(captureExceptionMock).toHaveBeenCalledTimes(1);
-      expect(flushMock).toHaveBeenCalledWith(2000);
+      // fetch must be called (event sent) before the handler's throw
+      // re-propagates, so the event isn't lost when the isolate recycles.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
 
-      // Ordering: capture must be called before flush so the event is in the
-      // buffer at flush time.
-      const captureOrder = captureExceptionMock.mock.invocationCallOrder[0]!;
-      const flushOrder = flushMock.mock.invocationCallOrder[0]!;
-      expect(captureOrder).toBeLessThan(flushOrder);
+      // POST'd to the DSN's envelope endpoint with a Sentry auth header.
+      const [url, init] = fetchMock.mock.calls[0]!;
+      expect(url).toBe("https://o0.ingest.sentry.io/api/1234567/envelope/");
+      const headers = (init as RequestInit).headers as Record<string, string>;
+      expect(headers["X-Sentry-Auth"]).toContain("sentry_key=public_key");
+      expect(headers["Content-Type"]).toBe("application/x-sentry-envelope");
     });
   });
 
   describe("no-op when SENTRY_DSN unset", () => {
-    it("does not init, capture, or throw on either helper", async () => {
+    it("does not call fetch on either helper", async () => {
       vi.stubEnv("SENTRY_DSN", "");
+      vi.resetModules();
 
-      const { captureCriticalError, withSentry } = await loadSentryFresh();
+      const { captureCriticalError, withSentry, flushSentry } = await import(
+        "../sentry"
+      );
 
-      // captureCriticalError: called → should not init or capture.
+      // Direct capture: silent.
       expect(() => captureCriticalError(new Error("x"))).not.toThrow();
 
-      // withSentry: wrapped success returns normally; wrapped throw re-throws
-      // without touching the SDK.
+      // withSentry on a passing handler: returns normally, no fetch.
       const wrappedOk = withSentry(async () => 42);
       await expect(wrappedOk()).resolves.toBe(42);
 
+      // withSentry on a throwing handler: re-throws without touching fetch.
       const wrappedErr = withSentry(async () => {
         throw new Error("y");
       });
       await expect(wrappedErr()).rejects.toThrow("y");
 
-      expect(initMock).not.toHaveBeenCalled();
-      expect(captureExceptionMock).not.toHaveBeenCalled();
-      expect(flushMock).not.toHaveBeenCalled();
+      await flushSentry(10);
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("self-hosted DSN with path prefix", () => {
+    it("preserves the path prefix in the envelope URL", async () => {
+      // Self-hosted Sentry mounted under a subpath, e.g. /sentry.
+      vi.stubEnv("SENTRY_DSN", "https://key@sentry.example.com/sentry/42");
+      vi.resetModules();
+
+      const { withSentry } = await import("../sentry");
+
+      const wrapped = withSentry(async () => {
+        throw new Error("self-hosted");
+      });
+
+      await expect(wrapped()).rejects.toThrow("self-hosted");
+
+      const [url] = fetchMock.mock.calls[0]!;
+      // The path prefix ("/sentry") must sit BEFORE "/api/{projectId}/envelope/"
+      // — dropping it would POST to the wrong endpoint on self-hosted deploys.
+      expect(url).toBe(
+        "https://sentry.example.com/sentry/api/42/envelope/",
+      );
     });
   });
 });
