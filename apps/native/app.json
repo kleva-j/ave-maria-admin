@@ -14,9 +14,8 @@
         "@sentry/react-native/expo",
         {
           "url": "https://sentry.io/",
-          "organization": "YOUR_ORG_SLUG",
-          "project": "avm-daily-native",
-          "disableAutoUpload": true
+          "organization": "michael-0b",
+          "project": "avm-daily-native"
         }
       ]
     ],

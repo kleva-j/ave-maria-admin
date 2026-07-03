@@ -1,4 +1,4 @@
-import { Stack, router, type RelativePathString } from "expo-router";
+import { Stack, router } from "expo-router";
 import { Button, Surface } from "heroui-native";
 import { Text, View } from "react-native";
 
@@ -34,7 +34,7 @@ export default function ErrorBoundary({ error }: { error: Error }) {
             <Text className="text-muted text-sm text-center mb-4">
               {detail}
             </Text>
-            <Button size="sm" onPress={() => router.replace("/" as RelativePathString)}>
+            <Button size="sm" onPress={() => router.replace("/")}>
               Go Home
             </Button>
           </Surface>

@@ -16,9 +16,7 @@ import { Sentry, initSentry } from "@/lib/sentry";
 // frame. No-op when EXPO_PUBLIC_SENTRY_DSN is unset.
 initSentry();
 
-export const unstable_settings = {
-  initialRouteName: "(drawer)",
-};
+export const unstable_settings = { initialRouteName: "(drawer)" };
 
 const convex = new ConvexReactClient(env.EXPO_PUBLIC_CONVEX_URL, {
   unsavedChangesWarning: false,
@@ -30,7 +28,10 @@ function StackLayout() {
       <NavigationTracker />
       <Stack screenOptions={{}}>
         <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ title: "Modal", presentation: "modal" }} />
+        <Stack.Screen
+          name="modal"
+          options={{ title: "Modal", presentation: "modal" }}
+        />
       </Stack>
     </>
   );
@@ -39,19 +40,19 @@ function StackLayout() {
 function Layout() {
   return (
     <PostHogProvider>
-    <ConvexProvider client={convex}>
-      <GestureHandlerRootView style={{ flex: 1 }}>
-        <KeyboardProvider>
-          <AppThemeProvider>
-            <HeroUINativeProvider>
-              <NovuInboxProvider>
-                <StackLayout />
-              </NovuInboxProvider>
-            </HeroUINativeProvider>
-          </AppThemeProvider>
-        </KeyboardProvider>
-      </GestureHandlerRootView>
-    </ConvexProvider>
+      <ConvexProvider client={convex}>
+        <GestureHandlerRootView style={{ flex: 1 }}>
+          <KeyboardProvider>
+            <AppThemeProvider>
+              <HeroUINativeProvider>
+                <NovuInboxProvider>
+                  <StackLayout />
+                </NovuInboxProvider>
+              </HeroUINativeProvider>
+            </AppThemeProvider>
+          </KeyboardProvider>
+        </GestureHandlerRootView>
+      </ConvexProvider>
     </PostHogProvider>
   );
 }
