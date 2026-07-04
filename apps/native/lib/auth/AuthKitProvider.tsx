@@ -135,13 +135,13 @@ export function AuthKitProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         await saveRefreshToken(result.refresh_token);
         applyAuthResult(result);
-      } catch (err) {
+      } catch {
         if (cancelled) return;
         // Stored refresh token no longer valid — drop it and drop the user to
         // the login screen. Silent because this fires on every cold boot and
         // an expired token isn't an error worth surfacing.
         await clearRefreshToken().catch(() => undefined);
-        clearAuth(err instanceof WorkOSAuthError ? err.message : null);
+        clearAuth();
       }
     })();
     return () => {
@@ -274,7 +274,9 @@ export function AuthKitProvider({ children }: { children: ReactNode }) {
 function useAuthContext(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) {
-    throw new Error("useAuth must be used inside <AuthKitProvider>");
+    throw new Error(
+      "AuthKitProvider missing — useAuth / useAccessToken must be called inside <AuthKitProvider>",
+    );
   }
   return ctx;
 }
