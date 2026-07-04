@@ -1,6 +1,6 @@
 import "@/global.css";
 import { env } from "@avm-daily/env/native";
-import { ConvexProvider, ConvexReactClient } from "convex/react";
+import { ConvexProviderWithAuth, ConvexReactClient } from "convex/react";
 import { Stack } from "expo-router";
 import { HeroUINativeProvider } from "heroui-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -10,6 +10,8 @@ import { NavigationTracker } from "@/contexts/navigation-tracker";
 import { AppThemeProvider } from "@/contexts/app-theme-context";
 import { PostHogProvider } from "@/contexts/posthog-context";
 import { NovuInboxProvider } from "@/components/novu-provider";
+import { AuthKitProvider } from "@/lib/auth/AuthKitProvider";
+import { useAuthForConvex } from "@/lib/auth/useAuthForConvex";
 import { Sentry, initSentry } from "@/lib/sentry";
 
 // Initialize at module top so Sentry registers before the first render
@@ -40,19 +42,21 @@ function StackLayout() {
 function Layout() {
   return (
     <PostHogProvider>
-      <ConvexProvider client={convex}>
-        <GestureHandlerRootView style={{ flex: 1 }}>
-          <KeyboardProvider>
-            <AppThemeProvider>
-              <HeroUINativeProvider>
-                <NovuInboxProvider>
-                  <StackLayout />
-                </NovuInboxProvider>
-              </HeroUINativeProvider>
-            </AppThemeProvider>
-          </KeyboardProvider>
-        </GestureHandlerRootView>
-      </ConvexProvider>
+      <AuthKitProvider>
+        <ConvexProviderWithAuth client={convex} useAuth={useAuthForConvex}>
+          <GestureHandlerRootView style={{ flex: 1 }}>
+            <KeyboardProvider>
+              <AppThemeProvider>
+                <HeroUINativeProvider>
+                  <NovuInboxProvider>
+                    <StackLayout />
+                  </NovuInboxProvider>
+                </HeroUINativeProvider>
+              </AppThemeProvider>
+            </KeyboardProvider>
+          </GestureHandlerRootView>
+        </ConvexProviderWithAuth>
+      </AuthKitProvider>
     </PostHogProvider>
   );
 }
