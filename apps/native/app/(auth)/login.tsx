@@ -27,7 +27,7 @@ export default function LoginScreen() {
     <Container isScrollable={false}>
       <View className="flex-1 justify-center items-center px-6 gap-3">
         <Text className="text-foreground font-semibold text-2xl">Welcome</Text>
-        <Text className="text-muted text-base mb-6">Sign in to continue</Text>
+        <Text className="text-muted text-base">Sign in to continue</Text>
 
         <View className="w-full items-stretch mt-4">
           {loading ? (
