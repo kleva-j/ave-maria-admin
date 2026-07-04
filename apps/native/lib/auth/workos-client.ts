@@ -26,7 +26,7 @@ export interface AuthenticateResponse {
   access_token: string;
   refresh_token: string;
   organization_id: string | null;
-  impersonator: unknown;
+  impersonator: { email: string; reason?: string | null } | null;
 }
 
 export class WorkOSAuthError extends Error {
@@ -59,15 +59,25 @@ function requireClientId(): string {
 async function postAuthenticate(
   body: Record<string, string>,
 ): Promise<AuthenticateResponse> {
-  const res = await fetch(`${baseUrl()}/user_management/authenticate`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify(body),
-    signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
-  });
+  // Convert transport failures (timeout, DNS, offline) into WorkOSAuthError
+  // with status 0 so callers can distinguish "WorkOS rejected the token"
+  // (4xx) from "we couldn't reach WorkOS at all". Cold-boot hydration uses
+  // this to keep the stored refresh token when the failure is network-side.
+  let res: Response;
+  try {
+    res = await fetch(`${baseUrl()}/user_management/authenticate`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "application/json",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "network error";
+    throw new WorkOSAuthError(0, "network", message);
+  }
 
   if (!res.ok) {
     let code = "unknown_error";

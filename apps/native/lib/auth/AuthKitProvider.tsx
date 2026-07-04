@@ -47,6 +47,9 @@ export const isAuthConfigured = Boolean(env.EXPO_PUBLIC_WORKOS_CLIENT_ID);
  */
 const discovery: AuthSession.DiscoveryDocument = {
   authorizationEndpoint: `https://${env.EXPO_PUBLIC_WORKOS_API_HOSTNAME}/user_management/authorize`,
+  // Unused at runtime — kept only so AuthSession.DiscoveryDocument type-checks
+  // and so a stray request.performTokenRequestAsync would hit the same
+  // endpoint we call from workos-client.ts instead of a made-up path.
   tokenEndpoint: `https://${env.EXPO_PUBLIC_WORKOS_API_HOSTNAME}/user_management/authenticate`,
 };
 
@@ -81,6 +84,12 @@ export function AuthKitProvider({ children }: { children: ReactNode }) {
   // bridge; Convex may call fetchAccessToken frequently).
   const refreshTokenRef = useRef<string | null>(null);
 
+  // Mirror state.accessToken in a ref so getAccessToken() can return the
+  // current value without depending on state — a state-dep memo would recreate
+  // fetchAccessToken on every rotation, which Convex treats as an auth-config
+  // change and re-registers auth on. Ref keeps the callback identity stable.
+  const accessTokenRef = useRef<string | null>(null);
+
   // Serialize concurrent refresh() calls. Convex's ConvexProviderWithAuth may
   // fire multiple fetchAccessToken({ forceRefreshToken: true }) at once on a
   // reconnect; without this we'd race the WorkOS refresh endpoint and one call
@@ -94,6 +103,7 @@ export function AuthKitProvider({ children }: { children: ReactNode }) {
       refresh_token: string;
     }) => {
       refreshTokenRef.current = result.refresh_token;
+      accessTokenRef.current = result.access_token;
       setState({
         user: result.user,
         accessToken: result.access_token,
@@ -106,6 +116,7 @@ export function AuthKitProvider({ children }: { children: ReactNode }) {
 
   const clearAuth = useCallback((error: string | null = null) => {
     refreshTokenRef.current = null;
+    accessTokenRef.current = null;
     setState({ user: null, accessToken: null, loading: false, error });
   }, []);
 
@@ -135,12 +146,21 @@ export function AuthKitProvider({ children }: { children: ReactNode }) {
         if (cancelled) return;
         await saveRefreshToken(result.refresh_token);
         applyAuthResult(result);
-      } catch {
+      } catch (err) {
         if (cancelled) return;
-        // Stored refresh token no longer valid — drop it and drop the user to
-        // the login screen. Silent because this fires on every cold boot and
-        // an expired token isn't an error worth surfacing.
-        await clearRefreshToken().catch(() => undefined);
+        // Distinguish "WorkOS rejected the token" from "we couldn't reach
+        // WorkOS at all" — workos-client wraps network / timeout failures as
+        // WorkOSAuthError with status 0. Only drop the stored refresh token
+        // on an actual 4xx rejection; a cold boot on a flaky network keeps
+        // the token so the next launch can re-hydrate. Either way we land on
+        // the login screen silently — no state.error surfaced.
+        const rejected =
+          err instanceof WorkOSAuthError &&
+          err.status >= 400 &&
+          err.status < 500;
+        if (rejected) {
+          await clearRefreshToken().catch(() => undefined);
+        }
         clearAuth();
       }
     })();
@@ -254,8 +274,10 @@ export function AuthKitProvider({ children }: { children: ReactNode }) {
   }, [clearAuth]);
 
   const getAccessToken = useCallback(async () => {
-    return state.accessToken;
-  }, [state.accessToken]);
+    // Read via ref so this callback's identity is stable — Convex treats a
+    // new fetchAccessToken as an auth-config change and re-registers auth.
+    return accessTokenRef.current;
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({

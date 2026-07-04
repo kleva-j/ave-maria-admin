@@ -23,12 +23,8 @@ export function useAuthForConvex() {
   const fetchAccessToken = useCallback(
     async (args: { forceRefreshToken: boolean }) => {
       try {
-        if (args.forceRefreshToken) {
-          const refreshed = await refresh();
-          return refreshed ?? null;
-        }
-        const token = await getAccessToken();
-        return token ?? null;
+        if (args.forceRefreshToken) return await refresh();
+        return await getAccessToken();
       } catch {
         return null;
       }
