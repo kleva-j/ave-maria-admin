@@ -1,6 +1,7 @@
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Text, View } from "react-native";
 import { Button } from "heroui-native";
 
+import { Container } from "@/components/container";
 import { isAuthConfigured, useAuth } from "@/lib/auth/AuthKitProvider";
 
 export default function LoginScreen() {
@@ -8,45 +9,40 @@ export default function LoginScreen() {
 
   if (!isAuthConfigured) {
     return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Sign in unavailable</Text>
-        <Text style={styles.body}>
-          Set EXPO_PUBLIC_WORKOS_CLIENT_ID and EXPO_PUBLIC_WORKOS_REDIRECT_URI
-          before running this build.
-        </Text>
-      </View>
+      <Container isScrollable={false}>
+        <View className="flex-1 justify-center items-center px-6 gap-3">
+          <Text className="text-foreground font-semibold text-2xl">
+            Sign in unavailable
+          </Text>
+          <Text className="text-muted text-sm text-center">
+            Set EXPO_PUBLIC_WORKOS_CLIENT_ID and EXPO_PUBLIC_WORKOS_REDIRECT_URI
+            before running this build.
+          </Text>
+        </View>
+      </Container>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Welcome</Text>
-      <Text style={styles.subtitle}>Sign in to continue</Text>
+    <Container isScrollable={false}>
+      <View className="flex-1 justify-center items-center px-6 gap-3">
+        <Text className="text-foreground font-semibold text-2xl">Welcome</Text>
+        <Text className="text-muted text-base mb-6">Sign in to continue</Text>
 
-      <View style={styles.actions}>
-        {loading ? (
-          <ActivityIndicator />
-        ) : (
-          <Button onPress={signIn}>Sign in with WorkOS</Button>
-        )}
+        <View className="w-full items-stretch mt-4">
+          {loading ? (
+            <ActivityIndicator />
+          ) : (
+            <Button onPress={signIn}>
+              <Button.Label>Sign in with WorkOS</Button.Label>
+            </Button>
+          )}
+        </View>
+
+        {error ? (
+          <Text className="text-danger text-sm text-center mt-4">{error}</Text>
+        ) : null}
       </View>
-
-      {error ? <Text style={styles.error}>{error}</Text> : null}
-    </View>
+    </Container>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
-    padding: 24,
-    gap: 12,
-  },
-  title: { fontSize: 28, fontWeight: "600" },
-  subtitle: { fontSize: 16, opacity: 0.6, marginBottom: 24 },
-  body: { fontSize: 14, textAlign: "center", opacity: 0.7 },
-  actions: { width: "100%", alignItems: "stretch", marginTop: 16 },
-  error: { color: "#dc2626", marginTop: 16, textAlign: "center" },
-});

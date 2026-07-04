@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { ReactNode } from "react";
-import { ActivityIndicator, StyleSheet, View } from "react-native";
+import { ActivityIndicator, View } from "react-native";
 import { useRouter, useSegments } from "expo-router";
 
 import { isAuthConfigured, useAuth } from "@/lib/auth/AuthKitProvider";
@@ -40,7 +40,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   if (isAuthConfigured && loading) {
     return (
-      <View style={styles.loading}>
+      <View className="flex-1 justify-center items-center bg-background">
         <ActivityIndicator />
       </View>
     );
@@ -48,7 +48,3 @@ export function AuthGate({ children }: { children: ReactNode }) {
 
   return <>{children}</>;
 }
-
-const styles = StyleSheet.create({
-  loading: { flex: 1, justifyContent: "center", alignItems: "center" },
-});
