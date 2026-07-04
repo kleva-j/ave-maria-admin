@@ -13,6 +13,7 @@ import { NovuInboxProvider } from "@/components/novu-provider";
 import { AuthKitProvider } from "@/lib/auth/AuthKitProvider";
 import { useAuthForConvex } from "@/lib/auth/useAuthForConvex";
 import { Sentry, initSentry } from "@/lib/sentry";
+import { AuthGate } from "@/lib/auth/AuthGate";
 
 // Initialize at module top so Sentry registers before the first render
 // frame. No-op when EXPO_PUBLIC_SENTRY_DSN is unset.
@@ -29,6 +30,7 @@ function StackLayout() {
     <>
       <NavigationTracker />
       <Stack screenOptions={{}}>
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
         <Stack.Screen
           name="modal"
@@ -49,7 +51,9 @@ function Layout() {
               <AppThemeProvider>
                 <HeroUINativeProvider>
                   <NovuInboxProvider>
-                    <StackLayout />
+                    <AuthGate>
+                      <StackLayout />
+                    </AuthGate>
                   </NovuInboxProvider>
                 </HeroUINativeProvider>
               </AppThemeProvider>
