@@ -20,6 +20,7 @@ export const env = createEnv({
     EXPO_PUBLIC_WORKOS_CLIENT_ID: z.string().min(1).optional(),
     EXPO_PUBLIC_WORKOS_REDIRECT_URI: z.url().optional(),
     EXPO_PUBLIC_WORKOS_API_HOSTNAME: z.string().min(1).default("api.workos.com"),
+    EXPO_PUBLIC_WORKOS_CONNECTION_ID: z.string().min(1).optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

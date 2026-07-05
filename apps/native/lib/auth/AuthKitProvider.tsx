@@ -191,15 +191,23 @@ export function AuthKitProvider({ children }: { children: ReactNode }) {
 
     setState((prev) => ({ ...prev, loading: true, error: null }));
 
+    // WorkOS /user_management/authorize does NOT accept OIDC-style `scope`
+    // params — sending them redirects the hosted UI to error.workos.com.
+    // Instead, route the flow via `provider=authkit` (renders the AuthKit
+    // chooser with every enabled provider) or `connection_id=...` (skips the
+    // chooser and goes straight to a specific SSO connection). Matches the
+    // web adapter's `workos.userManagement.getAuthorizationUrl({provider: "authkit"})`
+    // call in apps/web/src/server/hosted-auth.functions.ts.
+    const connectionId = env.EXPO_PUBLIC_WORKOS_CONNECTION_ID;
     const request = new AuthSession.AuthRequest({
       clientId,
       redirectUri,
       responseType: AuthSession.ResponseType.Code,
-      // openid ensures WorkOS returns an id_token-shaped payload consistent
-      // with the User Management issuer the backend verifies.
-      scopes: ["openid", "profile", "email", "offline_access"],
       usePKCE: true,
       codeChallengeMethod: AuthSession.CodeChallengeMethod.S256,
+      extraParams: connectionId
+        ? { connection_id: connectionId }
+        : { provider: "authkit" },
     });
 
     try {
