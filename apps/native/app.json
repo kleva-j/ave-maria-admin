@@ -17,7 +17,9 @@
           "organization": "michael-0b",
           "project": "avm-daily-native"
         }
-      ]
+      ],
+      "expo-web-browser",
+      "expo-secure-store"
     ],
     "experiments": {
       "typedRoutes": true,
