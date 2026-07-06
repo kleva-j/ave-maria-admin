@@ -63,6 +63,14 @@ async function postAuthenticate(
   // with status 0 so callers can distinguish "WorkOS rejected the token"
   // (4xx) from "we couldn't reach WorkOS at all". Cold-boot hydration uses
   // this to keep the stored refresh token when the failure is network-side.
+  //
+  // AbortSignal.timeout() is unavailable in Hermes, so wire up AbortController
+  // + setTimeout by hand; behavior is identical from fetch's perspective.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(
+    () => controller.abort(),
+    WORKOS_TIMEOUT_MS,
+  );
   let res: Response;
   try {
     res = await fetch(`${baseUrl()}/user_management/authenticate`, {
@@ -72,11 +80,13 @@ async function postAuthenticate(
         Accept: "application/json",
       },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(WORKOS_TIMEOUT_MS),
+      signal: controller.signal,
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : "network error";
     throw new WorkOSAuthError(0, "network", message);
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   if (!res.ok) {
