@@ -22,7 +22,8 @@ import { UserShell } from "@/components/user-shell";
  *      hydrates.
  *   2. The component subscribes to the PostHog flag; if the cohort rollout
  *      turns the user off after mount (mid-session flag change), a
- *      client-side redirect fires.
+ *      client-side redirect fires. `undefined` is treated as "still loading"
+ *      so users aren't bounced before their cohort resolves.
  */
 export const Route = createFileRoute("/_protected/user")({
   beforeLoad: () => {

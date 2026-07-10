@@ -27,8 +27,10 @@ import { Route as ProtectedAdminReconciliationRouteImport } from './routes/_prot
 import { Route as ProtectedAdminKycRouteImport } from './routes/_protected/admin/kyc'
 import { Route as ProtectedAdminBankVerificationRouteImport } from './routes/_protected/admin/bank-verification'
 import { Route as ProtectedAdminAlertsRouteImport } from './routes/_protected/admin/alerts'
+import { Route as ProtectedUserWithdrawalsIndexRouteImport } from './routes/_protected/user/withdrawals/index'
 import { Route as ProtectedUserTransactionsIndexRouteImport } from './routes/_protected/user/transactions/index'
 import { Route as ProtectedUserPlansIndexRouteImport } from './routes/_protected/user/plans/index'
+import { Route as ProtectedUserWithdrawalsNewRouteImport } from './routes/_protected/user/withdrawals/new'
 import { Route as ProtectedUserPlansNewRouteImport } from './routes/_protected/user/plans/new'
 import { Route as ProtectedUserPlansPlanIdIndexRouteImport } from './routes/_protected/user/plans/$planId/index'
 import { Route as ProtectedUserPlansPlanIdTopUpRouteImport } from './routes/_protected/user/plans/$planId/top-up'
@@ -125,6 +127,12 @@ const ProtectedAdminAlertsRoute = ProtectedAdminAlertsRouteImport.update({
   path: '/alerts',
   getParentRoute: () => ProtectedAdminRoute,
 } as any)
+const ProtectedUserWithdrawalsIndexRoute =
+  ProtectedUserWithdrawalsIndexRouteImport.update({
+    id: '/withdrawals/',
+    path: '/withdrawals/',
+    getParentRoute: () => ProtectedUserRoute,
+  } as any)
 const ProtectedUserTransactionsIndexRoute =
   ProtectedUserTransactionsIndexRouteImport.update({
     id: '/transactions/',
@@ -136,6 +144,12 @@ const ProtectedUserPlansIndexRoute = ProtectedUserPlansIndexRouteImport.update({
   path: '/plans/',
   getParentRoute: () => ProtectedUserRoute,
 } as any)
+const ProtectedUserWithdrawalsNewRoute =
+  ProtectedUserWithdrawalsNewRouteImport.update({
+    id: '/withdrawals/new',
+    path: '/withdrawals/new',
+    getParentRoute: () => ProtectedUserRoute,
+  } as any)
 const ProtectedUserPlansNewRoute = ProtectedUserPlansNewRouteImport.update({
   id: '/plans/new',
   path: '/plans/new',
@@ -173,8 +187,10 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof ProtectedAdminIndexRoute
   '/user/': typeof ProtectedUserIndexRoute
   '/user/plans/new': typeof ProtectedUserPlansNewRoute
+  '/user/withdrawals/new': typeof ProtectedUserWithdrawalsNewRoute
   '/user/plans/': typeof ProtectedUserPlansIndexRoute
   '/user/transactions/': typeof ProtectedUserTransactionsIndexRoute
+  '/user/withdrawals/': typeof ProtectedUserWithdrawalsIndexRoute
   '/user/plans/$planId/top-up': typeof ProtectedUserPlansPlanIdTopUpRoute
   '/user/plans/$planId/': typeof ProtectedUserPlansPlanIdIndexRoute
 }
@@ -195,8 +211,10 @@ export interface FileRoutesByTo {
   '/admin': typeof ProtectedAdminIndexRoute
   '/user': typeof ProtectedUserIndexRoute
   '/user/plans/new': typeof ProtectedUserPlansNewRoute
+  '/user/withdrawals/new': typeof ProtectedUserWithdrawalsNewRoute
   '/user/plans': typeof ProtectedUserPlansIndexRoute
   '/user/transactions': typeof ProtectedUserTransactionsIndexRoute
+  '/user/withdrawals': typeof ProtectedUserWithdrawalsIndexRoute
   '/user/plans/$planId/top-up': typeof ProtectedUserPlansPlanIdTopUpRoute
   '/user/plans/$planId': typeof ProtectedUserPlansPlanIdIndexRoute
 }
@@ -221,8 +239,10 @@ export interface FileRoutesById {
   '/_protected/admin/': typeof ProtectedAdminIndexRoute
   '/_protected/user/': typeof ProtectedUserIndexRoute
   '/_protected/user/plans/new': typeof ProtectedUserPlansNewRoute
+  '/_protected/user/withdrawals/new': typeof ProtectedUserWithdrawalsNewRoute
   '/_protected/user/plans/': typeof ProtectedUserPlansIndexRoute
   '/_protected/user/transactions/': typeof ProtectedUserTransactionsIndexRoute
+  '/_protected/user/withdrawals/': typeof ProtectedUserWithdrawalsIndexRoute
   '/_protected/user/plans/$planId/top-up': typeof ProtectedUserPlansPlanIdTopUpRoute
   '/_protected/user/plans/$planId/': typeof ProtectedUserPlansPlanIdIndexRoute
 }
@@ -247,8 +267,10 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/user/'
     | '/user/plans/new'
+    | '/user/withdrawals/new'
     | '/user/plans/'
     | '/user/transactions/'
+    | '/user/withdrawals/'
     | '/user/plans/$planId/top-up'
     | '/user/plans/$planId/'
   fileRoutesByTo: FileRoutesByTo
@@ -269,8 +291,10 @@ export interface FileRouteTypes {
     | '/admin'
     | '/user'
     | '/user/plans/new'
+    | '/user/withdrawals/new'
     | '/user/plans'
     | '/user/transactions'
+    | '/user/withdrawals'
     | '/user/plans/$planId/top-up'
     | '/user/plans/$planId'
   id:
@@ -294,8 +318,10 @@ export interface FileRouteTypes {
     | '/_protected/admin/'
     | '/_protected/user/'
     | '/_protected/user/plans/new'
+    | '/_protected/user/withdrawals/new'
     | '/_protected/user/plans/'
     | '/_protected/user/transactions/'
+    | '/_protected/user/withdrawals/'
     | '/_protected/user/plans/$planId/top-up'
     | '/_protected/user/plans/$planId/'
   fileRoutesById: FileRoutesById
@@ -438,6 +464,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedAdminAlertsRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
+    '/_protected/user/withdrawals/': {
+      id: '/_protected/user/withdrawals/'
+      path: '/withdrawals'
+      fullPath: '/user/withdrawals/'
+      preLoaderRoute: typeof ProtectedUserWithdrawalsIndexRouteImport
+      parentRoute: typeof ProtectedUserRoute
+    }
     '/_protected/user/transactions/': {
       id: '/_protected/user/transactions/'
       path: '/transactions'
@@ -450,6 +483,13 @@ declare module '@tanstack/react-router' {
       path: '/plans'
       fullPath: '/user/plans/'
       preLoaderRoute: typeof ProtectedUserPlansIndexRouteImport
+      parentRoute: typeof ProtectedUserRoute
+    }
+    '/_protected/user/withdrawals/new': {
+      id: '/_protected/user/withdrawals/new'
+      path: '/withdrawals/new'
+      fullPath: '/user/withdrawals/new'
+      preLoaderRoute: typeof ProtectedUserWithdrawalsNewRouteImport
       parentRoute: typeof ProtectedUserRoute
     }
     '/_protected/user/plans/new': {
@@ -503,8 +543,10 @@ const ProtectedAdminRouteWithChildren = ProtectedAdminRoute._addFileChildren(
 interface ProtectedUserRouteChildren {
   ProtectedUserIndexRoute: typeof ProtectedUserIndexRoute
   ProtectedUserPlansNewRoute: typeof ProtectedUserPlansNewRoute
+  ProtectedUserWithdrawalsNewRoute: typeof ProtectedUserWithdrawalsNewRoute
   ProtectedUserPlansIndexRoute: typeof ProtectedUserPlansIndexRoute
   ProtectedUserTransactionsIndexRoute: typeof ProtectedUserTransactionsIndexRoute
+  ProtectedUserWithdrawalsIndexRoute: typeof ProtectedUserWithdrawalsIndexRoute
   ProtectedUserPlansPlanIdTopUpRoute: typeof ProtectedUserPlansPlanIdTopUpRoute
   ProtectedUserPlansPlanIdIndexRoute: typeof ProtectedUserPlansPlanIdIndexRoute
 }
@@ -512,8 +554,10 @@ interface ProtectedUserRouteChildren {
 const ProtectedUserRouteChildren: ProtectedUserRouteChildren = {
   ProtectedUserIndexRoute: ProtectedUserIndexRoute,
   ProtectedUserPlansNewRoute: ProtectedUserPlansNewRoute,
+  ProtectedUserWithdrawalsNewRoute: ProtectedUserWithdrawalsNewRoute,
   ProtectedUserPlansIndexRoute: ProtectedUserPlansIndexRoute,
   ProtectedUserTransactionsIndexRoute: ProtectedUserTransactionsIndexRoute,
+  ProtectedUserWithdrawalsIndexRoute: ProtectedUserWithdrawalsIndexRoute,
   ProtectedUserPlansPlanIdTopUpRoute: ProtectedUserPlansPlanIdTopUpRoute,
   ProtectedUserPlansPlanIdIndexRoute: ProtectedUserPlansPlanIdIndexRoute,
 }
