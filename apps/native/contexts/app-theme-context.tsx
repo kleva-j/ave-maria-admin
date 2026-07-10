@@ -1,46 +1,71 @@
-import React, { createContext, useCallback, useContext, useMemo } from "react";
-import { Uniwind, useUniwind } from "uniwind";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { Uniwind } from "uniwind";
 
-type ThemeName = "light" | "dark";
+import { DEFAULT_THEME, THEMES, type ThemeName, type ThemeTokens } from "@avm-daily/ui/lib/themes";
+
+/**
+ * AVM Daily has three palettes per DESIGN.md:
+ *  - midnight (dark navy, default)
+ *  - indigo   (dark purple)
+ *  - daylight (light blue)
+ *
+ * Uniwind still tracks light/dark for its own base tokens (layout, spacing);
+ * we mirror light/dark from the selected palette so utility classes that
+ * read theme-scoped tokens continue to resolve.
+ *
+ * Palette-scoped colors are exposed on `tokens` — RN components read from
+ * `useAppTheme().tokens.primary` rather than classNames for palette-varying
+ * colors, mirroring the design source's `t.primary` pattern.
+ */
 
 type AppThemeContextType = {
-  currentTheme: string;
-  isLight: boolean;
+  palette: ThemeName;
+  tokens: ThemeTokens;
   isDark: boolean;
-  setTheme: (theme: ThemeName) => void;
+  isLight: boolean;
+  setPalette: (palette: ThemeName) => void;
+  cyclePalette: () => void;
   toggleTheme: () => void;
 };
 
 const AppThemeContext = createContext<AppThemeContextType | undefined>(undefined);
 
+const PALETTE_CYCLE: ThemeName[] = ["midnight", "indigo", "daylight"];
+
 export const AppThemeProvider = ({ children }: { children: React.ReactNode }) => {
-  const { theme } = useUniwind();
+  const [palette, setPaletteState] = useState<ThemeName>(DEFAULT_THEME);
+  const tokens = THEMES[palette];
 
-  const isLight = useMemo(() => {
-    return theme === "light";
-  }, [theme]);
+  useEffect(() => {
+    Uniwind.setTheme(tokens.dark ? "dark" : "light");
+  }, [tokens.dark]);
 
-  const isDark = useMemo(() => {
-    return theme === "dark";
-  }, [theme]);
+  const setPalette = useCallback((next: ThemeName) => {
+    setPaletteState(next);
+  }, []);
 
-  const setTheme = useCallback((newTheme: ThemeName) => {
-    Uniwind.setTheme(newTheme);
+  const cyclePalette = useCallback(() => {
+    setPaletteState((prev) => {
+      const idx = PALETTE_CYCLE.indexOf(prev);
+      return PALETTE_CYCLE[(idx + 1) % PALETTE_CYCLE.length]!;
+    });
   }, []);
 
   const toggleTheme = useCallback(() => {
-    Uniwind.setTheme(theme === "light" ? "dark" : "light");
-  }, [theme]);
+    setPaletteState((prev) => (THEMES[prev].dark ? "daylight" : "midnight"));
+  }, []);
 
-  const value = useMemo(
+  const value = useMemo<AppThemeContextType>(
     () => ({
-      currentTheme: theme,
-      isLight,
-      isDark,
-      setTheme,
+      palette,
+      tokens,
+      isDark: tokens.dark,
+      isLight: !tokens.dark,
+      setPalette,
+      cyclePalette,
       toggleTheme,
     }),
-    [theme, isLight, isDark, setTheme, toggleTheme],
+    [palette, tokens, setPalette, cyclePalette, toggleTheme],
   );
 
   return <AppThemeContext.Provider value={value}>{children}</AppThemeContext.Provider>;
@@ -52,4 +77,9 @@ export function useAppTheme() {
     throw new Error("useAppTheme must be used within AppThemeProvider");
   }
   return context;
+}
+
+/** Convenience — get the active theme's tokens without wrapping in context. */
+export function useThemeTokens(): ThemeTokens {
+  return useAppTheme().tokens;
 }
