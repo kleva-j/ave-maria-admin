@@ -28,12 +28,13 @@ function RouteComponent() {
     select: ({ location }) => location.pathname,
   });
 
-  // /_protected is the pathless parent of both /dashboard and /admin/*. Admin
-  // routes render their own chrome via AdminShell, so the consumer top-bar +
-  // bell must not wrap them — render a bare Outlet there.
-  const isAdmin = pathname.startsWith("/admin");
+  // /_protected is the pathless parent of /dashboard, /admin/*, and /user/*.
+  // Admin routes render their own chrome via AdminShell and user routes via
+  // UserShell — the consumer top-bar + bell must not double-wrap either.
+  const isShelfOwned =
+    pathname.startsWith("/admin") || pathname.startsWith("/user");
 
-  if (isAdmin) {
+  if (isShelfOwned) {
     return (
       <>
         <PostHogIdentity />

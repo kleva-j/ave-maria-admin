@@ -13,6 +13,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
+    "@avm-daily/application": "workspace:*",
     "@avm-daily/backend": "workspace:*",
     "@avm-daily/domain": "workspace:*",
     "@avm-daily/env": "workspace:*",
