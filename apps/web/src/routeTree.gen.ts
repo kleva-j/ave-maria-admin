@@ -27,6 +27,10 @@ import { Route as ProtectedAdminReconciliationRouteImport } from './routes/_prot
 import { Route as ProtectedAdminKycRouteImport } from './routes/_protected/admin/kyc'
 import { Route as ProtectedAdminBankVerificationRouteImport } from './routes/_protected/admin/bank-verification'
 import { Route as ProtectedAdminAlertsRouteImport } from './routes/_protected/admin/alerts'
+import { Route as ProtectedUserPlansIndexRouteImport } from './routes/_protected/user/plans/index'
+import { Route as ProtectedUserPlansNewRouteImport } from './routes/_protected/user/plans/new'
+import { Route as ProtectedUserPlansPlanIdIndexRouteImport } from './routes/_protected/user/plans/$planId/index'
+import { Route as ProtectedUserPlansPlanIdTopUpRouteImport } from './routes/_protected/user/plans/$planId/top-up'
 
 const TodosRoute = TodosRouteImport.update({
   id: '/todos',
@@ -120,6 +124,28 @@ const ProtectedAdminAlertsRoute = ProtectedAdminAlertsRouteImport.update({
   path: '/alerts',
   getParentRoute: () => ProtectedAdminRoute,
 } as any)
+const ProtectedUserPlansIndexRoute = ProtectedUserPlansIndexRouteImport.update({
+  id: '/plans/',
+  path: '/plans/',
+  getParentRoute: () => ProtectedUserRoute,
+} as any)
+const ProtectedUserPlansNewRoute = ProtectedUserPlansNewRouteImport.update({
+  id: '/plans/new',
+  path: '/plans/new',
+  getParentRoute: () => ProtectedUserRoute,
+} as any)
+const ProtectedUserPlansPlanIdIndexRoute =
+  ProtectedUserPlansPlanIdIndexRouteImport.update({
+    id: '/plans/$planId/',
+    path: '/plans/$planId/',
+    getParentRoute: () => ProtectedUserRoute,
+  } as any)
+const ProtectedUserPlansPlanIdTopUpRoute =
+  ProtectedUserPlansPlanIdTopUpRouteImport.update({
+    id: '/plans/$planId/top-up',
+    path: '/plans/$planId/top-up',
+    getParentRoute: () => ProtectedUserRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -139,6 +165,10 @@ export interface FileRoutesByFullPath {
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/admin/': typeof ProtectedAdminIndexRoute
   '/user/': typeof ProtectedUserIndexRoute
+  '/user/plans/new': typeof ProtectedUserPlansNewRoute
+  '/user/plans/': typeof ProtectedUserPlansIndexRoute
+  '/user/plans/$planId/top-up': typeof ProtectedUserPlansPlanIdTopUpRoute
+  '/user/plans/$planId/': typeof ProtectedUserPlansPlanIdIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -156,6 +186,10 @@ export interface FileRoutesByTo {
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/admin': typeof ProtectedAdminIndexRoute
   '/user': typeof ProtectedUserIndexRoute
+  '/user/plans/new': typeof ProtectedUserPlansNewRoute
+  '/user/plans': typeof ProtectedUserPlansIndexRoute
+  '/user/plans/$planId/top-up': typeof ProtectedUserPlansPlanIdTopUpRoute
+  '/user/plans/$planId': typeof ProtectedUserPlansPlanIdIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -177,6 +211,10 @@ export interface FileRoutesById {
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/_protected/admin/': typeof ProtectedAdminIndexRoute
   '/_protected/user/': typeof ProtectedUserIndexRoute
+  '/_protected/user/plans/new': typeof ProtectedUserPlansNewRoute
+  '/_protected/user/plans/': typeof ProtectedUserPlansIndexRoute
+  '/_protected/user/plans/$planId/top-up': typeof ProtectedUserPlansPlanIdTopUpRoute
+  '/_protected/user/plans/$planId/': typeof ProtectedUserPlansPlanIdIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -198,6 +236,10 @@ export interface FileRouteTypes {
     | '/api/auth/callback'
     | '/admin/'
     | '/user/'
+    | '/user/plans/new'
+    | '/user/plans/'
+    | '/user/plans/$planId/top-up'
+    | '/user/plans/$planId/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -215,6 +257,10 @@ export interface FileRouteTypes {
     | '/api/auth/callback'
     | '/admin'
     | '/user'
+    | '/user/plans/new'
+    | '/user/plans'
+    | '/user/plans/$planId/top-up'
+    | '/user/plans/$planId'
   id:
     | '__root__'
     | '/'
@@ -235,6 +281,10 @@ export interface FileRouteTypes {
     | '/api/auth/callback'
     | '/_protected/admin/'
     | '/_protected/user/'
+    | '/_protected/user/plans/new'
+    | '/_protected/user/plans/'
+    | '/_protected/user/plans/$planId/top-up'
+    | '/_protected/user/plans/$planId/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -375,6 +425,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedAdminAlertsRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
+    '/_protected/user/plans/': {
+      id: '/_protected/user/plans/'
+      path: '/plans'
+      fullPath: '/user/plans/'
+      preLoaderRoute: typeof ProtectedUserPlansIndexRouteImport
+      parentRoute: typeof ProtectedUserRoute
+    }
+    '/_protected/user/plans/new': {
+      id: '/_protected/user/plans/new'
+      path: '/plans/new'
+      fullPath: '/user/plans/new'
+      preLoaderRoute: typeof ProtectedUserPlansNewRouteImport
+      parentRoute: typeof ProtectedUserRoute
+    }
+    '/_protected/user/plans/$planId/': {
+      id: '/_protected/user/plans/$planId/'
+      path: '/plans/$planId'
+      fullPath: '/user/plans/$planId/'
+      preLoaderRoute: typeof ProtectedUserPlansPlanIdIndexRouteImport
+      parentRoute: typeof ProtectedUserRoute
+    }
+    '/_protected/user/plans/$planId/top-up': {
+      id: '/_protected/user/plans/$planId/top-up'
+      path: '/plans/$planId/top-up'
+      fullPath: '/user/plans/$planId/top-up'
+      preLoaderRoute: typeof ProtectedUserPlansPlanIdTopUpRouteImport
+      parentRoute: typeof ProtectedUserRoute
+    }
   }
 }
 
@@ -404,10 +482,18 @@ const ProtectedAdminRouteWithChildren = ProtectedAdminRoute._addFileChildren(
 
 interface ProtectedUserRouteChildren {
   ProtectedUserIndexRoute: typeof ProtectedUserIndexRoute
+  ProtectedUserPlansNewRoute: typeof ProtectedUserPlansNewRoute
+  ProtectedUserPlansIndexRoute: typeof ProtectedUserPlansIndexRoute
+  ProtectedUserPlansPlanIdTopUpRoute: typeof ProtectedUserPlansPlanIdTopUpRoute
+  ProtectedUserPlansPlanIdIndexRoute: typeof ProtectedUserPlansPlanIdIndexRoute
 }
 
 const ProtectedUserRouteChildren: ProtectedUserRouteChildren = {
   ProtectedUserIndexRoute: ProtectedUserIndexRoute,
+  ProtectedUserPlansNewRoute: ProtectedUserPlansNewRoute,
+  ProtectedUserPlansIndexRoute: ProtectedUserPlansIndexRoute,
+  ProtectedUserPlansPlanIdTopUpRoute: ProtectedUserPlansPlanIdTopUpRoute,
+  ProtectedUserPlansPlanIdIndexRoute: ProtectedUserPlansPlanIdIndexRoute,
 }
 
 const ProtectedUserRouteWithChildren = ProtectedUserRoute._addFileChildren(

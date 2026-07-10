@@ -754,6 +754,63 @@ export const listForAdmin = query({
   },
 });
 
+/**
+ * User-initiated top-up on their own savings plan.
+ *
+ * The client supplies an idempotency reference (a UUID it generated) so
+ * repeated network attempts collapse into one contribution. Owner-scoped —
+ * the underlying workflow rejects if the plan does not belong to `getUser`.
+ */
+export const topUp = mutation({
+  args: {
+    planId: v.id("user_savings_plans"),
+    amountKobo: v.int64(),
+    reference: v.string(),
+    note: v.optional(v.string()),
+  },
+  returns: contributionResultValidator,
+  handler: async (ctx, args) => {
+    const user = await getUser(ctx);
+    if (!user) {
+      throw new ConvexError("Not authenticated");
+    }
+    if (args.amountKobo <= 0n) {
+      throw new ConvexError("Top-up amount must be positive");
+    }
+
+    // Idempotency reference is client-generated; sanitise before it becomes
+    // part of the transaction's dedupe key. A blank or short reference could
+    // collapse unrelated top-ups into a single row.
+    const reference = args.reference.trim();
+    if (reference.length < 8) {
+      throw new ConvexError(
+        "Top-up reference must be at least 8 non-blank characters",
+      );
+    }
+
+    const plan = await getPlanDocOrThrow(ctx, args.planId);
+    if (plan.user_id !== user._id) {
+      throw new ConvexError("Savings plan does not belong to the user");
+    }
+
+    return await recordContributionWorkflow(ctx, {
+      userId: user._id,
+      planId: plan._id,
+      amountKobo: args.amountKobo,
+      reference,
+      metadata: normalizeContributionMetadata({
+        source: TransactionSource.USER,
+        actorId: user._id,
+        channel: "user_top_up",
+        note: args.note,
+        reference,
+      }),
+      source: TransactionSource.USER,
+      actorId: user._id,
+    });
+  },
+});
+
 export const adminRecordContribution = mutation({
   args: {
     planId: v.id("user_savings_plans"),
