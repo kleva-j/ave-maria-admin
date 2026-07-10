@@ -29,10 +29,15 @@ Skill invoked to determine sync viability. Sync itself deferred until PR 00 toke
 
 ## Design gaps (blocks specific PRs)
 
-Design does not cover these screens. See tasks #16 + #17 (designer to add). Downstream PRs pause until design lands.
+### Resolved 2026-07-10 via `avm-screens-3.jsx`
 
-- **Banks manage (roadmap §7.5)** — banks appear inline in Deposit screen only. Need: list, add-form, verification uploader detail, primary-toggle. Blocks PR 05 + PR N05.
-- **Notifications (roadmap §7.6)** — bell + red dot on Dashboard header only. Need: inbox route, notification detail, preferences form (channel + category toggles). Blocks PR 06 + PR N06.
+- **Banks manage (roadmap §7.5)** — `BanksScreen` covers list, add-form (inline), primary-toggle, remove, security note. Verification uploader detail still absent — extrapolate w/ existing tokens + mirror KYC uploader pattern from `apps/web/src/routes/_protected/dashboard.tsx`.
+- **Notifications inbox (roadmap §7.6)** — `NotificationsScreen` covers filter chips (All/Unread), unread dot, mark-all-read, per-item dismiss + click-to-read, type-colored badges (success/goal/security/compliance/debit), empty state.
+
+### Still not in design
+
+- **Notification preferences form** — channel + category toggles. Extrapolate w/ existing primitives + `Field`/`Checkbox`.
+- **Bank verification uploader detail** — camera-first document upload flow. Mirror the KYC uploader chrome from `apps/web/src/routes/_protected/dashboard.tsx`; document as extrapolation in PR 05 body.
 
 ## Coverage variance vs roadmap
 
