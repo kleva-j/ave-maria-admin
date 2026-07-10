@@ -21,6 +21,19 @@ export const users = defineTable({
   bvn_encrypted: v.optional(v.string()),
   nin_encrypted: v.optional(v.string()),
 
+  // Per-user notification channel + category toggles. Optional — read via
+  // userNotifications.getPreferences which supplies defaults when absent.
+  // Category ids are the NotificationEventType values from shared.ts.
+  notification_preferences: v.optional(
+    v.object({
+      inApp: v.boolean(),
+      email: v.boolean(),
+      sms: v.boolean(),
+      push: v.boolean(),
+      categories: v.record(v.string(), v.boolean()),
+    }),
+  ),
+
   created_at: v.number(),
   updated_at: v.number(),
   deleted_at: v.optional(v.number()),

@@ -30,9 +30,11 @@ import { Route as ProtectedAdminAlertsRouteImport } from './routes/_protected/ad
 import { Route as ProtectedUserWithdrawalsIndexRouteImport } from './routes/_protected/user/withdrawals/index'
 import { Route as ProtectedUserTransactionsIndexRouteImport } from './routes/_protected/user/transactions/index'
 import { Route as ProtectedUserPlansIndexRouteImport } from './routes/_protected/user/plans/index'
+import { Route as ProtectedUserNotificationsIndexRouteImport } from './routes/_protected/user/notifications/index'
 import { Route as ProtectedUserBanksIndexRouteImport } from './routes/_protected/user/banks/index'
 import { Route as ProtectedUserWithdrawalsNewRouteImport } from './routes/_protected/user/withdrawals/new'
 import { Route as ProtectedUserPlansNewRouteImport } from './routes/_protected/user/plans/new'
+import { Route as ProtectedUserNotificationsPreferencesRouteImport } from './routes/_protected/user/notifications/preferences'
 import { Route as ProtectedUserPlansPlanIdIndexRouteImport } from './routes/_protected/user/plans/$planId/index'
 import { Route as ProtectedUserBanksBankIdIndexRouteImport } from './routes/_protected/user/banks/$bankId/index'
 import { Route as ProtectedUserPlansPlanIdTopUpRouteImport } from './routes/_protected/user/plans/$planId/top-up'
@@ -146,6 +148,12 @@ const ProtectedUserPlansIndexRoute = ProtectedUserPlansIndexRouteImport.update({
   path: '/plans/',
   getParentRoute: () => ProtectedUserRoute,
 } as any)
+const ProtectedUserNotificationsIndexRoute =
+  ProtectedUserNotificationsIndexRouteImport.update({
+    id: '/notifications/',
+    path: '/notifications/',
+    getParentRoute: () => ProtectedUserRoute,
+  } as any)
 const ProtectedUserBanksIndexRoute = ProtectedUserBanksIndexRouteImport.update({
   id: '/banks/',
   path: '/banks/',
@@ -162,6 +170,12 @@ const ProtectedUserPlansNewRoute = ProtectedUserPlansNewRouteImport.update({
   path: '/plans/new',
   getParentRoute: () => ProtectedUserRoute,
 } as any)
+const ProtectedUserNotificationsPreferencesRoute =
+  ProtectedUserNotificationsPreferencesRouteImport.update({
+    id: '/notifications/preferences',
+    path: '/notifications/preferences',
+    getParentRoute: () => ProtectedUserRoute,
+  } as any)
 const ProtectedUserPlansPlanIdIndexRoute =
   ProtectedUserPlansPlanIdIndexRouteImport.update({
     id: '/plans/$planId/',
@@ -199,9 +213,11 @@ export interface FileRoutesByFullPath {
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/admin/': typeof ProtectedAdminIndexRoute
   '/user/': typeof ProtectedUserIndexRoute
+  '/user/notifications/preferences': typeof ProtectedUserNotificationsPreferencesRoute
   '/user/plans/new': typeof ProtectedUserPlansNewRoute
   '/user/withdrawals/new': typeof ProtectedUserWithdrawalsNewRoute
   '/user/banks/': typeof ProtectedUserBanksIndexRoute
+  '/user/notifications/': typeof ProtectedUserNotificationsIndexRoute
   '/user/plans/': typeof ProtectedUserPlansIndexRoute
   '/user/transactions/': typeof ProtectedUserTransactionsIndexRoute
   '/user/withdrawals/': typeof ProtectedUserWithdrawalsIndexRoute
@@ -225,9 +241,11 @@ export interface FileRoutesByTo {
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/admin': typeof ProtectedAdminIndexRoute
   '/user': typeof ProtectedUserIndexRoute
+  '/user/notifications/preferences': typeof ProtectedUserNotificationsPreferencesRoute
   '/user/plans/new': typeof ProtectedUserPlansNewRoute
   '/user/withdrawals/new': typeof ProtectedUserWithdrawalsNewRoute
   '/user/banks': typeof ProtectedUserBanksIndexRoute
+  '/user/notifications': typeof ProtectedUserNotificationsIndexRoute
   '/user/plans': typeof ProtectedUserPlansIndexRoute
   '/user/transactions': typeof ProtectedUserTransactionsIndexRoute
   '/user/withdrawals': typeof ProtectedUserWithdrawalsIndexRoute
@@ -255,9 +273,11 @@ export interface FileRoutesById {
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/_protected/admin/': typeof ProtectedAdminIndexRoute
   '/_protected/user/': typeof ProtectedUserIndexRoute
+  '/_protected/user/notifications/preferences': typeof ProtectedUserNotificationsPreferencesRoute
   '/_protected/user/plans/new': typeof ProtectedUserPlansNewRoute
   '/_protected/user/withdrawals/new': typeof ProtectedUserWithdrawalsNewRoute
   '/_protected/user/banks/': typeof ProtectedUserBanksIndexRoute
+  '/_protected/user/notifications/': typeof ProtectedUserNotificationsIndexRoute
   '/_protected/user/plans/': typeof ProtectedUserPlansIndexRoute
   '/_protected/user/transactions/': typeof ProtectedUserTransactionsIndexRoute
   '/_protected/user/withdrawals/': typeof ProtectedUserWithdrawalsIndexRoute
@@ -285,9 +305,11 @@ export interface FileRouteTypes {
     | '/api/auth/callback'
     | '/admin/'
     | '/user/'
+    | '/user/notifications/preferences'
     | '/user/plans/new'
     | '/user/withdrawals/new'
     | '/user/banks/'
+    | '/user/notifications/'
     | '/user/plans/'
     | '/user/transactions/'
     | '/user/withdrawals/'
@@ -311,9 +333,11 @@ export interface FileRouteTypes {
     | '/api/auth/callback'
     | '/admin'
     | '/user'
+    | '/user/notifications/preferences'
     | '/user/plans/new'
     | '/user/withdrawals/new'
     | '/user/banks'
+    | '/user/notifications'
     | '/user/plans'
     | '/user/transactions'
     | '/user/withdrawals'
@@ -340,9 +364,11 @@ export interface FileRouteTypes {
     | '/api/auth/callback'
     | '/_protected/admin/'
     | '/_protected/user/'
+    | '/_protected/user/notifications/preferences'
     | '/_protected/user/plans/new'
     | '/_protected/user/withdrawals/new'
     | '/_protected/user/banks/'
+    | '/_protected/user/notifications/'
     | '/_protected/user/plans/'
     | '/_protected/user/transactions/'
     | '/_protected/user/withdrawals/'
@@ -510,6 +536,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedUserPlansIndexRouteImport
       parentRoute: typeof ProtectedUserRoute
     }
+    '/_protected/user/notifications/': {
+      id: '/_protected/user/notifications/'
+      path: '/notifications'
+      fullPath: '/user/notifications/'
+      preLoaderRoute: typeof ProtectedUserNotificationsIndexRouteImport
+      parentRoute: typeof ProtectedUserRoute
+    }
     '/_protected/user/banks/': {
       id: '/_protected/user/banks/'
       path: '/banks'
@@ -529,6 +562,13 @@ declare module '@tanstack/react-router' {
       path: '/plans/new'
       fullPath: '/user/plans/new'
       preLoaderRoute: typeof ProtectedUserPlansNewRouteImport
+      parentRoute: typeof ProtectedUserRoute
+    }
+    '/_protected/user/notifications/preferences': {
+      id: '/_protected/user/notifications/preferences'
+      path: '/notifications/preferences'
+      fullPath: '/user/notifications/preferences'
+      preLoaderRoute: typeof ProtectedUserNotificationsPreferencesRouteImport
       parentRoute: typeof ProtectedUserRoute
     }
     '/_protected/user/plans/$planId/': {
@@ -581,9 +621,11 @@ const ProtectedAdminRouteWithChildren = ProtectedAdminRoute._addFileChildren(
 
 interface ProtectedUserRouteChildren {
   ProtectedUserIndexRoute: typeof ProtectedUserIndexRoute
+  ProtectedUserNotificationsPreferencesRoute: typeof ProtectedUserNotificationsPreferencesRoute
   ProtectedUserPlansNewRoute: typeof ProtectedUserPlansNewRoute
   ProtectedUserWithdrawalsNewRoute: typeof ProtectedUserWithdrawalsNewRoute
   ProtectedUserBanksIndexRoute: typeof ProtectedUserBanksIndexRoute
+  ProtectedUserNotificationsIndexRoute: typeof ProtectedUserNotificationsIndexRoute
   ProtectedUserPlansIndexRoute: typeof ProtectedUserPlansIndexRoute
   ProtectedUserTransactionsIndexRoute: typeof ProtectedUserTransactionsIndexRoute
   ProtectedUserWithdrawalsIndexRoute: typeof ProtectedUserWithdrawalsIndexRoute
@@ -594,9 +636,12 @@ interface ProtectedUserRouteChildren {
 
 const ProtectedUserRouteChildren: ProtectedUserRouteChildren = {
   ProtectedUserIndexRoute: ProtectedUserIndexRoute,
+  ProtectedUserNotificationsPreferencesRoute:
+    ProtectedUserNotificationsPreferencesRoute,
   ProtectedUserPlansNewRoute: ProtectedUserPlansNewRoute,
   ProtectedUserWithdrawalsNewRoute: ProtectedUserWithdrawalsNewRoute,
   ProtectedUserBanksIndexRoute: ProtectedUserBanksIndexRoute,
+  ProtectedUserNotificationsIndexRoute: ProtectedUserNotificationsIndexRoute,
   ProtectedUserPlansIndexRoute: ProtectedUserPlansIndexRoute,
   ProtectedUserTransactionsIndexRoute: ProtectedUserTransactionsIndexRoute,
   ProtectedUserWithdrawalsIndexRoute: ProtectedUserWithdrawalsIndexRoute,
