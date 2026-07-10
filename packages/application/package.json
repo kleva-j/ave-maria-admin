@@ -10,7 +10,8 @@
   "exports": {
     "./dto": "./src/dto/index.ts",
     "./ports": "./src/ports/index.ts",
-    "./use-cases": "./src/use-cases/index.ts"
+    "./use-cases": "./src/use-cases/index.ts",
+    "./client": "./src/client/index.ts"
   },
   "dependencies": {
     "@avm-daily/domain": "workspace:*"

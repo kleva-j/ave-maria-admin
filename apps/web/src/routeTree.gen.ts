@@ -15,8 +15,10 @@ import { Route as SignoutRouteImport } from './routes/signout'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as ProtectedRouteImport } from './routes/_protected'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ProtectedUserRouteImport } from './routes/_protected/user'
 import { Route as ProtectedDashboardRouteImport } from './routes/_protected/dashboard'
 import { Route as ProtectedAdminRouteImport } from './routes/_protected/admin'
+import { Route as ProtectedUserIndexRouteImport } from './routes/_protected/user/index'
 import { Route as ProtectedAdminIndexRouteImport } from './routes/_protected/admin/index'
 import { Route as ApiAuthCallbackRouteImport } from './routes/api/auth/callback'
 import { Route as ProtectedAdminWithdrawalsRouteImport } from './routes/_protected/admin/withdrawals'
@@ -55,6 +57,11 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProtectedUserRoute = ProtectedUserRouteImport.update({
+  id: '/user',
+  path: '/user',
+  getParentRoute: () => ProtectedRoute,
+} as any)
 const ProtectedDashboardRoute = ProtectedDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
@@ -64,6 +71,11 @@ const ProtectedAdminRoute = ProtectedAdminRouteImport.update({
   id: '/admin',
   path: '/admin',
   getParentRoute: () => ProtectedRoute,
+} as any)
+const ProtectedUserIndexRoute = ProtectedUserIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => ProtectedUserRoute,
 } as any)
 const ProtectedAdminIndexRoute = ProtectedAdminIndexRouteImport.update({
   id: '/',
@@ -117,6 +129,7 @@ export interface FileRoutesByFullPath {
   '/todos': typeof TodosRoute
   '/admin': typeof ProtectedAdminRouteWithChildren
   '/dashboard': typeof ProtectedDashboardRoute
+  '/user': typeof ProtectedUserRouteWithChildren
   '/admin/alerts': typeof ProtectedAdminAlertsRoute
   '/admin/bank-verification': typeof ProtectedAdminBankVerificationRoute
   '/admin/kyc': typeof ProtectedAdminKycRoute
@@ -125,6 +138,7 @@ export interface FileRoutesByFullPath {
   '/admin/withdrawals': typeof ProtectedAdminWithdrawalsRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/admin/': typeof ProtectedAdminIndexRoute
+  '/user/': typeof ProtectedUserIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -141,6 +155,7 @@ export interface FileRoutesByTo {
   '/admin/withdrawals': typeof ProtectedAdminWithdrawalsRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/admin': typeof ProtectedAdminIndexRoute
+  '/user': typeof ProtectedUserIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -152,6 +167,7 @@ export interface FileRoutesById {
   '/todos': typeof TodosRoute
   '/_protected/admin': typeof ProtectedAdminRouteWithChildren
   '/_protected/dashboard': typeof ProtectedDashboardRoute
+  '/_protected/user': typeof ProtectedUserRouteWithChildren
   '/_protected/admin/alerts': typeof ProtectedAdminAlertsRoute
   '/_protected/admin/bank-verification': typeof ProtectedAdminBankVerificationRoute
   '/_protected/admin/kyc': typeof ProtectedAdminKycRoute
@@ -160,6 +176,7 @@ export interface FileRoutesById {
   '/_protected/admin/withdrawals': typeof ProtectedAdminWithdrawalsRoute
   '/api/auth/callback': typeof ApiAuthCallbackRoute
   '/_protected/admin/': typeof ProtectedAdminIndexRoute
+  '/_protected/user/': typeof ProtectedUserIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -171,6 +188,7 @@ export interface FileRouteTypes {
     | '/todos'
     | '/admin'
     | '/dashboard'
+    | '/user'
     | '/admin/alerts'
     | '/admin/bank-verification'
     | '/admin/kyc'
@@ -179,6 +197,7 @@ export interface FileRouteTypes {
     | '/admin/withdrawals'
     | '/api/auth/callback'
     | '/admin/'
+    | '/user/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -195,6 +214,7 @@ export interface FileRouteTypes {
     | '/admin/withdrawals'
     | '/api/auth/callback'
     | '/admin'
+    | '/user'
   id:
     | '__root__'
     | '/'
@@ -205,6 +225,7 @@ export interface FileRouteTypes {
     | '/todos'
     | '/_protected/admin'
     | '/_protected/dashboard'
+    | '/_protected/user'
     | '/_protected/admin/alerts'
     | '/_protected/admin/bank-verification'
     | '/_protected/admin/kyc'
@@ -213,6 +234,7 @@ export interface FileRouteTypes {
     | '/_protected/admin/withdrawals'
     | '/api/auth/callback'
     | '/_protected/admin/'
+    | '/_protected/user/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -269,6 +291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_protected/user': {
+      id: '/_protected/user'
+      path: '/user'
+      fullPath: '/user'
+      preLoaderRoute: typeof ProtectedUserRouteImport
+      parentRoute: typeof ProtectedRoute
+    }
     '/_protected/dashboard': {
       id: '/_protected/dashboard'
       path: '/dashboard'
@@ -282,6 +311,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin'
       preLoaderRoute: typeof ProtectedAdminRouteImport
       parentRoute: typeof ProtectedRoute
+    }
+    '/_protected/user/': {
+      id: '/_protected/user/'
+      path: '/'
+      fullPath: '/user/'
+      preLoaderRoute: typeof ProtectedUserIndexRouteImport
+      parentRoute: typeof ProtectedUserRoute
     }
     '/_protected/admin/': {
       id: '/_protected/admin/'
@@ -366,14 +402,28 @@ const ProtectedAdminRouteWithChildren = ProtectedAdminRoute._addFileChildren(
   ProtectedAdminRouteChildren,
 )
 
+interface ProtectedUserRouteChildren {
+  ProtectedUserIndexRoute: typeof ProtectedUserIndexRoute
+}
+
+const ProtectedUserRouteChildren: ProtectedUserRouteChildren = {
+  ProtectedUserIndexRoute: ProtectedUserIndexRoute,
+}
+
+const ProtectedUserRouteWithChildren = ProtectedUserRoute._addFileChildren(
+  ProtectedUserRouteChildren,
+)
+
 interface ProtectedRouteChildren {
   ProtectedAdminRoute: typeof ProtectedAdminRouteWithChildren
   ProtectedDashboardRoute: typeof ProtectedDashboardRoute
+  ProtectedUserRoute: typeof ProtectedUserRouteWithChildren
 }
 
 const ProtectedRouteChildren: ProtectedRouteChildren = {
   ProtectedAdminRoute: ProtectedAdminRouteWithChildren,
   ProtectedDashboardRoute: ProtectedDashboardRoute,
+  ProtectedUserRoute: ProtectedUserRouteWithChildren,
 }
 
 const ProtectedRouteWithChildren = ProtectedRoute._addFileChildren(

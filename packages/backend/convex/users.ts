@@ -4,7 +4,13 @@ import { createApplyKycDecisionUseCase } from "@avm-daily/application/use-cases"
 import { AuditActions } from "convex-audit-log";
 
 import { createConvexEventOutboxService } from "./adapters/eventOutboxAdapter";
-import { RESOURCE_TYPE, TABLE_NAMES, EVENT_TYPE, UserStatus } from "./shared";
+import {
+  RESOURCE_TYPE,
+  TABLE_NAMES,
+  EVENT_TYPE,
+  UserStatus,
+  WithdrawalReservationStatus,
+} from "./shared";
 import { createConvexKycDocumentRepository } from "./adapters/kycAdapters";
 import { createConvexAuditLogService } from "./adapters/auditLogAdapter";
 import { internalMutation, mutation, query } from "./_generated/server";
@@ -50,6 +56,50 @@ export const viewer = query({
   args: {},
   handler: async (ctx) => {
     return await getUser(ctx);
+  },
+});
+
+/**
+ * Available-for-withdrawal aggregate — powers the user dashboard's
+ * "Available balance" tile and the withdrawal form's amount cap.
+ *
+ * `available = total - reserved` where `reserved` is the sum of every
+ * ACTIVE row in `withdrawal_reservations` for this user (i.e. every
+ * pending or approved-but-not-processed withdrawal). Reservations get
+ * RELEASED on rejection and CONSUMED on payout, so this only sees the
+ * in-flight commitments.
+ */
+export const availableForWithdrawal = query({
+  args: {},
+  returns: v.object({
+    totalKobo: v.int64(),
+    reservedKobo: v.int64(),
+    availableKobo: v.int64(),
+  }),
+  handler: async (ctx) => {
+    const user = await getUser(ctx);
+    if (!user) {
+      return { totalKobo: 0n, reservedKobo: 0n, availableKobo: 0n };
+    }
+    const activeReservations = await ctx.db
+      .query(TABLE_NAMES.WITHDRAWAL_RESERVATIONS)
+      .withIndex("by_user_id_and_status", (q) =>
+        q
+          .eq("user_id", user._id)
+          .eq("status", WithdrawalReservationStatus.ACTIVE),
+      )
+      .collect();
+
+    let reservedKobo = 0n;
+    for (const r of activeReservations) {
+      reservedKobo += r.amount_kobo;
+    }
+
+    const totalKobo = user.total_balance_kobo;
+    const availableKobo =
+      totalKobo > reservedKobo ? totalKobo - reservedKobo : 0n;
+
+    return { totalKobo, reservedKobo, availableKobo };
   },
 });
 
