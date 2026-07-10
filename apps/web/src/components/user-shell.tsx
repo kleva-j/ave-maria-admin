@@ -1,10 +1,10 @@
+import { formatNaira, formatNairaCompact } from "@avm-daily/application/client";
+import { Icon, type IconName } from "@avm-daily/ui/components/icon";
+import { api } from "@avm-daily/backend/convex/_generated/api";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
 import { convexQuery } from "@convex-dev/react-query";
-import { api } from "@avm-daily/backend/convex/_generated/api";
 import { cn } from "@avm-daily/ui/lib/utils";
-import { Icon, type IconName } from "@avm-daily/ui/components/icon";
-import { formatNaira, formatNairaCompact } from "@avm-daily/application/client";
 
 import { useEligibility } from "@/lib/eligibility";
 
@@ -73,10 +73,10 @@ function Sidebar({
   fullName: string;
 }) {
   return (
-    <aside className="hidden w-[248px] shrink-0 flex-col border-r border-border bg-card px-3.5 py-7 md:flex">
+    <aside className="hidden w-62 shrink-0 flex-col border-r border-border bg-card px-3.5 py-7 md:flex">
       <Link
         to="/user"
-        className="mb-10 flex items-center gap-[11px] px-1.5"
+        className="mb-10 flex items-center gap-2.75 px-1.5"
       >
         <div className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-primary">
           <Icon name="zap" size={18} color="#fff" strokeWidth={2.2} />
@@ -97,7 +97,7 @@ function Sidebar({
               key={item.to}
               to={item.to as string}
               className={cn(
-                "flex items-center gap-[11px] rounded-[11px] border border-transparent px-3 py-2.5 text-sm transition-colors",
+                "flex items-center gap-2.75 rounded-[11px] border border-transparent px-3 py-2.5 text-sm transition-colors",
                 active
                   ? "border-[color-mix(in_oklab,var(--primary)_30%,transparent)] bg-primary-dim font-semibold text-primary"
                   : "text-muted-foreground hover:text-foreground",
