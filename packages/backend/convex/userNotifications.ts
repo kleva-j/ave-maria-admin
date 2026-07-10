@@ -27,6 +27,7 @@ import {
   internalAction,
   internalMutation,
   internalQuery,
+  mutation,
   query,
 } from "./_generated/server";
 import { NotificationEventType, NovuDeliveryStatus, TABLE_NAMES } from "./shared";
@@ -106,6 +107,81 @@ export const getNovuInboxAuth = query({
     const subscriberId = String(user._id);
     const subscriberHash = await hmacSha256Hex(secret, subscriberId);
     return { subscriberId, subscriberHash };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// Notification preferences — per-user channel + category toggles
+// ---------------------------------------------------------------------------
+
+const preferencesValidator = v.object({
+  inApp: v.boolean(),
+  email: v.boolean(),
+  sms: v.boolean(),
+  push: v.boolean(),
+  categories: v.record(v.string(), v.boolean()),
+});
+
+const DEFAULT_PREFERENCES = {
+  inApp: true,
+  email: true,
+  sms: false,
+  push: true,
+  categories: {} as Record<string, boolean>,
+};
+
+/**
+ * Whitelisted category ids — must stay in sync with USER_FACING_EVENT_TYPES
+ * above. Any client-supplied category not in this set is dropped by
+ * `updatePreferences` before persisting so the users doc can never grow
+ * unbounded or hold garbage keys.
+ */
+const ALLOWED_CATEGORY_IDS: ReadonlySet<string> = new Set(
+  Array.from(USER_FACING_EVENT_TYPES),
+);
+
+/**
+ * Returns the viewer's notification preferences with defaults applied.
+ * `getUser` throws when unauthenticated, so we can assume a real user here.
+ * The `categories` map is stored sparsely — an unlisted category defaults
+ * to enabled at read time.
+ */
+export const getPreferences = query({
+  args: {},
+  returns: preferencesValidator,
+  handler: async (ctx) => {
+    const user = await getUser(ctx);
+    return user.notification_preferences ?? DEFAULT_PREFERENCES;
+  },
+});
+
+/**
+ * Overwrite the viewer's preferences object. Downstream channel gating
+ * (Novu subscriber preferences sync) is a follow-up ticket — this only
+ * persists to the users doc for now.
+ *
+ * Unknown category ids are filtered out server-side so a malicious/buggy
+ * client can't grow the users doc indefinitely.
+ */
+export const updatePreferences = mutation({
+  args: {
+    preferences: preferencesValidator,
+  },
+  returns: preferencesValidator,
+  handler: async (ctx, args) => {
+    const user = await getUser(ctx);
+    const categories: Record<string, boolean> = {};
+    for (const [id, on] of Object.entries(args.preferences.categories)) {
+      if (ALLOWED_CATEGORY_IDS.has(id)) {
+        categories[id] = on;
+      }
+    }
+    const sanitised = { ...args.preferences, categories };
+    await ctx.db.patch(user._id, {
+      notification_preferences: sanitised,
+      updated_at: Date.now(),
+    });
+    return sanitised;
   },
 });
 
