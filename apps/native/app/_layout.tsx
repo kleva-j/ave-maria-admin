@@ -1,17 +1,33 @@
 import "@/global.css";
-import { env } from "@avm-daily/env/native";
+
 import { ConvexProviderWithAuth, ConvexReactClient } from "convex/react";
-import { Stack } from "expo-router";
-import { HeroUINativeProvider } from "heroui-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { KeyboardProvider } from "react-native-keyboard-controller";
+import { HeroUINativeProvider } from "heroui-native";
+import { useFonts } from "expo-font";
+import { Stack } from "expo-router";
+import { View } from "react-native";
+import {
+  Inter_600SemiBold,
+  Inter_400Regular,
+  Inter_500Medium,
+  Inter_700Bold,
+} from "@expo-google-fonts/inter";
+import {
+  NotoSans_600SemiBold,
+  NotoSans_400Regular,
+  NotoSans_500Medium,
+  NotoSans_700Bold,
+} from "@expo-google-fonts/noto-sans";
+
+import { env } from "@avm-daily/env/native";
 
 import { NavigationTracker } from "@/contexts/navigation-tracker";
 import { AppThemeProvider } from "@/contexts/app-theme-context";
-import { PostHogProvider } from "@/contexts/posthog-context";
-import { NovuInboxProvider } from "@/components/novu-provider";
-import { AuthKitProvider } from "@/lib/auth/AuthKitProvider";
 import { useAuthForConvex } from "@/lib/auth/useAuthForConvex";
+import { NovuInboxProvider } from "@/components/novu-provider";
+import { PostHogProvider } from "@/contexts/posthog-context";
+import { AuthKitProvider } from "@/lib/auth/AuthKitProvider";
 import { Sentry, initSentry } from "@/lib/sentry";
 import { AuthGate } from "@/lib/auth/AuthGate";
 
@@ -31,6 +47,7 @@ function StackLayout() {
       <NavigationTracker />
       <Stack screenOptions={{}}>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+        <Stack.Screen name="(dashboard)" options={{ headerShown: false }} />
         <Stack.Screen name="(drawer)" options={{ headerShown: false }} />
         <Stack.Screen
           name="modal"
@@ -39,6 +56,21 @@ function StackLayout() {
       </Stack>
     </>
   );
+}
+
+function FontsGate({ children }: { children: React.ReactNode }) {
+  const [loaded] = useFonts({
+    Inter_400Regular,
+    Inter_500Medium,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    NotoSans_400Regular,
+    NotoSans_500Medium,
+    NotoSans_600SemiBold,
+    NotoSans_700Bold,
+  });
+  if (!loaded) return <View style={{ flex: 1, backgroundColor: "#060c1c" }} />;
+  return <>{children}</>;
 }
 
 function Layout() {
@@ -52,7 +84,9 @@ function Layout() {
                 <HeroUINativeProvider>
                   <NovuInboxProvider>
                     <AuthGate>
-                      <StackLayout />
+                      <FontsGate>
+                        <StackLayout />
+                      </FontsGate>
                     </AuthGate>
                   </NovuInboxProvider>
                 </HeroUINativeProvider>
