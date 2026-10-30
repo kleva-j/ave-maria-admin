@@ -4,6 +4,7 @@ import { createApplyKycDecisionUseCase } from "@avm-daily/application/use-cases"
 import { AuditActions } from "convex-audit-log";
 
 import { createConvexEventOutboxService } from "./adapters/eventOutboxAdapter";
+import { internal } from "./_generated/api";
 import {
   RESOURCE_TYPE,
   TABLE_NAMES,
@@ -242,6 +243,35 @@ export const deleteFromWorkOS = internalMutation({
     if (existing) {
       // Sync aggregates before deletion
       await syncUserDelete(ctx, existing);
+
+      // Keep CRM operational history while erasing the customer profile and
+      // personal bank-account details. Child records are processed in pages
+      // so a customer with extensive history cannot exceed mutation limits.
+      await enqueueTwentyCrmRecord(
+        ctx,
+        "person",
+        String(existing._id),
+        "anonymize",
+        existing.workosId,
+      );
+      for (const entityType of [
+        "withdrawal",
+        "kyc_document",
+        "risk_hold",
+        "savings_plan",
+        "bank_account",
+        "transaction",
+      ] as const) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.twentySync.anonymizeLifecyclePage,
+          {
+            userId: String(existing._id),
+            entityType,
+            cursor: null,
+          },
+        );
+      }
 
       await auditLog.log(ctx, {
         action: AuditActions.USER_DELETED,

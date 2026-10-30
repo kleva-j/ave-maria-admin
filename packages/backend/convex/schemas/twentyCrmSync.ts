@@ -19,10 +19,24 @@ export const twentyCrmOutboxStatus = v.union(
   v.literal("delivered"),
 );
 
+export const twentyCrmLifecycleEntityType = v.union(
+  v.literal("withdrawal"),
+  v.literal("kyc_document"),
+  v.literal("risk_hold"),
+  v.literal("savings_plan"),
+  v.literal("bank_account"),
+  v.literal("transaction"),
+);
+
 export const twenty_crm_outbox = defineTable({
   entity_type: twentyCrmEntityType,
   entity_id: v.string(),
-  operation: v.union(v.literal("upsert"), v.literal("delete")),
+  operation: v.union(
+    v.literal("upsert"),
+    v.literal("delete"),
+    v.literal("anonymize"),
+  ),
+  anonymize_lookup_id: v.optional(v.string()),
   revision: v.number(),
   status: twentyCrmOutboxStatus,
   attempt_count: v.number(),

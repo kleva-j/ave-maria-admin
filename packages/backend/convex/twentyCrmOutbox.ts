@@ -17,9 +17,14 @@ export async function enqueueTwentyCrmRecord(
   ctx: MutationCtx,
   entityType: TwentyCrmEntityType,
   entityId: string,
-  operation: "upsert" | "delete" = "upsert",
+  operation: "upsert" | "delete" | "anonymize" = "upsert",
+  anonymizeLookupId?: string,
 ): Promise<void> {
   const now = Date.now();
+  const lookupId =
+    operation === "anonymize"
+      ? (anonymizeLookupId ?? (entityType === "person" ? undefined : entityId))
+      : undefined;
   const existing = await ctx.db
     .query("twenty_crm_outbox")
     .withIndex("by_entity_type_and_entity_id", (q) =>
@@ -29,11 +34,16 @@ export async function enqueueTwentyCrmRecord(
 
   let outboxId: TwentyCrmOutboxId;
   if (existing) {
+    // Deletion anonymization is terminal: a later backfill must not replace it
+    // with an upsert and restore customer-identifying data in the CRM.
+    if (existing.operation === "anonymize" && operation === "upsert") {
+      return;
+    }
     const hasActiveLease =
-      existing.status === "processing" &&
-      (existing.lease_expires_at ?? 0) > now;
+      existing.status === "processing" && (existing.lease_expires_at ?? 0) > now;
     await ctx.db.patch("twenty_crm_outbox", existing._id, {
       operation,
+      anonymize_lookup_id: lookupId,
       revision: existing.revision + 1,
       status: hasActiveLease ? "processing" : "pending",
       attempt_count: hasActiveLease ? existing.attempt_count : 0,
@@ -50,6 +60,7 @@ export async function enqueueTwentyCrmRecord(
       entity_type: entityType,
       entity_id: entityId,
       operation,
+      ...(lookupId !== undefined ? { anonymize_lookup_id: lookupId } : {}),
       revision: 1,
       status: "pending",
       attempt_count: 0,
