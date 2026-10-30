@@ -16,7 +16,13 @@ function validateEnv(): { apiUrl: string; apiKey: string } {
 }
 
 async function getMetadataValidationDetails(apiUrl: string, apiKey: string) {
-  const buildResult = await runTwenty(['app', 'build']);
+  let buildResult: Awaited<ReturnType<typeof runTwenty>>;
+
+  try {
+    buildResult = await runTwenty(['app', 'build']);
+  } catch (error) {
+    return `Could not rebuild the app manifest: ${String(error)}`;
+  }
 
   if (!buildResult.ok) {
     return `Could not rebuild the app manifest: ${JSON.stringify(buildResult.error)}`;

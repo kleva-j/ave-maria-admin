@@ -611,8 +611,15 @@ function responseRecordId(result: unknown): string | null {
   const top = result as Record<string, unknown>;
   const data = top.data;
   if (data && typeof data === "object" && !Array.isArray(data)) {
-    const id = (data as Record<string, unknown>).id;
-    return typeof id === "string" ? id : null;
+    const dataRecord = data as Record<string, unknown>;
+    const directId = dataRecord.id;
+    if (typeof directId === "string") return directId;
+    for (const value of Object.values(dataRecord)) {
+      if (!value || typeof value !== "object" || Array.isArray(value)) continue;
+      const nestedId = (value as Record<string, unknown>).id;
+      if (typeof nestedId === "string") return nestedId;
+    }
+    return null;
   }
   const id = top.id;
   return typeof id === "string" ? id : null;
@@ -621,7 +628,12 @@ function responseRecordId(result: unknown): string | null {
 function responseRecords(result: unknown): Array<Record<string, unknown>> {
   if (!result || typeof result !== "object") return [];
   const top = result as Record<string, unknown>;
-  const data = Array.isArray(top.data) ? top.data : [];
+  const envelope = top.data;
+  const data = Array.isArray(envelope)
+    ? envelope
+    : envelope && typeof envelope === "object"
+      ? (Object.values(envelope as Record<string, unknown>).find(Array.isArray) ?? [])
+      : [];
   return data.filter(
     (item): item is Record<string, unknown> =>
       !!item && typeof item === "object" && !Array.isArray(item),
@@ -662,14 +674,30 @@ async function upsertTwentyRecord(
   }
   if (!existingId) {
     const searchUrl = new URL(path);
-    searchUrl.searchParams.set(`filter[${externalField}][eq]`, externalId);
+    searchUrl.searchParams.set(
+      "filter",
+      `${externalField}[eq]:${JSON.stringify(externalId)}`,
+    );
+    searchUrl.searchParams.set("limit", "2");
     const existingResponse = await requestTwenty(
       searchUrl.toString(),
       "GET",
       apiKey,
     );
-    const resultId = responseRecords(existingResponse)[0]?.id;
-    existingId = typeof resultId === "string" ? resultId : null;
+    const records = responseRecords(existingResponse);
+    if (records.length > 1) {
+      throw new TwentyResponseError(422, "ambiguous_external_id_lookup");
+    }
+    const matchedRecord = records[0];
+    if (matchedRecord && matchedRecord[externalField] !== externalId) {
+      throw new TwentyResponseError(422, "external_id_lookup_mismatch");
+    }
+    if (matchedRecord) {
+      if (typeof matchedRecord.id !== "string") {
+        throw new TwentyResponseError(502, "missing_lookup_record_id");
+      }
+      existingId = matchedRecord.id;
+    }
   }
   const result = existingId
     ? await requestTwenty(

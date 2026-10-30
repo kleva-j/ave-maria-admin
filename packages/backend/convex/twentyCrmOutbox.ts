@@ -29,14 +29,17 @@ export async function enqueueTwentyCrmRecord(
 
   let outboxId: TwentyCrmOutboxId;
   if (existing) {
+    const hasActiveLease =
+      existing.status === "processing" &&
+      (existing.lease_expires_at ?? 0) > now;
     await ctx.db.patch("twenty_crm_outbox", existing._id, {
       operation,
       revision: existing.revision + 1,
-      status: "pending",
-      attempt_count: 0,
-      next_attempt_at: now,
-      lease_token: undefined,
-      lease_expires_at: undefined,
+      status: hasActiveLease ? "processing" : "pending",
+      attempt_count: hasActiveLease ? existing.attempt_count : 0,
+      next_attempt_at: hasActiveLease ? existing.next_attempt_at : now,
+      lease_token: hasActiveLease ? existing.lease_token : undefined,
+      lease_expires_at: hasActiveLease ? existing.lease_expires_at : undefined,
       last_error: undefined,
       delivered_at: undefined,
       updated_at: now,
