@@ -41,11 +41,8 @@ export async function setup() {
   const result = await runTwenty(['app', 'apply', '--create']);
 
   if (!result.ok) {
-    const details = [result.error.message, result.error.hint]
-      .filter(Boolean)
-      .join('\n');
     throw new Error(
-      `App apply failed: ${result.error.code}\n${details}`,
+      `App apply failed: ${JSON.stringify(result.error, null, 2)}`,
     );
   }
 }
