@@ -13,7 +13,10 @@ import {
   mutation,
   query,
 } from "./_generated/server";
-import { twentyCrmEntityType } from "./schemas/twentyCrmSync";
+import {
+  twentyCrmEntityType,
+  twentyCrmLifecycleEntityType,
+} from "./schemas/twentyCrmSync";
 import { enqueueTwentyCrmRecord } from "./twentyCrmOutbox";
 import { AdminRole } from "./shared";
 import { getAdminUser } from "./utils";
@@ -23,7 +26,11 @@ const LEASE_MS = 5 * 60_000;
 const BACKFILL_PAGE_SIZE = 100;
 const MAX_RETRY_DELAY_MS = 6 * 60 * 60_000;
 
-const operationValidator = v.union(v.literal("upsert"), v.literal("delete"));
+const operationValidator = v.union(
+  v.literal("upsert"),
+  v.literal("delete"),
+  v.literal("anonymize"),
+);
 const sourcePayloadValidator = v.any();
 
 const backfillPasses: Array<{
@@ -372,6 +379,7 @@ export const claim = internalMutation({
       entityType: twentyCrmEntityType,
       entityId: v.string(),
       operation: operationValidator,
+      lookupId: v.union(v.string(), v.null()),
       revision: v.number(),
       attempt: v.number(),
       leaseToken: v.string(),
@@ -403,6 +411,7 @@ export const claim = internalMutation({
       entityType: row.entity_type,
       entityId: row.entity_id,
       operation: row.operation,
+      lookupId: row.anonymize_lookup_id ?? null,
       revision: row.revision,
       attempt,
       leaseToken,
@@ -440,6 +449,7 @@ export const finish = internalMutation({
       lease_token: undefined,
       lease_expires_at: undefined,
       last_error: undefined,
+      anonymize_lookup_id: undefined,
       updated_at: now,
     });
     return null;
@@ -549,6 +559,86 @@ export const deleteLinkAndComplete = internalMutation({
   },
 });
 
+/**
+ * Page through retained operational records after a WorkOS hard-delete event.
+ * Each page creates durable outbox work before scheduling the next page.
+ */
+export const anonymizeLifecyclePage = internalMutation({
+  args: {
+    userId: v.string(),
+    entityType: twentyCrmLifecycleEntityType,
+    cursor: v.union(v.string(), v.null()),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const paginationOpts = { numItems: 50, cursor: args.cursor };
+    let page: { ids: string[]; isDone: boolean; continueCursor: string };
+    const userId = args.userId as Id<"users">;
+    switch (args.entityType) {
+      case "withdrawal": {
+        const result = await ctx.db
+          .query("withdrawals")
+          .withIndex("by_requested_by", (q) => q.eq("requested_by", userId))
+          .paginate(paginationOpts);
+        page = { ...result, ids: result.page.map((record) => String(record._id)) };
+        break;
+      }
+      case "kyc_document": {
+        const result = await ctx.db
+          .query("kyc_documents")
+          .withIndex("by_user_id", (q) => q.eq("user_id", userId))
+          .paginate(paginationOpts);
+        page = { ...result, ids: result.page.map((record) => String(record._id)) };
+        break;
+      }
+      case "risk_hold": {
+        const result = await ctx.db
+          .query("user_risk_holds")
+          .withIndex("by_user_id", (q) => q.eq("user_id", userId))
+          .paginate(paginationOpts);
+        page = { ...result, ids: result.page.map((record) => String(record._id)) };
+        break;
+      }
+      case "savings_plan": {
+        const result = await ctx.db
+          .query("user_savings_plans")
+          .withIndex("by_user_id", (q) => q.eq("user_id", userId))
+          .paginate(paginationOpts);
+        page = { ...result, ids: result.page.map((record) => String(record._id)) };
+        break;
+      }
+      case "bank_account": {
+        const result = await ctx.db
+          .query("user_bank_accounts")
+          .withIndex("by_user_id", (q) => q.eq("user_id", userId))
+          .paginate(paginationOpts);
+        page = { ...result, ids: result.page.map((record) => String(record._id)) };
+        break;
+      }
+      case "transaction": {
+        const result = await ctx.db
+          .query("transactions")
+          .withIndex("by_user_id", (q) => q.eq("user_id", userId))
+          .paginate(paginationOpts);
+        page = { ...result, ids: result.page.map((record) => String(record._id)) };
+        break;
+      }
+    }
+
+    for (const entityId of page.ids) {
+      await enqueueTwentyCrmRecord(ctx, args.entityType, entityId, "anonymize");
+    }
+    if (!page.isDone) {
+      await ctx.scheduler.runAfter(0, internal.twentySync.anonymizeLifecyclePage, {
+        userId: args.userId,
+        entityType: args.entityType,
+        cursor: page.continueCursor,
+      });
+    }
+    return null;
+  },
+});
+
 class TwentyResponseError extends Error {
   constructor(
     readonly status: number,
@@ -640,6 +730,36 @@ function responseRecords(result: unknown): Array<Record<string, unknown>> {
   );
 }
 
+async function findTwentyRecordId(
+  baseUrl: string,
+  apiKey: string,
+  endpoint: string,
+  externalField: string,
+  externalId: string,
+): Promise<string | null> {
+  const searchUrl = new URL(`${baseUrl}/rest/${endpoint}`);
+  searchUrl.searchParams.set(
+    "filter",
+    `${externalField}[eq]:${JSON.stringify(externalId)}`,
+  );
+  searchUrl.searchParams.set("limit", "2");
+  const records = responseRecords(
+    await requestTwenty(searchUrl.toString(), "GET", apiKey),
+  );
+  if (records.length > 1) {
+    throw new TwentyResponseError(422, "ambiguous_external_id_lookup");
+  }
+  const matchedRecord = records[0];
+  if (matchedRecord && matchedRecord[externalField] !== externalId) {
+    throw new TwentyResponseError(422, "external_id_lookup_mismatch");
+  }
+  if (!matchedRecord) return null;
+  if (typeof matchedRecord.id !== "string") {
+    throw new TwentyResponseError(502, "missing_lookup_record_id");
+  }
+  return matchedRecord.id;
+}
+
 async function upsertTwentyRecord(
   baseUrl: string,
   apiKey: string,
@@ -673,31 +793,13 @@ async function upsertTwentyRecord(
     }
   }
   if (!existingId) {
-    const searchUrl = new URL(path);
-    searchUrl.searchParams.set(
-      "filter",
-      `${externalField}[eq]:${JSON.stringify(externalId)}`,
-    );
-    searchUrl.searchParams.set("limit", "2");
-    const existingResponse = await requestTwenty(
-      searchUrl.toString(),
-      "GET",
+    existingId = await findTwentyRecordId(
+      baseUrl,
       apiKey,
+      endpoint,
+      externalField,
+      externalId,
     );
-    const records = responseRecords(existingResponse);
-    if (records.length > 1) {
-      throw new TwentyResponseError(422, "ambiguous_external_id_lookup");
-    }
-    const matchedRecord = records[0];
-    if (matchedRecord && matchedRecord[externalField] !== externalId) {
-      throw new TwentyResponseError(422, "external_id_lookup_mismatch");
-    }
-    if (matchedRecord) {
-      if (typeof matchedRecord.id !== "string") {
-        throw new TwentyResponseError(502, "missing_lookup_record_id");
-      }
-      existingId = matchedRecord.id;
-    }
   }
   const result = existingId
     ? await requestTwenty(
@@ -712,6 +814,37 @@ async function upsertTwentyRecord(
   return id;
 }
 
+function anonymizedFields(
+  entityType: TwentyCrmEntityType,
+): Record<string, unknown> {
+  if (entityType === "person") {
+    return {
+      name: { firstName: "Deleted", lastName: "Customer" },
+      emails: { primaryEmail: null },
+      phones: { primaryPhoneNumber: null },
+      avmUserId: "",
+      avmAccountStatus: "deleted",
+      avmLedgerBalanceKobo: 0,
+      avmAvailableBalanceKobo: 0,
+      avmReferralCode: "",
+      avmAnonymized: true,
+    };
+  }
+
+  const fields: Record<string, unknown> = {
+    avmUserId: "",
+    personId: null,
+  };
+  if (entityType === "bank_account") {
+    Object.assign(fields, {
+      bankName: "Redacted",
+      accountName: null,
+      lastFourDigits: "****",
+    });
+  }
+  return fields;
+}
+
 export const deliver = internalAction({
   args: { outboxId: v.id("twenty_crm_outbox") },
   returns: v.null(),
@@ -724,6 +857,58 @@ export const deliver = internalAction({
         internal.twentySync.getRecordLink,
         { entityType: job.entityType, entityId: job.entityId },
       );
+      if (job.operation === "anonymize") {
+        const endpoint = endpointFor(job.entityType);
+        const externalField =
+          job.entityType === "person" ? "avmUserId" : "externalId";
+        const lookupId =
+          job.lookupId ??
+          (job.entityType === "person" ? null : job.entityId);
+        let targetId = mappedId;
+        if (mappedId) {
+          try {
+            await requestTwenty(
+              `${baseUrl}/rest/${endpoint}/${encodeURIComponent(mappedId)}`,
+              "PATCH",
+              apiKey,
+              anonymizedFields(job.entityType),
+            );
+          } catch (error) {
+            if (error instanceof TwentyResponseError && error.status === 404) {
+              targetId = null;
+            } else throw error;
+          }
+        }
+        if (!targetId && lookupId) {
+          targetId = await findTwentyRecordId(
+            baseUrl,
+            apiKey,
+            endpoint,
+            externalField,
+            lookupId,
+          );
+          if (targetId) {
+            try {
+              await requestTwenty(
+                `${baseUrl}/rest/${endpoint}/${encodeURIComponent(targetId)}`,
+                "PATCH",
+                apiKey,
+                anonymizedFields(job.entityType),
+              );
+            } catch (error) {
+              if (!(error instanceof TwentyResponseError && error.status === 404)) {
+                throw error;
+              }
+            }
+          }
+        }
+        await ctx.runMutation(internal.twentySync.finish, {
+          outboxId: args.outboxId,
+          revision: job.revision,
+          leaseToken: job.leaseToken,
+        });
+        return null;
+      }
       if (job.operation === "delete") {
         if (mappedId) {
           try {
@@ -753,7 +938,7 @@ export const deliver = internalAction({
         entityId: job.entityId,
       })) as PreparedRecord | null;
       // A source record may have been hard-deleted before its queued upsert ran.
-      // Deletion/anonymization policies are handled by the dedicated lifecycle phase.
+      // The WorkOS deletion hook separately queues CRM anonymization work.
       if (!prepared) {
         await ctx.runMutation(internal.twentySync.finish, {
           outboxId: args.outboxId,

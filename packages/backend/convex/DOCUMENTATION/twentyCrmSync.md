@@ -43,8 +43,21 @@ Convex deployments; production sync must wait for staging validation.
 
 BVN/NIN values, bank account numbers, document URLs/files, withdrawal bank
 details, raw processing errors, and arbitrary transaction metadata are not sent.
-Records whose owning user is soft-deleted are skipped. User deletion and CRM
-retention/anonymization behavior is a later phase.
+Records whose owning user is soft-deleted are skipped. When WorkOS emits a hard
+`user.deleted` event, the backend queues an anonymization pass: the Person is
+renamed to “Deleted Customer,” contact details and AVM identity are cleared,
+balances and referral code are reset, and synced operational records retain
+their financial/status history while their customer ID and Person relation are
+cleared. Bank account summaries also have bank/account names and last-four
+digits redacted. This runs through the existing retryable outbox, with large
+histories processed in pages. Anonymization can recover a missing/stale CRM
+record link using the external ID saved on its pending outbox job; the lookup
+key is cleared when delivery succeeds. CRM tasks and notes are not currently
+synced.
+
+This flow does not purge retained operational records or set a timed retention
+period. Agree a retention/erasure policy before production rollout; do not treat
+the CRM anonymization as a source-database erasure.
 
 ## Initial staging backfill
 
@@ -69,5 +82,5 @@ configuration, replay failed records, and resolve the alert after the queue
 recovers.
 
 Validate with staging records and the Twenty API playground before configuring
-production. This phase does not create Twenty tasks, import production
-historical data, or implement user-deletion retention policy.
+production. This phase does not create Twenty tasks or import production
+historical data.
