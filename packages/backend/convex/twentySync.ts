@@ -213,7 +213,7 @@ async function loadPreparedRecord(
       amountKobo: asSafeInteger(source.requested_amount_kobo as bigint),
       status: source.status,
       occurredAt: asDate(source.requested_at as number),
-      updatedAt: asDate(
+      sourceUpdatedAt: asDate(
         (source.processed_at ?? source.approved_at ?? source.requested_at) as number,
       ),
       savingsPlanId: null,
@@ -239,7 +239,7 @@ async function loadPreparedRecord(
       reason:
         sanitizeOperationalReason(source.reason as string | undefined) ??
         "Requires review",
-      createdAt: asDate(source.placed_at as number),
+      sourceCreatedAt: asDate(source.placed_at as number),
       releasedAt: asDate(source.released_at as number | undefined),
     };
   } else if (entityType === "savings_plan") {
@@ -272,7 +272,7 @@ async function loadPreparedRecord(
       accountName: source.account_name ?? null,
       lastFourDigits: accountNumber.length >= 4 ? accountNumber.slice(-4) : "****",
       verificationStatus: source.verification_status,
-      isCurrent: true,
+      isCurrent: source.is_primary,
     };
   } else {
     fields = {
