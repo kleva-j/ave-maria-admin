@@ -64,3 +64,7 @@ jobs:
         env:
           TWENTY_API_URL: ${{ steps.twenty.outputs.server-url }}
           TWENTY_API_KEY: ${{ steps.twenty.outputs.api-key }}
+
+      - name: Show Twenty validation logs
+        if: always()
+        run: docker logs twenty-app-dev-test 2>&1 | grep -Ei 'metadata|validat|error' | tail -100 || true
