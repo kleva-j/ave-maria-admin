@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request: {}
+
+permissions:
+  contents: read
+
+env:
+  TWENTY_VERSION: v2.51.0
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Spawn Twenty test instance
+        id: twenty
+        uses: twentyhq/twenty/.github/actions/spawn-twenty-app-dev-test@main
+        with:
+          twenty-version: ${{ env.TWENTY_VERSION }}
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: yarn
+          cache-dependency-path: 'apps/twenty-crm/yarn.lock'
+
+      - name: Install Twenty CLI
+        run: npm install -g twenty@2.51.3
+
+      - name: Install dependencies
+        run: yarn install --immutable
+        working-directory: apps/twenty-crm
+
+      - name: Lint
+        run: yarn lint
+        working-directory: apps/twenty-crm
+
+      - name: Typecheck
+        run: yarn typecheck
+        working-directory: apps/twenty-crm
+
+      - name: Unit tests
+        run: yarn test:unit
+        working-directory: apps/twenty-crm
+
+      - name: Run integration tests
+        run: yarn test
+        working-directory: apps/twenty-crm
+        env:
+          TWENTY_API_URL: ${{ steps.twenty.outputs.server-url }}
+          TWENTY_API_KEY: ${{ steps.twenty.outputs.api-key }}
+
+      - name: Show Twenty validation logs
+        if: always()
+        run: docker logs twenty-app-dev-test 2>&1 | grep -Ei 'metadata|validat|error' | tail -100 || true
