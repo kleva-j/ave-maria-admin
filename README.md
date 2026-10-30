@@ -68,8 +68,10 @@ avm-daily/
 
 ### Prerequisites
 
-- Node.js 18.x or higher
-- pnpm 8.x or higher
+- Node.js 24.5 or higher (`.nvmrc` selects 24.5.0)
+- pnpm 10.x
+- Corepack-enabled Yarn 4 for the Twenty CRM schema app
+- Docker Compose v2 for the self-hosted Twenty server
 - Convex account (free tier available)
 - WorkOS account (for AuthKit)
 
@@ -117,13 +119,31 @@ cp packages/backend/.env.local apps/server/.env
 ### Running the Application
 
 ```bash
-# Start all applications
-pnpm run dev
+# Start the web, native, marketing, backend, Twenty server, and CRM schema watcher
+pnpm dev
 
 # Or start individually:
 pnpm run dev:web     # Web app on http://localhost:3001
 pnpm run dev:native  # Expo app
 ```
+
+Before the first `pnpm dev`, install the Twenty CRM app dependencies with
+`corepack enable && corepack yarn install` from `apps/twenty-crm`, install the
+Twenty CLI with `npm install --global twenty@2.51.3`, and complete the staging
+workspace setup at `http://localhost:3000`. If the CLI has not been authenticated
+to staging, `pnpm dev` opens the browser sign-in and saves a dedicated
+`avm-staging` profile. To configure that profile before starting the app:
+
+```bash
+twenty auth login --url http://localhost:3000 --name avm-staging --use
+```
+
+The root dev launcher starts the Twenty Compose services and the authenticated
+app watcher against the explicit `avm-staging` profile alongside the existing
+Turbo dev tasks. The watcher creates the app registration if needed and
+live-syncs schema changes while protecting remote entities missing from local
+source. Pressing Ctrl+C stops the dev processes and Compose services while
+preserving database and file-storage volumes.
 
 ## Authentication
 
