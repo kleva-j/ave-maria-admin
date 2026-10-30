@@ -39,7 +39,6 @@ export default defineObject({
         joinColumnName: 'personId',
       },
       isNullable: true,
-      defaultValue: null,
     },
   ],
 });
