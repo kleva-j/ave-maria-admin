@@ -37,24 +37,30 @@ jobs:
         with:
           node-version-file: '.nvmrc'
           cache: yarn
+          cache-dependency-path: 'apps/twenty-crm/yarn.lock'
 
       - name: Install Twenty CLI
         run: npm install -g twenty@2.51.3
 
       - name: Install dependencies
         run: yarn install --immutable
+        working-directory: apps/twenty-crm
 
       - name: Lint
         run: yarn lint
+        working-directory: apps/twenty-crm
 
       - name: Typecheck
         run: yarn typecheck
+        working-directory: apps/twenty-crm
 
       - name: Unit tests
         run: yarn test:unit
+        working-directory: apps/twenty-crm
 
       - name: Run integration tests
         run: yarn test
+        working-directory: apps/twenty-crm
         env:
           TWENTY_API_URL: ${{ steps.twenty.outputs.server-url }}
           TWENTY_API_KEY: ${{ steps.twenty.outputs.api-key }}
