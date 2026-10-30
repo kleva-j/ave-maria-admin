@@ -34,6 +34,11 @@ export async function enqueueTwentyCrmRecord(
 
   let outboxId: TwentyCrmOutboxId;
   if (existing) {
+    // Deletion anonymization is terminal: a later backfill must not replace it
+    // with an upsert and restore customer-identifying data in the CRM.
+    if (existing.operation === "anonymize" && operation === "upsert") {
+      return;
+    }
     const hasActiveLease =
       existing.status === "processing" && (existing.lease_expires_at ?? 0) > now;
     await ctx.db.patch("twenty_crm_outbox", existing._id, {
