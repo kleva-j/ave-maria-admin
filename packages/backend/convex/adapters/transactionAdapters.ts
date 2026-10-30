@@ -7,6 +7,7 @@ import { DomainError } from "@avm-daily/domain";
 import type { Transaction } from "@avm-daily/domain";
 
 import type { MutationCtx, QueryCtx } from "../_generated/server";
+import { enqueueTwentyCrmRecord } from "../twentyCrmOutbox";
 
 import type {
   Transaction as ConvexTransaction,
@@ -110,6 +111,7 @@ export function createConvexTransactionWriteRepository(
       };
 
       const id = await ctx.db.insert(TABLE_NAMES.TRANSACTIONS, insertPayload);
+      await enqueueTwentyCrmRecord(ctx, "transaction", String(id));
       const doc = await ctx.db.get(id);
       if (!doc) {
         throw new Error("Failed to create transaction");
@@ -130,6 +132,7 @@ export function createConvexTransactionWriteRepository(
       }
 
       await ctx.db.patch(id, { metadata });
+      await enqueueTwentyCrmRecord(ctx, "transaction", String(id));
     },
   };
 }

@@ -73,6 +73,8 @@ import type * as schemas_withdrawals from "../schemas/withdrawals.js";
 import type * as sentry from "../sentry.js";
 import type * as shared from "../shared.js";
 import type * as transactions from "../transactions.js";
+import type * as twentyCrmOutbox from "../twentyCrmOutbox.js";
+import type * as twentySync from "../twentySync.js";
 import type * as types from "../types.js";
 import type * as userAudit from "../userAudit.js";
 import type * as userNotifications from "../userNotifications.js";
@@ -154,6 +156,8 @@ declare const fullApi: ApiFromModules<{
   sentry: typeof sentry;
   shared: typeof shared;
   transactions: typeof transactions;
+  twentyCrmOutbox: typeof twentyCrmOutbox;
+  twentySync: typeof twentySync;
   types: typeof types;
   userAudit: typeof userAudit;
   userNotifications: typeof userNotifications;

@@ -17,11 +17,13 @@ import type {
   Context,
   UserId,
 } from "../types";
+import type { MutationCtx } from "../_generated/server";
 
 import { DomainError } from "@avm-daily/domain";
 
 import { getInsertDb, getPatchDb } from "./utils";
 import { TABLE_NAMES } from "../shared";
+import { enqueueTwentyCrmRecord } from "../twentyCrmOutbox";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -152,6 +154,7 @@ export function createConvexSavingsPlanRepository(
         created_at: plan.created_at,
         updated_at: plan.updated_at,
       });
+      await enqueueTwentyCrmRecord(ctx as MutationCtx, "savings_plan", String(id));
 
       const doc = await ctx.db.get(id);
       if (!doc) {
@@ -208,6 +211,7 @@ export function createConvexSavingsPlanRepository(
           ] as const,
         ),
       );
+      await enqueueTwentyCrmRecord(ctx as MutationCtx, "savings_plan", String(existing._id));
 
       const updated = await ctx.db.get(existing._id);
       if (!updated) {
@@ -242,6 +246,7 @@ export function createConvexSavingsPlanRepository(
         current_amount_kobo: currentAmountKobo,
         updated_at: updatedAt,
       });
+      await enqueueTwentyCrmRecord(ctx as MutationCtx, "savings_plan", String(existingPlan._id));
     },
   };
 }

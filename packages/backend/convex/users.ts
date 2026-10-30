@@ -19,6 +19,7 @@ import { buildUserProfileSyncAuditChange } from "./userAudit";
 import { ensureUser, getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
 import { posthog } from "./posthog";
+import { enqueueTwentyCrmRecord } from "./twentyCrmOutbox";
 
 import {
   syncUserInsert,
@@ -166,6 +167,9 @@ export const upsertFromWorkOS = internalMutation({
       // Sync aggregates for user updates
       const updatedUser = (await ctx.db.get(existing._id))!;
       await syncUserUpdate(ctx, oldUser, updatedUser);
+      if (updatedUser.deleted_at === undefined) {
+        await enqueueTwentyCrmRecord(ctx, "person", String(updatedUser._id));
+      }
 
       // Audit significant profile changes during external sync
       const profileSyncAuditChange = buildUserProfileSyncAuditChange(
@@ -207,6 +211,7 @@ export const upsertFromWorkOS = internalMutation({
     const newUser = await ctx.db.get(userId);
     if (newUser) {
       await syncUserInsert(ctx, newUser);
+      await enqueueTwentyCrmRecord(ctx, "person", String(newUser._id));
     }
 
     try {

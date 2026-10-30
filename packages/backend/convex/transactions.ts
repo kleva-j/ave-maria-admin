@@ -53,6 +53,7 @@ import { getAdminUser, getUser, isRecord } from "./utils";
 import { captureCriticalError, flushSentry } from "./sentry";
 import { internal } from "./_generated/api";
 import { auditLog } from "./auditLog";
+import { enqueueTwentyCrmRecord } from "./twentyCrmOutbox";
 
 import {
   createReverseTransactionUseCase,
@@ -1023,6 +1024,7 @@ export const rebuildUserProjection = internalMutation({
       savings_balance_kobo: projected.savingsBalanceKobo,
       updated_at: now,
     });
+    await enqueueTwentyCrmRecord(ctx, "person", String(args.userId));
 
     return {
       userId: args.userId,
@@ -1064,6 +1066,7 @@ export const rebuildPlanProjection = internalMutation({
       current_amount_kobo: projected,
       updated_at: now,
     });
+    await enqueueTwentyCrmRecord(ctx, "savings_plan", String(args.userPlanId));
 
     return {
       userPlanId: args.userPlanId,

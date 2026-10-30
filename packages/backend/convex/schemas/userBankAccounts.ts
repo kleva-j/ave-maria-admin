@@ -19,6 +19,7 @@ export const user_bank_accounts = defineTable({
   rejection_reason: v.optional(v.string()),
 })
   .index("by_user_id", ["user_id"])
+  .index("by_created_at", ["created_at"])
   .index("by_user_id_and_is_primary", ["user_id", "is_primary"])
   .index("by_account_number", ["account_number"])
   .index("by_verification_status", ["verification_status"])
