@@ -8,7 +8,6 @@ const serverDirectory = path.join(rootDirectory, "apps/twenty-server");
 const crmDirectory = path.join(rootDirectory, "apps/twenty-crm");
 const composeFile = "compose.yaml";
 const stagingRemote = "avm-staging";
-const rtk = process.env.RTK_BIN || "rtk";
 const childProcesses = new Map();
 let isShuttingDown = false;
 let resolveShutdown;
@@ -34,7 +33,7 @@ function getTwentyPort() {
 
 function runOnce(label, args, cwd) {
   return new Promise((resolve, reject) => {
-    const child = spawn(rtk, ["proxy", ...args], {
+    const child = spawn(args[0], args.slice(1), {
       cwd,
       stdio: "inherit",
     });
@@ -56,7 +55,7 @@ function runOnce(label, args, cwd) {
 
 function checkQuietly(label, args, cwd) {
   return new Promise((resolve, reject) => {
-    const child = spawn(rtk, ["proxy", ...args], {
+    const child = spawn(args[0], args.slice(1), {
       cwd,
       stdio: "ignore",
     });
@@ -77,7 +76,7 @@ function checkQuietly(label, args, cwd) {
 }
 
 function startLongRunning(label, args, cwd) {
-  const child = spawn(rtk, ["proxy", ...args], {
+  const child = spawn(args[0], args.slice(1), {
     cwd,
     detached: process.platform !== "win32",
     stdio: "inherit",
@@ -172,14 +171,7 @@ async function main() {
     );
   }
 
-  try {
-    await runOnce("Twenty CLI check", ["twenty", "--version"], crmDirectory);
-  } catch {
-    throw new Error(
-      "The standalone Twenty CLI is missing. Install it with " +
-        "`npm install --global twenty@2.51.3` before running `pnpm dev`.",
-    );
-  }
+  await runOnce("Twenty CLI check", ["twenty", "--version"], crmDirectory);
 
   console.log("[dev] Starting the existing app and backend dev tasks with Turbo.");
   startLongRunning("Turbo dev tasks", ["pnpm", "exec", "turbo", "dev"], rootDirectory);

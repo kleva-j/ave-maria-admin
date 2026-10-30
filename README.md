@@ -75,6 +75,9 @@ avm-daily/
 - Convex account (free tier available)
 - WorkOS account (for AuthKit)
 
+On Windows, run the project from WSL 2 with Docker Desktop's WSL integration;
+the Twenty setup script requires a POSIX shell.
+
 ### Installation
 
 ```bash
