@@ -76,6 +76,10 @@ function checkQuietly(label, args, cwd) {
 }
 
 function startLongRunning(label, args, cwd) {
+  if (isShuttingDown) {
+    return null;
+  }
+
   const child = spawn(args[0], args.slice(1), {
     cwd,
     detached: process.platform !== "win32",
@@ -187,6 +191,11 @@ async function main() {
     ["docker", "compose", "--file", composeFile, "up", "--detach", "--wait"],
     serverDirectory,
   );
+  if (isShuttingDown) {
+    await shutdownComplete;
+    await stopComposeServices();
+    return;
+  }
 
   const stagingAuthStatus = ["twenty", "auth", "status", "--remote", stagingRemote, "--no-input"];
 
