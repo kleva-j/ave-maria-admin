@@ -305,6 +305,7 @@ export const AdminAlertType = {
   RECONCILIATION_RUN_FAILED: "reconciliation_run_failed",
   RECONCILIATION_RUN_STALE: "reconciliation_run_stale",
   RECONCILIATION_OPEN_ISSUES: "reconciliation_open_issues",
+  TWENTY_CRM_SYNC_FAILED: "twenty_crm_sync_failed",
 } as const;
 
 export type AdminAlertType =

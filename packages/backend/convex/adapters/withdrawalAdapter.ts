@@ -6,6 +6,7 @@ import type { WithdrawalRepository } from "@avm-daily/application/ports";
 import type { Withdrawal as WithdrawalDomain } from "@avm-daily/domain";
 
 import type { Withdrawal, UserId, WithdrawalId, Context } from "../types";
+import type { MutationCtx } from "../_generated/server";
 
 import {
   WithdrawalMethod as DomainWithdrawalMethod,
@@ -13,6 +14,7 @@ import {
 } from "@avm-daily/domain";
 
 import { TABLE_NAMES, WithdrawalMethod } from "../shared";
+import { enqueueTwentyCrmRecord } from "../twentyCrmOutbox";
 import { getInsertDb, getPatchDb } from "./utils";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -143,6 +145,7 @@ export function createConvexWithdrawalRepository(
           ? { last_processing_error: withdrawal.last_processing_error }
           : {}),
       });
+      await enqueueTwentyCrmRecord(ctx as MutationCtx, "withdrawal", String(id));
 
       const doc = await ctx.db.get(id);
       if (!doc) {
@@ -225,6 +228,7 @@ export function createConvexWithdrawalRepository(
           ? { last_processing_error: patch.last_processing_error }
           : {}),
       });
+      await enqueueTwentyCrmRecord(ctx as MutationCtx, "withdrawal", String(id));
 
       const updated = await ctx.db.get(id);
       if (!updated) {

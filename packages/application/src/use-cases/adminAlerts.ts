@@ -112,6 +112,12 @@ export const ADMIN_ALERT_POLICIES: Record<AdminAlertType, AdminAlertPolicy> = {
     routingRoles: [AdminRole.FINANCE, AdminRole.SUPER_ADMIN],
     requiresHealthyConditionForManualResolve: true,
   },
+  [AdminAlertType.TWENTY_CRM_SYNC_FAILED]: {
+    alertType: AdminAlertType.TWENTY_CRM_SYNC_FAILED,
+    scope: AdminAlertScope.SYSTEM,
+    routingRoles: [AdminRole.OPERATIONS, AdminRole.SUPER_ADMIN],
+    requiresHealthyConditionForManualResolve: false,
+  },
 };
 
 type ConditionEvaluation = {

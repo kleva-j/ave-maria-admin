@@ -24,6 +24,7 @@ import type {
 import { DomainError } from "@avm-daily/domain";
 
 import { getInsertDb, getPatchDb } from "./utils";
+import { enqueueTwentyCrmRecord } from "../twentyCrmOutbox";
 
 import {
   BankAccountEventType,
@@ -128,6 +129,7 @@ export function createConvexRiskHoldRepository(
         placed_by_admin_id: hold.placed_by_admin_id,
         placed_at: hold.placed_at,
       });
+      await enqueueTwentyCrmRecord(ctx as MutationCtx, "risk_hold", String(id));
       return { _id: id };
     },
 
@@ -147,6 +149,7 @@ export function createConvexRiskHoldRepository(
         released_by_admin_id: releasedByAdminId,
         released_at: releasedAt,
       });
+      await enqueueTwentyCrmRecord(ctx as MutationCtx, "risk_hold", String(id));
     },
   };
 }

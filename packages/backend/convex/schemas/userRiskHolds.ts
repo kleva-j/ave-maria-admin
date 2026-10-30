@@ -37,6 +37,7 @@ export const user_risk_holds = defineTable({
 })
   // Primary lookup to check all holds currently affecting a user
   .index("by_user_id", ["user_id"])
+  .index("by_placed_at", ["placed_at"])
 
   // Global view for admin dashboards to find all accounts currently under review
   .index("by_status", ["status"])

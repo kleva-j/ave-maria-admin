@@ -698,6 +698,7 @@ export const AdminAlertType = {
   RECONCILIATION_RUN_FAILED: "reconciliation_run_failed",
   RECONCILIATION_RUN_STALE: "reconciliation_run_stale",
   RECONCILIATION_OPEN_ISSUES: "reconciliation_open_issues",
+  TWENTY_CRM_SYNC_FAILED: "twenty_crm_sync_failed",
 } as const;
 
 export const adminAlertType = v.union(
@@ -708,6 +709,7 @@ export const adminAlertType = v.union(
   v.literal(AdminAlertType.RECONCILIATION_RUN_FAILED),
   v.literal(AdminAlertType.RECONCILIATION_RUN_STALE),
   v.literal(AdminAlertType.RECONCILIATION_OPEN_ISSUES),
+  v.literal(AdminAlertType.TWENTY_CRM_SYNC_FAILED),
 );
 
 export type AdminAlertType = typeof adminAlertType.type;

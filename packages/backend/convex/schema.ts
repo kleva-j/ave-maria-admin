@@ -7,6 +7,10 @@ import { user_notification_deliveries } from "./schemas/userNotificationDeliveri
 import { novu_enqueue_cursor } from "./schemas/novuEnqueueCursor";
 import { user_bank_account_events } from "./schemas/userBankAccountEvents";
 import { withdrawal_reservations } from "./schemas/withdrawalReservations";
+import {
+  twenty_crm_outbox,
+  twenty_crm_record_links,
+} from "./schemas/twentyCrmSync";
 import { bank_account_documents } from "./schemas/bankAccountDocuments";
 import { savings_plan_templates } from "./schemas/savingsPlanTemplates";
 import { admin_dashboard_kpis } from "./schemas/adminDashboardKpis";
@@ -46,6 +50,8 @@ export default defineSchema({
   [TABLE_NAMES.BANK_ACCOUNT_DOCUMENTS]: bank_account_documents,
   [TABLE_NAMES.SAVINGS_PLAN_TEMPLATES]: savings_plan_templates,
   [TABLE_NAMES.WITHDRAWAL_RESERVATIONS]: withdrawal_reservations,
+  twenty_crm_outbox,
+  twenty_crm_record_links,
   [TABLE_NAMES.USER_BANK_ACCOUNT_EVENTS]: user_bank_account_events,
   [TABLE_NAMES.BANK_ACCOUNT_DOCUMENT_COMMENTS]: bank_account_document_comments,
 });

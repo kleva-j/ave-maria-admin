@@ -15,6 +15,80 @@ function validateEnv(): { apiUrl: string; apiKey: string } {
   return { apiUrl, apiKey };
 }
 
+async function getMetadataValidationDetails(apiUrl: string, apiKey: string) {
+  let buildResult: Awaited<ReturnType<typeof runTwenty>>;
+
+  try {
+    buildResult = await runTwenty(['app', 'build']);
+  } catch (error) {
+    return `Could not rebuild the app manifest: ${String(error)}`;
+  }
+
+  if (!buildResult.ok) {
+    return `Could not rebuild the app manifest: ${JSON.stringify(buildResult.error)}`;
+  }
+
+  const manifest = (buildResult.data as { manifest?: unknown }).manifest;
+
+  if (!manifest) {
+    return 'The Twenty CLI build result did not include a manifest.';
+  }
+
+  let response: Response;
+
+  try {
+    response = await fetch(`${apiUrl.replace(/\/$/, '')}/metadata`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query:
+          'mutation PreviewApplication($manifest: JSON!) { ' +
+          'syncApplication(manifest: $manifest, dryRun: true) { ' +
+          'applicationUniversalIdentifier actions } }',
+        variables: { manifest },
+      }),
+    });
+  } catch (error) {
+    return `Could not request the read-only metadata preview: ${String(error)}`;
+  }
+
+  const body: unknown = await response.json().catch(() => null);
+  const errors =
+    typeof body === 'object' && body !== null && 'errors' in body
+      ? body.errors
+      : undefined;
+
+  if (!Array.isArray(errors) || errors.length === 0) {
+    return `The diagnostic preview returned HTTP ${response.status} without GraphQL validation errors.`;
+  }
+
+  return JSON.stringify(
+    {
+      status: response.status,
+      errors: errors.map((error) => {
+        if (typeof error !== 'object' || error === null) {
+          return error;
+        }
+
+        const graphqlError = error as {
+          message?: unknown;
+          extensions?: unknown;
+        };
+
+        return {
+          message: graphqlError.message,
+          extensions: graphqlError.extensions,
+        };
+      }),
+    },
+    null,
+    2,
+  );
+}
+
 async function checkServer(apiUrl: string) {
   let response: Response;
 
@@ -33,7 +107,7 @@ async function checkServer(apiUrl: string) {
 }
 
 export async function setup() {
-  const { apiUrl } = validateEnv();
+  const { apiUrl, apiKey } = validateEnv();
 
   await checkServer(apiUrl);
   await runTwenty(['app', 'uninstall', '--yes']);
@@ -41,8 +115,17 @@ export async function setup() {
   const result = await runTwenty(['app', 'apply', '--create']);
 
   if (!result.ok) {
+    const validationDetails =
+      result.error.code === 'GRAPHQL_ERROR' &&
+      result.error.message.includes('Validation errors')
+        ? await getMetadataValidationDetails(apiUrl, apiKey)
+        : undefined;
+
     throw new Error(
-      `App apply failed: ${JSON.stringify(result.error, null, 2)}`,
+      `App apply failed: ${JSON.stringify(result.error, null, 2)}` +
+        (validationDetails
+          ? `\nMetadata validation details: ${validationDetails}`
+          : ''),
     );
   }
 }

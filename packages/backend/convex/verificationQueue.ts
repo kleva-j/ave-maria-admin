@@ -15,6 +15,7 @@
 import { ConvexError, v } from "convex/values";
 
 import { createConvexEventOutboxService } from "./adapters/eventOutboxAdapter";
+import { enqueueTwentyCrmRecord } from "./twentyCrmOutbox";
 import { mutation, query } from "./_generated/server";
 import { getAdminUser } from "./utils";
 import { auditLog } from "./auditLog";
@@ -515,6 +516,7 @@ export const approveVerification = mutation({
       },
       actor_admin_id: admin._id,
     });
+    await enqueueTwentyCrmRecord(ctx, "bank_account", String(updated._id));
 
     await createConvexEventOutboxService(ctx).append([
       {
@@ -642,6 +644,7 @@ export const rejectVerification = mutation({
       },
       actor_admin_id: admin._id,
     });
+    await enqueueTwentyCrmRecord(ctx, "bank_account", String(updated._id));
 
     await createConvexEventOutboxService(ctx).append([
       {

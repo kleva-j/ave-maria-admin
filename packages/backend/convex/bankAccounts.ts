@@ -21,6 +21,7 @@ import type { VerificationStatus } from "./shared";
 import { ConvexError, v } from "convex/values";
 
 import { createConvexEventOutboxService } from "./adapters/eventOutboxAdapter";
+import { enqueueTwentyCrmRecord } from "./twentyCrmOutbox";
 import { sortAccounts, getAdminUser, getUser } from "./utils";
 import { auditLog } from "./auditLog";
 import {
@@ -188,6 +189,12 @@ async function logAccountEvent(
     ...(params.actorUserId && { actor_user_id: params.actorUserId }),
     ...(params.actorAdminId && { actor_admin_id: params.actorAdminId }),
   });
+  await enqueueTwentyCrmRecord(
+    ctx,
+    "bank_account",
+    String(params.accountId),
+    params.eventType === BankAccountEventType.DELETED ? "delete" : "upsert",
+  );
 }
 
 /**

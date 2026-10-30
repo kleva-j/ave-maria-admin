@@ -180,10 +180,8 @@ async function main() {
   console.log("[dev] Starting the existing app and backend dev tasks with Turbo.");
   startLongRunning("Turbo dev tasks", ["pnpm", "exec", "turbo", "dev"], rootDirectory);
 
-  if (!existsSync(path.join(serverDirectory, ".env"))) {
-    console.log("[dev] Creating private local credentials for Twenty Compose.");
-    await runOnce("Twenty local setup", ["./scripts/setup.sh"], serverDirectory);
-  }
+  console.log("[dev] Preparing private local credentials for Twenty Compose.");
+  await runOnce("Twenty local setup", ["./scripts/setup.sh"], serverDirectory);
 
   console.log("[dev] Starting the Twenty server, database, and Redis.");
   await runOnce(

@@ -6,8 +6,10 @@ import type { UserRepository } from "@avm-daily/application/ports";
 import type { User as UserDomain } from "@avm-daily/domain";
 
 import type { User, UserId, Context } from "../types";
+import type { MutationCtx } from "../_generated/server";
 
 import { getPatchDb } from "./utils";
+import { enqueueTwentyCrmRecord } from "../twentyCrmOutbox";
 
 function docToUser(doc: User): UserDomain {
   return {
@@ -46,6 +48,7 @@ export function createConvexUserRepository(ctx: Context): UserRepository {
         savings_balance_kobo: savingsBalanceKobo,
         updated_at: updatedAt,
       });
+      await enqueueTwentyCrmRecord(ctx as MutationCtx, "person", String(id));
     },
 
     async updateStatus(
@@ -62,6 +65,7 @@ export function createConvexUserRepository(ctx: Context): UserRepository {
         status,
         updated_at: updatedAt,
       });
+      await enqueueTwentyCrmRecord(ctx as MutationCtx, "person", String(id));
     },
   };
 }

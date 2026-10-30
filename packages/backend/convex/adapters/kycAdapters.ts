@@ -2,11 +2,13 @@ import type { KycDocumentRepository } from "@avm-daily/application/ports";
 import type { KycDocument as KycDocumentDomain } from "@avm-daily/domain";
 
 import type { KycDocument, KycDocumentId, UserId, Context } from "../types";
+import type { MutationCtx } from "../_generated/server";
 
 import { DomainError } from "@avm-daily/domain";
 
 import { getInsertDb, getPatchDb, getDeleteDb } from "./utils";
 import { TABLE_NAMES } from "../shared";
+import { enqueueTwentyCrmRecord } from "../twentyCrmOutbox";
 
 type KycDocumentPatch = Partial<
   Omit<KycDocumentDomain, "_id" | "user_id" | "document_type" | "created_at">
@@ -107,6 +109,7 @@ export function createConvexKycDocumentRepository(
             }
           : {}),
       });
+      await enqueueTwentyCrmRecord(ctx as MutationCtx, "kyc_document", String(id));
 
       const doc = await ctx.db.get(id);
 
@@ -172,6 +175,7 @@ export function createConvexKycDocumentRepository(
             }
           : {}),
       });
+      await enqueueTwentyCrmRecord(ctx as MutationCtx, "kyc_document", String(id));
 
       const updated = await ctx.db.get(id);
 
@@ -199,6 +203,7 @@ export function createConvexKycDocumentRepository(
         );
       }
       await deleteDb.delete(id);
+      await enqueueTwentyCrmRecord(ctx as MutationCtx, "kyc_document", String(id), "delete");
     },
   };
 }
