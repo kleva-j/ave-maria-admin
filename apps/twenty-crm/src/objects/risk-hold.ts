@@ -21,7 +21,7 @@ export default defineObject({
     { universalIdentifier: '4ce5a453-56c5-4cda-a3da-fc29a3aa095a', name: 'avmUserId', type: FieldType.TEXT, label: 'AVM User ID' },
     { universalIdentifier: '4d772049-43ca-43c9-9000-9201c3806fc7', name: 'status', type: FieldType.TEXT, label: 'Status' },
     { universalIdentifier: 'e1aa5c6c-d0a2-451c-8e06-e08ca2e85169', name: 'reason', type: FieldType.TEXT, label: 'Reason' },
-    { universalIdentifier: '53b24209-f31b-494e-8464-2c50d55a4b94', name: 'createdAt', type: FieldType.DATE_TIME, label: 'Created At' },
+    { universalIdentifier: '53b24209-f31b-494e-8464-2c50d55a4b94', name: 'sourceCreatedAt', type: FieldType.DATE_TIME, label: 'AVM Created At' },
     { universalIdentifier: 'cf69df18-4b18-4257-8e41-66621373495c', name: 'releasedAt', type: FieldType.DATE_TIME, label: 'Released At', isNullable: true, defaultValue: null },
     {
       universalIdentifier: 'bdb364a2-5617-4578-983a-fd4fbeafe032',

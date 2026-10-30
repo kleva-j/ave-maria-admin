@@ -23,7 +23,7 @@ export default defineObject({
     { universalIdentifier: '90f33f60-9c99-4963-bb98-85863871e03e', name: 'amountKobo', type: FieldType.NUMBER, label: 'Amount (Kobo)' },
     { universalIdentifier: '6cd6ae46-ed99-458d-9c69-20b10b60ab45', name: 'status', type: FieldType.TEXT, label: 'Status' },
     { universalIdentifier: '67f65d85-6474-4914-ad86-999ed4d91a68', name: 'occurredAt', type: FieldType.DATE_TIME, label: 'Created At' },
-    { universalIdentifier: '6fc35c81-fb6a-4836-83b7-16f248fe6274', name: 'updatedAt', type: FieldType.DATE_TIME, label: 'Updated At' },
+    { universalIdentifier: '6fc35c81-fb6a-4836-83b7-16f248fe6274', name: 'sourceUpdatedAt', type: FieldType.DATE_TIME, label: 'AVM Updated At' },
     { universalIdentifier: '93c2ee3f-d02e-420f-a16a-db959b9ca306', name: 'savingsPlanId', type: FieldType.TEXT, label: 'AVM Savings Plan ID', isNullable: true, defaultValue: null },
     { universalIdentifier: '35659fd8-a28e-40c4-bc91-d8ac781feac3', name: 'reversalReference', type: FieldType.TEXT, label: 'Reversal Reference', isNullable: true, defaultValue: null },
     {
