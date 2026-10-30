@@ -62,6 +62,7 @@ import type * as schemas_savingsPlanTemplates from "../schemas/savingsPlanTempla
 import type * as schemas_transactionReconciliationIssues from "../schemas/transactionReconciliationIssues.js";
 import type * as schemas_transactionReconciliationRuns from "../schemas/transactionReconciliationRuns.js";
 import type * as schemas_transactions from "../schemas/transactions.js";
+import type * as schemas_twentyCrmSync from "../schemas/twentyCrmSync.js";
 import type * as schemas_userBankAccountEvents from "../schemas/userBankAccountEvents.js";
 import type * as schemas_userBankAccounts from "../schemas/userBankAccounts.js";
 import type * as schemas_userNotificationDeliveries from "../schemas/userNotificationDeliveries.js";
@@ -145,6 +146,7 @@ declare const fullApi: ApiFromModules<{
   "schemas/transactionReconciliationIssues": typeof schemas_transactionReconciliationIssues;
   "schemas/transactionReconciliationRuns": typeof schemas_transactionReconciliationRuns;
   "schemas/transactions": typeof schemas_transactions;
+  "schemas/twentyCrmSync": typeof schemas_twentyCrmSync;
   "schemas/userBankAccountEvents": typeof schemas_userBankAccountEvents;
   "schemas/userBankAccounts": typeof schemas_userBankAccounts;
   "schemas/userNotificationDeliveries": typeof schemas_userNotificationDeliveries;

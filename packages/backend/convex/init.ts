@@ -52,6 +52,11 @@ export const setup = internalAction({
         fn: internal.userNotifications.sweep,
         schedule: { kind: "interval" as const, ms: 60 * 1000 }, // 1 minute
       },
+      {
+        name: "recover Twenty CRM sync jobs",
+        fn: internal.twentySync.recover,
+        schedule: { kind: "interval" as const, ms: 60 * 1000 }, // 1 minute
+      },
     ];
 
     for (const job of cronJobs) {
