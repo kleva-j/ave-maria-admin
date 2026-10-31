@@ -116,7 +116,11 @@ http.route({
       },
     );
 
-    return new Response(null, { status: result.accepted ? 202 : 404 });
+    if (!result.accepted) {
+      return Response.json({ accepted: false, reason: "unmatched_user" });
+    }
+
+    return new Response(null, { status: 202 });
   }),
 });
 

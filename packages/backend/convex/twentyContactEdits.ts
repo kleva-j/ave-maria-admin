@@ -52,7 +52,7 @@ export const ingestFromTwenty = internalMutation({
       email: user.email,
       phone: user.phone,
     };
-    
+
     for (const field of ["first_name", "last_name", "email", "phone"] as const) {
       const value = args.fields[field];
       if (value === undefined) continue;
@@ -184,6 +184,12 @@ export const _finishReview = internalMutation({
     if (!request || request.status !== "pending") {
       throw new ConvexError("Contact edit request is no longer pending");
     }
+    
+    for (const field of ["first_name", "last_name", "email", "phone"] as const) {
+      if (request.proposed_fields[field] !== args.fields[field]) {
+        throw new ConvexError("Contact edit request changed while it was being reviewed");
+      }
+    }
     const user = await ctx.db
       .query("users")
       .withIndex("by_workos_id", (q) => q.eq("workosId", args.workosId))
@@ -262,23 +268,30 @@ export const review = action({
     }
     if (args.decision === "apply") {
       const email = request.fields.email?.trim();
+      if (request.fields.email !== undefined && !email) {
+        throw new ConvexError("The proposed email address cannot be empty");
+      }
       if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
         throw new ConvexError("The proposed email address is invalid");
       }
-      const apiKey = process.env.WORKOS_API_KEY;
-      if (!apiKey) throw new ConvexError("WORKOS_API_KEY is not configured");
       const workosFields: Record<string, string> = {};
       if (email) workosFields.email = email;
       if (request.fields.first_name !== undefined) workosFields.first_name = request.fields.first_name.trim();
       if (request.fields.last_name !== undefined) workosFields.last_name = request.fields.last_name.trim();
-      const response = await fetch(`https://api.workos.com/user_management/users/${request.workosId}`, {
-        method: "POST",
-        headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-        body: JSON.stringify(workosFields),
-        signal: AbortSignal.timeout(10_000),
-      }).catch(() => null);
-      if (!response?.ok) {
-        throw new ConvexError(`WorkOS profile update failed${response ? ` (HTTP ${response.status})` : " (network error)"}`);
+      if (Object.keys(workosFields).length > 0) {
+        const apiKey = process.env.WORKOS_API_KEY;
+        if (!apiKey) throw new ConvexError("WORKOS_API_KEY is not configured");
+
+        const response = await fetch(`https://api.workos.com/user_management/users/${request.workosId}`, {
+          method: "PUT",
+          headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
+          body: JSON.stringify(workosFields),
+          signal: AbortSignal.timeout(10_000),
+        }).catch(() => null);
+
+        if (!response?.ok) {
+          throw new ConvexError(`WorkOS profile update failed${response ? ` (HTTP ${response.status})` : " (network error)"}`);
+        }
       }
     }
     await ctx.runMutation(internal.twentyContactEdits._finishReview, {

@@ -13,6 +13,10 @@ type Person = {
 type PersonUpdatedEvent = DatabaseEventPayload<ObjectRecordUpdateEvent<Person>>;
 
 const handler = async (event: PersonUpdatedEvent) => {
+  // App-originated syncs have no workspace member behind them; only staff edits
+  // should create contact review proposals.
+  if (event.workspaceMemberId == null) return { accepted: false };
+
   const endpoint = process.env.AVM_CONVEX_HTTP_URL;
   const secret = process.env.AVM_CONTACT_EDIT_WEBHOOK_SECRET;
   if (!endpoint || !secret) {
@@ -67,10 +71,23 @@ const handler = async (event: PersonUpdatedEvent) => {
     },
     body,
   });
-  if (!response.ok && response.status !== 404) {
+  if (!response.ok) {
     throw new Error(`AVM contact edit webhook returned HTTP ${response.status}`);
   }
-  return { accepted: response.status !== 404 };
+  if (response.status === 200) {
+    const result: unknown = await response.json();
+    if (
+      result &&
+      typeof result === 'object' &&
+      'accepted' in result &&
+      result.accepted === false &&
+      'reason' in result &&
+      result.reason === 'unmatched_user'
+    ) {
+      return { accepted: false };
+    }
+  }
+  return { accepted: true };
 };
 
 export default defineLogicFunction({
