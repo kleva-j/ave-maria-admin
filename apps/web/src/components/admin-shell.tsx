@@ -1,5 +1,5 @@
-import { Link, useRouterState } from "@tanstack/react-router";
 import { api } from "@avm-daily/backend/convex/_generated/api";
+import { Link, useRouterState } from "@tanstack/react-router";
 import { Button } from "@avm-daily/ui/components/button";
 import { Badge } from "@avm-daily/ui/components/badge";
 import { convexQuery } from "@convex-dev/react-query";
@@ -22,6 +22,7 @@ type NavigationItem = { to: string; label: string };
 const baseNavigationItems: ReadonlyArray<NavigationItem> = [
   { to: "/admin", label: "Overview" },
   { to: "/admin/alerts", label: "Alerts" },
+  { to: "/admin/crm-contact-edits", label: "CRM edits" },
   { to: "/admin/withdrawals", label: "Withdrawals" },
   { to: "/admin/kyc", label: "KYC" },
   { to: "/admin/bank-verification", label: "Bank Verification" },

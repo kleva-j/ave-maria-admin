@@ -10,6 +10,7 @@ import { withdrawal_reservations } from "./schemas/withdrawalReservations";
 import {
   twenty_crm_outbox,
   twenty_crm_record_links,
+  twenty_crm_contact_edit_requests,
 } from "./schemas/twentyCrmSync";
 import { bank_account_documents } from "./schemas/bankAccountDocuments";
 import { savings_plan_templates } from "./schemas/savingsPlanTemplates";
@@ -52,6 +53,7 @@ export default defineSchema({
   [TABLE_NAMES.WITHDRAWAL_RESERVATIONS]: withdrawal_reservations,
   twenty_crm_outbox,
   twenty_crm_record_links,
+  twenty_crm_contact_edit_requests,
   [TABLE_NAMES.USER_BANK_ACCOUNT_EVENTS]: user_bank_account_events,
   [TABLE_NAMES.BANK_ACCOUNT_DOCUMENT_COMMENTS]: bank_account_document_comments,
 });
