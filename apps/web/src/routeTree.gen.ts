@@ -25,6 +25,7 @@ import { Route as ProtectedAdminWithdrawalsRouteImport } from './routes/_protect
 import { Route as ProtectedAdminTeamRouteImport } from './routes/_protected/admin/team'
 import { Route as ProtectedAdminReconciliationRouteImport } from './routes/_protected/admin/reconciliation'
 import { Route as ProtectedAdminKycRouteImport } from './routes/_protected/admin/kyc'
+import { Route as ProtectedAdminCrmContactEditsRouteImport } from './routes/_protected/admin/crm-contact-edits'
 import { Route as ProtectedAdminBankVerificationRouteImport } from './routes/_protected/admin/bank-verification'
 import { Route as ProtectedAdminAlertsRouteImport } from './routes/_protected/admin/alerts'
 import { Route as ProtectedUserWithdrawalsIndexRouteImport } from './routes/_protected/user/withdrawals/index'
@@ -120,6 +121,12 @@ const ProtectedAdminKycRoute = ProtectedAdminKycRouteImport.update({
   path: '/kyc',
   getParentRoute: () => ProtectedAdminRoute,
 } as any)
+const ProtectedAdminCrmContactEditsRoute =
+  ProtectedAdminCrmContactEditsRouteImport.update({
+    id: '/crm-contact-edits',
+    path: '/crm-contact-edits',
+    getParentRoute: () => ProtectedAdminRoute,
+  } as any)
 const ProtectedAdminBankVerificationRoute =
   ProtectedAdminBankVerificationRouteImport.update({
     id: '/bank-verification',
@@ -206,6 +213,7 @@ export interface FileRoutesByFullPath {
   '/user': typeof ProtectedUserRouteWithChildren
   '/admin/alerts': typeof ProtectedAdminAlertsRoute
   '/admin/bank-verification': typeof ProtectedAdminBankVerificationRoute
+  '/admin/crm-contact-edits': typeof ProtectedAdminCrmContactEditsRoute
   '/admin/kyc': typeof ProtectedAdminKycRoute
   '/admin/reconciliation': typeof ProtectedAdminReconciliationRoute
   '/admin/team': typeof ProtectedAdminTeamRoute
@@ -234,6 +242,7 @@ export interface FileRoutesByTo {
   '/dashboard': typeof ProtectedDashboardRoute
   '/admin/alerts': typeof ProtectedAdminAlertsRoute
   '/admin/bank-verification': typeof ProtectedAdminBankVerificationRoute
+  '/admin/crm-contact-edits': typeof ProtectedAdminCrmContactEditsRoute
   '/admin/kyc': typeof ProtectedAdminKycRoute
   '/admin/reconciliation': typeof ProtectedAdminReconciliationRoute
   '/admin/team': typeof ProtectedAdminTeamRoute
@@ -266,6 +275,7 @@ export interface FileRoutesById {
   '/_protected/user': typeof ProtectedUserRouteWithChildren
   '/_protected/admin/alerts': typeof ProtectedAdminAlertsRoute
   '/_protected/admin/bank-verification': typeof ProtectedAdminBankVerificationRoute
+  '/_protected/admin/crm-contact-edits': typeof ProtectedAdminCrmContactEditsRoute
   '/_protected/admin/kyc': typeof ProtectedAdminKycRoute
   '/_protected/admin/reconciliation': typeof ProtectedAdminReconciliationRoute
   '/_protected/admin/team': typeof ProtectedAdminTeamRoute
@@ -298,6 +308,7 @@ export interface FileRouteTypes {
     | '/user'
     | '/admin/alerts'
     | '/admin/bank-verification'
+    | '/admin/crm-contact-edits'
     | '/admin/kyc'
     | '/admin/reconciliation'
     | '/admin/team'
@@ -326,6 +337,7 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/admin/alerts'
     | '/admin/bank-verification'
+    | '/admin/crm-contact-edits'
     | '/admin/kyc'
     | '/admin/reconciliation'
     | '/admin/team'
@@ -357,6 +369,7 @@ export interface FileRouteTypes {
     | '/_protected/user'
     | '/_protected/admin/alerts'
     | '/_protected/admin/bank-verification'
+    | '/_protected/admin/crm-contact-edits'
     | '/_protected/admin/kyc'
     | '/_protected/admin/reconciliation'
     | '/_protected/admin/team'
@@ -501,6 +514,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProtectedAdminKycRouteImport
       parentRoute: typeof ProtectedAdminRoute
     }
+    '/_protected/admin/crm-contact-edits': {
+      id: '/_protected/admin/crm-contact-edits'
+      path: '/crm-contact-edits'
+      fullPath: '/admin/crm-contact-edits'
+      preLoaderRoute: typeof ProtectedAdminCrmContactEditsRouteImport
+      parentRoute: typeof ProtectedAdminRoute
+    }
     '/_protected/admin/bank-verification': {
       id: '/_protected/admin/bank-verification'
       path: '/bank-verification'
@@ -598,6 +618,7 @@ declare module '@tanstack/react-router' {
 interface ProtectedAdminRouteChildren {
   ProtectedAdminAlertsRoute: typeof ProtectedAdminAlertsRoute
   ProtectedAdminBankVerificationRoute: typeof ProtectedAdminBankVerificationRoute
+  ProtectedAdminCrmContactEditsRoute: typeof ProtectedAdminCrmContactEditsRoute
   ProtectedAdminKycRoute: typeof ProtectedAdminKycRoute
   ProtectedAdminReconciliationRoute: typeof ProtectedAdminReconciliationRoute
   ProtectedAdminTeamRoute: typeof ProtectedAdminTeamRoute
@@ -608,6 +629,7 @@ interface ProtectedAdminRouteChildren {
 const ProtectedAdminRouteChildren: ProtectedAdminRouteChildren = {
   ProtectedAdminAlertsRoute: ProtectedAdminAlertsRoute,
   ProtectedAdminBankVerificationRoute: ProtectedAdminBankVerificationRoute,
+  ProtectedAdminCrmContactEditsRoute: ProtectedAdminCrmContactEditsRoute,
   ProtectedAdminKycRoute: ProtectedAdminKycRoute,
   ProtectedAdminReconciliationRoute: ProtectedAdminReconciliationRoute,
   ProtectedAdminTeamRoute: ProtectedAdminTeamRoute,

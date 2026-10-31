@@ -64,3 +64,27 @@ export const twenty_crm_record_links = defineTable({
     "entity_type",
     "twenty_record_id",
   ]);
+
+export const twenty_crm_contact_edit_requests = defineTable({
+  source_event_id: v.string(),
+  twenty_person_id: v.string(),
+  workos_id: v.string(),
+  proposed_fields: v.object({
+    first_name: v.optional(v.string()),
+    last_name: v.optional(v.string()),
+    email: v.optional(v.string()),
+    phone: v.optional(v.string()),
+  }),
+  status: v.union(
+    v.literal("pending"),
+    v.literal("applied"),
+    v.literal("rejected"),
+    v.literal("stale"),
+  ),
+  received_at: v.number(),
+  reviewed_at: v.optional(v.number()),
+  reviewed_by: v.optional(v.id("admin_users")),
+})
+  .index("by_source_event_id", ["source_event_id"])
+  .index("by_status_and_received_at", ["status", "received_at"])
+  .index("by_workos_id_and_status", ["workos_id", "status"]);

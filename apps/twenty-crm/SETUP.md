@@ -1,5 +1,21 @@
 # Setup
 
+## Contact edit review forwarding
+
+To send profile edits from Twenty to the application review queue, configure
+these server-side environment variables for the Twenty app logic function:
+
+- `AVM_CONVEX_HTTP_URL`: the matching Convex deployment's HTTP Actions origin
+  (the `convex.site` URL).
+- `AVM_CONTACT_EDIT_WEBHOOK_SECRET`: a per-environment random secret matching
+  `TWENTY_CONTACT_EDIT_WEBHOOK_SECRET` in Convex.
+
+Provide values using the Twenty app environment/secret settings and Convex
+deployment secrets. Do not commit them. Apply the app schema and logic-function
+metadata after configuring the values. Changes to Person contact fields are
+forwarded to `/twenty/contact-edit` and reviewed in the admin console under
+**CRM edits**; app-owned operational fields remain sourced from Convex.
+
 This app uses Twenty's Yarn 4 app toolchain and requires Node.js 24.5 or newer.
 The repository root `.nvmrc` selects Node.js 24.5.0.
 

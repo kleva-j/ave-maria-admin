@@ -84,3 +84,27 @@ recovers.
 Validate with staging records and the Twenty API playground before configuring
 production. This phase does not create Twenty tasks or import production
 historical data.
+
+## Reviewing contact corrections from Twenty
+
+The Twenty app's `person.updated` logic function forwards changes to a small
+allow-list of contact fields (name, email, and phone) to the Convex HTTP action
+`/twenty/contact-edit`. The endpoint verifies an HMAC-SHA256 signature and a
+five-minute timestamp window before accepting the request. Operational fields
+such as account status, balances, and workflow state are never accepted from
+Twenty.
+
+Set `TWENTY_CONTACT_EDIT_WEBHOOK_SECRET` in the Convex deployment and set the
+same random secret plus `AVM_CONVEX_HTTP_URL` in the Twenty app's logic-function
+environment. Generate a distinct secret per environment and provide it through
+the deployment secret manager, not source control. The function needs the
+public Convex HTTP Actions origin, normally the deployment's `convex.site` URL.
+
+Submitted corrections appear in the admin console under **CRM edits**. An
+authorized admin can reject them or apply them. Applying name/email changes
+first updates the WorkOS user through its User Management API, then updates the
+Convex profile and queues the corrected profile back to Twenty. WorkOS marks a
+changed email unverified; the customer will need to verify it again. A phone
+correction updates the application profile only because phone is not an
+authentication field in this flow. If WorkOS rejects an update, the request
+stays pending and the UI reports the failure.
